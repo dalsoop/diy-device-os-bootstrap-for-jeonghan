@@ -410,7 +410,7 @@ if [ "$json_output" -eq 1 ]; then
     exit 0
 fi
 
-echo "Device OS USB for Jeonghan capacity plan"
+echo "DIY Device OS USB for Jeonghan capacity plan"
 echo
 jq -r '.entries[] |
   if .bytes == null then

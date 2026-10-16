@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/dalsoop/device-os-bootstrap-for-jeonghan/blob/main/catalog/schemas/catalog-index.schema.json",
+  "$id": "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/blob/main/catalog/schemas/catalog-index.schema.json",
   "title": "Device OS Catalog Index for Jeonghan",
   "type": "object",
   "required": ["schema_version", "name", "repository", "bootloaders", "entries"],

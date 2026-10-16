@@ -1,6 +1,6 @@
-# Device OS Bootstrap for Jeonghan
+# DIY Device OS Bootstrap for Jeonghan
 
-[![CI](https://github.com/dalsoop/device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml)
+[![CI](https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 This repository is Jeonghan's personal device-OS World: it accumulates device
@@ -23,8 +23,8 @@ compatibility, but the current media selections do not download or stage them.
 ## Start here
 
 ```sh
-git clone https://github.com/dalsoop/device-os-bootstrap-for-jeonghan.git
-cd device-os-bootstrap-for-jeonghan
+git clone https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan.git
+cd diy-device-os-bootstrap-for-jeonghan
 ./device-os world validate
 ./device-os world plan
 ./device-os world capacity --capacity 16GB
@@ -70,7 +70,7 @@ image.
 ## Repository map
 
 ```text
-device-os-bootstrap-for-jeonghan/
+diy-device-os-bootstrap-for-jeonghan/
 ├── device-os              operator command
 ├── world/                 home intent and append-only USB generations
 ├── catalog/               data-only public OS and bootloader metadata

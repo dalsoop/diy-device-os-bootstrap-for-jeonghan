@@ -1,11 +1,11 @@
-# Device OS Bootstrap for Jeonghan
+# DIY Device OS Bootstrap for Jeonghan
 
 This public monorepo is the single operator-owned source for Jeonghan's home-device intent, public OS metadata, guarded installation media, and immutable physical USB history. Its first physical target is three HP DNS appliances, while the same `jeonghan-home` World is intended to accumulate future devices and media.
 
 ## Project map
 
 ```text
-device-os-bootstrap-for-jeonghan/
+diy-device-os-bootstrap-for-jeonghan/
 ├── AGENTS.md                         ← agent entry point
 ├── CLAUDE.md                         ← Claude entry point; identical to AGENTS.md
 ├── docs/

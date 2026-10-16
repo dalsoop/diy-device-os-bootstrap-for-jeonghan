@@ -1,4 +1,4 @@
-# Device OS USB for Jeonghan
+# DIY Device OS USB for Jeonghan
 
 This module combines public Catalog entries with Installer-local entries into a
 verified Korean-first Ventoy USB.
@@ -95,7 +95,7 @@ DEVICE-OS/                     exFAT label used by Ventoy's bundled formatter
 │   ├── dns-build-manifest.json
 │   └── SHA256SUMS
 ├── licenses/
-│   ├── DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt
+│   ├── DIY-DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt
 │   ├── LICENSE_HISTORY.md
 │   ├── THIRD_PARTY_NOTICES.md
 │   ├── Tailscale-BSD-3-Clause.txt

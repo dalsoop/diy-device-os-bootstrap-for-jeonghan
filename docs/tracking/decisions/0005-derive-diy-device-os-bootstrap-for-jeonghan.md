@@ -1,4 +1,4 @@
-# 0005: Derive Jeonghan's Device OS Bootstrap
+# 0005: Derive DIY Device OS Bootstrap for Jeonghan
 
 - Status: Accepted
 - Date: 2026-10-16
@@ -17,11 +17,11 @@ remote.
 
 ## Decision
 
-`dalsoop/device-os-bootstrap-for-jeonghan` is the operator repository for
+`dalsoop/diy-device-os-bootstrap-for-jeonghan` is the operator repository for
 Jeonghan's home World.
 
-- The product name is **Device OS Bootstrap for Jeonghan**.
-- The generated removable media is **Device OS USB for Jeonghan**.
+- The product name is **DIY Device OS Bootstrap for Jeonghan**.
+- The generated removable media is **DIY Device OS USB for Jeonghan**.
 - The operator command remains `device-os`.
 - The single mutable World is `jeonghan-home`.
 - `dns-install` selects only `dns-appliance`.
@@ -50,5 +50,5 @@ The operator normally edits only the home World and ignored local inventory.
 The current production media has no unrelated boot choices, while future
 devices and media extend the same World rather than creating product-specific
 repositories. Repository provenance points to the source that produced each
-artifact. Automatic World-generation publication and physical qualification
-remain separate unfinished gates.
+artifact. World generation publication is implemented behind verified writer
+readback; physical firmware and installation qualification remain separate.

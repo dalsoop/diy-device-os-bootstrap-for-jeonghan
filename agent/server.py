@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 dalsoop
 # SPDX-License-Identifier: GPL-3.0-only
-"""Constrained MCP gateway for Device OS Bootstrap for Jeonghan."""
+"""Constrained MCP gateway for DIY Device OS Bootstrap for Jeonghan."""
 
 from __future__ import annotations
 
@@ -386,8 +386,8 @@ class Gateway:
 
 gateway = Gateway()
 mcp = MCPServer(
-    "device-os-bootstrap-for-jeonghan",
-    title="Device OS Bootstrap for Jeonghan",
+    "diy-device-os-bootstrap-for-jeonghan",
+    title="DIY Device OS Bootstrap for Jeonghan",
     version="0.1.0",
     instructions=(
         "Operate only through these constrained tools. Planning and simulation do not "

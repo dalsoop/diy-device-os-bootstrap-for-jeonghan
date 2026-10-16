@@ -2,7 +2,7 @@
 
 ## System boundary
 
-Device OS Bootstrap for Jeonghan combines one personal infrastructure model with a reusable public operating-system catalog, a safety-critical media engine, and a constrained remote access plane. A single Git commit identifies all four source domains, but repository proximity does not collapse their trust boundaries.
+DIY Device OS Bootstrap for Jeonghan combines one personal infrastructure model with a reusable public operating-system catalog, a safety-critical media engine, and a constrained remote access plane. A single Git commit identifies all four source domains, but repository proximity does not collapse their trust boundaries.
 
 ```text
 operator or remote agent

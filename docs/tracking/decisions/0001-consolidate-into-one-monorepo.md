@@ -30,7 +30,7 @@ The three former repositories remain available during consolidation and are not
 deleted. They may be archived with a pointer to this monorepo only after the
 monorepo CI passes and its `main` branch is verified.
 
-Decision 0005 later created `dalsoop/device-os-bootstrap-for-jeonghan` as the
+Decision 0005 later created `dalsoop/diy-device-os-bootstrap-for-jeonghan` as the
 canonical operator repository for Jeonghan while retaining this monorepo shape
 and the generic repository as a selectively reviewed upstream.
 

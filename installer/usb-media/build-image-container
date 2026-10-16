@@ -60,6 +60,7 @@ done
 [ -n "$output" ] || usage
 [ -n "$size" ] || usage
 container_output=$(contained_path "$output")
+mkdir -p "$(dirname -- "$output")"
 
 if [ -z "$runtime" ]; then
     if command -v podman >/dev/null 2>&1; then

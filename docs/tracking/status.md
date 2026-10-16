@@ -14,9 +14,9 @@ The current release state is a source-validated prototype, not a physically qual
 | Nominal, offline, runtime-artifact, and read-only-device capacity calculation | Yes | Isolated tests and a prior read-only 16 GB macOS query | Exact result using the final rebuilt DNS ISO and target USB |
 | Korean Ventoy presentation with no automatic timeout | Yes | Generated configuration checks | Physical BIOS and UEFI menu verification |
 | Linux removable-device USB writer | Yes | Source simulation after target-resolution fix | Rebuilt disposable USB, readback, filesystem, BIOS, and UEFI evidence |
-| macOS exact-size raw-image writer using MBR-last readback | Yes | Isolated success/failure simulation; earlier physical writes used the prior sequence | Physical rerun of the revised sequence and a raw-image builder |
+| Cross-platform exact-size raw-image builder and macOS MBR-last writer | Yes | Isolated builder and writer success/failure simulations | Physical container-built image, revised write, filesystem, BIOS, and UEFI qualification |
 | Append-only World event and generation publication after verified write | Yes | Isolated two-device success, failed-write, collision, and record-shape simulations | First disposable physical Linux and macOS writes with inspected tracked evidence |
-| Offline Korean DNS appliance image with immutable locks | Yes | Source validation and ISO embedded-file readback logic | Enforce or explicitly decide the one-enabled-role build policy, then complete two clean amd64 Debian 13 builds and artifact comparison |
+| Offline Korean DNS appliance image with immutable locks | Yes | Source validation and ISO embedded-file readback logic; exactly-one-role build gate | Capture the three real inventories, then complete two clean amd64 Debian 13 builds and artifact comparison |
 | Exact HP/NIC/internal-disk install gate with mapper ancestry resolution | Yes | Isolated rejection and disk-preparation simulation | VM BIOS/UEFI install and disposable physical `dns01` rerun |
 | Retry-safe encrypted first-boot enrollment | Yes | Source contract | Power-loss and real exFAT fault injection |
 | Three-node Technitium cluster bootstrap | Yes | Fixture/source checks | Live three-node cluster and primary-loss drill |

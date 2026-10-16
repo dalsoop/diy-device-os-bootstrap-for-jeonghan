@@ -52,7 +52,8 @@ cp installer/inventory/nodes/dns02.conf.example installer/inventory/local/dns02.
 cp installer/inventory/nodes/dns03.conf.example installer/inventory/local/dns03.conf
 ```
 
-The builder requires at least one enabled role.
+The builder requires exactly one enabled role and rejects both zero and multiple
+erase-enabled inventories.
 
 Copy the operator's public SSH key, never the private key:
 

@@ -11,6 +11,7 @@ cache_dir=${USB_MEDIA_CACHE_DIR:-$repo_root/cache/usb-media}
 write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
 device=
 confirmation=
+image_build=0
 declare -A runtime_artifacts=()
 declare -A runtime_manifests=()
 declare -A staged_sources=()
@@ -89,13 +90,19 @@ while [ "$#" -gt 0 ]; do
             shift 2
             ;;
         --confirm) confirmation=${2:-}; shift 2 ;;
+        --image-build)
+            [ "${DEVICE_OS_INTERNAL_IMAGE_BUILD:-0}" = 1 ] ||
+                fail "--image-build is reserved for build-image-linux"
+            image_build=1
+            shift
+            ;;
         *) usage ;;
     esac
 done
 
 [ "$(uname -s)" = Linux ] || fail "Linux is required"
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-for command in lsblk findmnt jq sha256sum python3 sfdisk blockdev udevadm mkfs.exfat git; do
+for command in lsblk findmnt jq sha256sum python3 sfdisk blockdev udevadm mkfs.exfat mkfs.vfat blkid git; do
     command -v "$command" >/dev/null 2>&1 || fail "$command is required"
 done
 [ -r "$catalog" ] || fail "resolved catalog is missing; run ./device-os plan"
@@ -116,18 +123,26 @@ for legal_file in LICENSE LICENSE_HISTORY.md THIRD_PARTY_NOTICES.md \
 done
 
 [ -b "$device" ] || usage
-[ "$(lsblk -dnro TYPE "$device")" = disk ] || fail "whole-disk target required"
-[ "$(lsblk -dnro RM "$device")" = 1 ] || fail "target is not reported removable"
+if [ "$image_build" -eq 1 ]; then
+    [ "$(lsblk -dnro TYPE "$device")" = loop ] ||
+        fail "image builds require a loop device"
+    [ -z "$confirmation" ] || fail "image builds do not accept erase confirmation"
+    serial=
+    model="generated raw image"
+else
+    [ "$(lsblk -dnro TYPE "$device")" = disk ] || fail "whole-disk target required"
+    [ "$(lsblk -dnro RM "$device")" = 1 ] || fail "target is not reported removable"
 
-root_source=$(findmnt -nro SOURCE /)
-root_parent=/dev/$(lsblk -no PKNAME "$root_source" 2>/dev/null | sed -n '1p')
-[ "$device" != "$root_parent" ] || fail "refusing root disk"
-serial=$(lsblk -dnro SERIAL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-model=$(lsblk -dnro MODEL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-[ -n "$serial" ] || fail "target has no readable serial"
-[ -n "$model" ] || fail "target has no readable model"
-[ "$confirmation" = "ERASE $device $serial" ] ||
-    fail "exact confirmation must include device and serial: ERASE $device $serial"
+    root_source=$(findmnt -nro SOURCE /)
+    root_parent=/dev/$(lsblk -no PKNAME "$root_source" 2>/dev/null | sed -n '1p')
+    [ "$device" != "$root_parent" ] || fail "refusing root disk"
+    serial=$(lsblk -dnro SERIAL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    model=$(lsblk -dnro MODEL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    [ -n "$serial" ] || fail "target has no readable serial"
+    [ -n "$model" ] || fail "target has no readable model"
+    [ "$confirmation" = "ERASE $device $serial" ] ||
+        fail "exact confirmation must include device and serial: ERASE $device $serial"
+fi
 
 data_label=$(jq -er '.usb.data_label' "$catalog")
 enrollment_label=$(jq -er '.usb.enrollment_label' "$catalog")
@@ -185,11 +200,17 @@ fi
 while IFS= read -r bundle; do
     kind=$(jq -er '.source.kind' <<<"$bundle")
     path=$(jq -er '.source.path' <<<"$bundle")
+    bundle_source=$repo_root/$path
     case "$kind" in
-        repository-file) [ -f "$repo_root/$path" ] || fail "missing repository file: $path" ;;
-        repository-tree) [ -d "$repo_root/$path" ] || fail "missing repository tree: $path" ;;
+        repository-file) [ -f "$bundle_source" ] || fail "missing repository file: $path" ;;
+        repository-tree) [ -d "$bundle_source" ] || fail "missing repository tree: $path" ;;
         *) fail "unsupported bundle source kind: $kind" ;;
     esac
+    [ ! -L "$bundle_source" ] || fail "repository bundle may not be a symlink: $path"
+    if [ "$kind" = repository-tree ] &&
+        find "$bundle_source" -type l -print -quit | grep -q .; then
+        fail "repository bundle tree may not contain symlinks: $path"
+    fi
 done < <(jq -c '.bundles[]' "$catalog")
 
 required_bytes=$((required_bytes + reserve_mib * 1024 * 1024 + overhead_mib * 1024 * 1024))
@@ -202,7 +223,9 @@ emit_write_evidence pending
 
 echo "target: $device"
 echo "model: $model"
-echo "serial: $serial"
+if [ "$image_build" -eq 0 ]; then
+    echo "serial: $serial"
+fi
 echo "bytes: $device_bytes"
 echo "warning: all existing partitions and data will be erased"
 
@@ -237,8 +260,52 @@ fi
 blockdev --rereadpt "$device" || true
 udevadm settle
 
-main_partition=$(lsblk -nrpo NAME,LABEL "$device" |
-    awk -v label="$data_label" '$2 == label { print $1; exit }')
+ensure_image_partition_nodes() {
+    local sys_partition name numbers major minor expected actual
+    [ "$image_build" -eq 1 ] || return 0
+    for sys_partition in /sys/class/block/"${device#/dev/}"p*; do
+        [ -r "$sys_partition/dev" ] || continue
+        name=$(basename -- "$sys_partition")
+        numbers=$(cat "$sys_partition/dev")
+        major=${numbers%:*}
+        minor=${numbers#*:}
+        expected=$(printf '%x:%x' "$major" "$minor")
+        actual=$(stat -c '%t:%T' "/dev/$name" 2>/dev/null || true)
+        if [ "$actual" != "$expected" ]; then
+            # Ventoy can create a partition node just before the kernel assigns
+            # the final dynamic major/minor. Replace that stale node from the
+            # authoritative sysfs identity before probing the filesystem.
+            rm -f -- "/dev/$name"
+            mknod -m 0660 "/dev/$name" b "$major" "$minor"
+        fi
+    done
+}
+ensure_image_partition_nodes
+
+main_partition=
+if [ "$image_build" -eq 1 ]; then
+    main_partition=${device}p1
+    [ -b "$main_partition" ] || fail "Ventoy data partition node was not created"
+    main_sys=/sys/class/block/${main_partition#/dev/}
+    [ -r "$main_sys/start" ] || fail "Ventoy data partition identity is unavailable"
+    [ "$(cat "$main_sys/start")" = 2048 ] ||
+        fail "Ventoy data partition has an unexpected start sector"
+    [ "$(blkid -p -s TYPE -o value "$main_partition" 2>/dev/null || true)" = exfat ] ||
+        fail "Ventoy data partition is not exFAT"
+    [ "$(blkid -p -s LABEL -o value "$main_partition" 2>/dev/null || true)" = "$data_label" ] ||
+        fail "Ventoy data partition label does not match $data_label"
+else
+    main_partition=$(lsblk -nrpo NAME,LABEL "$device" |
+        awk -v label="$data_label" '$2 == label { print $1; exit }')
+    while IFS= read -r candidate; do
+        [ -z "$main_partition" ] || break
+        candidate_label=$(blkid -s LABEL -o value "$candidate" 2>/dev/null || true)
+        if [ "$candidate_label" = "$data_label" ]; then
+            main_partition=$candidate
+            break
+        fi
+    done < <(lsblk -nrpo NAME,TYPE "$device" | awk '$2 == "part" { print $1 }')
+fi
 [ -b "$main_partition" ] || fail "Ventoy data partition was not found"
 
 enroll_partition=
@@ -251,8 +318,17 @@ if [ "$reserve_mib" -gt 0 ]; then
     printf 'start=%s, type=7\n' "$start" | sfdisk --append "$device"
     blockdev --rereadpt "$device"
     udevadm settle
-    enroll_partition=$(lsblk -nrpo NAME,TYPE,START "$device" |
-        awk -v start="$start" '$2 == "part" && $3 == start { print $1; exit }')
+    ensure_image_partition_nodes
+    if [ "$image_build" -eq 1 ]; then
+        enroll_partition=${device}p3
+        enroll_sys=/sys/class/block/${enroll_partition#/dev/}
+        [ -r "$enroll_sys/start" ] || fail "$enrollment_label partition identity is unavailable"
+        [ "$(cat "$enroll_sys/start")" = "$start" ] ||
+            fail "$enrollment_label partition has an unexpected start sector"
+    else
+        enroll_partition=$(lsblk -nrpo NAME,TYPE,START "$device" |
+            awk -v start="$start" '$2 == "part" && $3 == start { print $1; exit }')
+    fi
     [ -b "$enroll_partition" ] || fail "$enrollment_label partition was not found"
     mkfs.exfat -n "$enrollment_label" "$enroll_partition"
 fi
@@ -388,4 +464,8 @@ if [ -n "$dns_manifest" ]; then
 else
     echo "usb-media write-usb-linux: verified catalog, write readback, and created $data_label"
 fi
-echo "usb-media write-usb-linux: target remains $device; eject it before unplugging"
+if [ "$image_build" -eq 1 ]; then
+    echo "usb-media write-usb-linux: verified generated image on $device"
+else
+    echo "usb-media write-usb-linux: target remains $device; eject it before unplugging"
+fi

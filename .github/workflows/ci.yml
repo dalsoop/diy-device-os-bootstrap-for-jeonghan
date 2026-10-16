@@ -79,6 +79,7 @@ jobs:
           tests/management-simulation.sh
           tests/tailscale-enrollment-simulation.sh
           tests/media-catalog-simulation.sh
+          tests/image-builder-simulation.sh
           tests/macos-writer-simulation.sh
           tests/repository-contract.sh
       - name: Run Agent Gateway simulation

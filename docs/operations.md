@@ -19,13 +19,19 @@ sudo apt-get update
 sudo apt-get install -y git jq ruby curl coreutils age
 ```
 
-On macOS, install the read-only tool set with Homebrew:
+On macOS, install the command tools and one supported Linux container runtime:
 
 ```sh
-brew install git jq ruby age
+brew install git jq ruby age podman
+podman machine init --cpus 4 --memory 4096 --disk-size 100
 ```
 
-Complete Ventoy assembly and the DNS ISO build require Linux. macOS can validate, plan, calculate nominal capacity, and write a prebuilt exact-size MBR raw image; this repository does not yet build that raw image. Windows is intentionally unsupported and is not a planned preparation or write platform.
+The first `build-image` starts the Podman machine and builds the pinned Debian
+13 media-builder container. Docker may be selected with
+`--runtime docker`. Ventoy assembly runs against a loop device inside the Linux
+VM; only `burn-image-macos` opens the separately confirmed macOS USB. The DNS
+installer ISO itself still requires an amd64 Debian 13 build. Windows is
+intentionally unsupported and is not a planned preparation or write platform.
 
 ## Validate the source checkout
 
@@ -68,6 +74,13 @@ DEVICE_OS_MEDIA=inventory-capture ./device-os world plan
 DEVICE_OS_MEDIA=inventory-capture ./device-os world simulate
 ```
 
+Inspect redacted DNS-build blockers and live removable targets separately:
+
+```sh
+./device-os world readiness | jq
+./device-os targets
+```
+
 Edit `world/drafts/jeonghan-home/world.yaml` to change desired devices or media. Keep real inventories and observations under the ignored local paths, never in the draft.
 
 ## Check network readiness
@@ -83,7 +96,7 @@ The offline form marks outbound DNS and HTTPS readiness unknown. Internet is req
 
 ## First pass: capture hardware inventory
 
-Prepare and burn only the `inventory-capture` selection on Linux:
+Prepare only the `inventory-capture` selection. On Linux, burn it directly:
 
 ```sh
 DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
@@ -91,6 +104,21 @@ lsblk -d -o NAME,MODEL,SERIAL,SIZE,TRAN,RM
 sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn \
   --device /dev/sdX \
   --confirm 'ERASE /dev/sdX USB_SERIAL'
+```
+
+On macOS, use the exact byte count printed by `targets` to build first and then
+perform a separately confirmed write:
+
+```sh
+./device-os targets
+DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
+DEVICE_OS_MEDIA=inventory-capture ./device-os world build-image \
+  --output "$PWD/installer/artifacts/inventory-capture.raw" \
+  --size EXACT_TARGET_BYTES
+sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn-image-macos \
+  --image "$PWD/installer/artifacts/inventory-capture.raw" \
+  --device /dev/diskN \
+  --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_TARGET_BYTES'
 ```
 
 The resulting media contains Debian Live only. Boot each HP computer deliberately and follow the inventory guide on the USB. Capture one role at a time from the trusted live environment:
@@ -126,6 +154,10 @@ installer/installer/fetch-locked-sources
 installer/installer/build-image
 ```
 
+`build-image` refuses zero or multiple erase-enabled roles. Run
+`./device-os world readiness` before the build and keep only the current pilot
+set to `destructive_install_enabled=true`.
+
 The ISO appears under `installer/installer/simple-cdd/images/`; its matching manifest is `installer/artifacts/build-manifest.json`. Retain the package closure, checksums, SBOM, and build manifest outside Git. A successful build does not authorize a USB write.
 
 ## Calculate exact fit and burn production media
@@ -152,14 +184,20 @@ sudo ./device-os world burn \
 
 The command destroys the selected USB. Never reuse a previous device path, serial, or confirmation after a reconnect. The production `dns-install` selection contains only the DNS appliance image.
 
-On macOS, an already prepared exact-size MBR full-disk image can be written with:
+On macOS, build a raw image from the exact DNS artifact and manifest, then write
+it. All paths passed into the container must stay inside this checkout:
 
 ```sh
-diskutil list external physical
+./device-os targets
+./device-os world build-image \
+  --output "$PWD/installer/artifacts/dns-install.raw" \
+  --size EXACT_TARGET_BYTES \
+  --runtime-artifact dns-appliance="$PWD/installer/installer/simple-cdd/images/DNS_ISO" \
+  --runtime-manifest dns-appliance="$PWD/installer/artifacts/build-manifest.json"
 sudo ./device-os world burn-image-macos \
-  --image /absolute/path/device-os.raw \
+  --image "$PWD/installer/artifacts/dns-install.raw" \
   --device /dev/diskN \
-  --confirm 'ERASE /dev/diskN MODEL SERIAL SIZE'
+  --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_TARGET_BYTES'
 ```
 
 The image byte size must equal the target and the target must be removable, writable, MBR-compatible, and non-root. World burn commands process one device at a time. Passed readback creates a new tracked generation directory; failed or cancelled physical attempts create a tracked redacted event file. Review those new files and publish them through the normal pull-request path—the root writer never commits or pushes.

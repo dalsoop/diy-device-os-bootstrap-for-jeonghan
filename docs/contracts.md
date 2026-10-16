@@ -18,13 +18,19 @@ Stable IDs use lowercase ASCII letters, digits, and hyphens. Configured reposito
 | `world capacity` | `--capacity <decimal-or-binary-size>` or read-only target query; optional runtime artifact/manifest pairs and `--offline` | Human or schema-version-1 JSON totals, sources, unknown/unverified IDs, `required_bytes`, and `fits` | Nonzero for malformed arguments; unknown/unverified data yields null final fit, not assumed success; never writes |
 | `world simulate` | Selected World and optional media override | Plan plus explicit skipped download/write phases | Same validation errors as plan; no download or write |
 | `world prepare` | Selected World; network and cache access | Verified selected public artifacts in ignored cache | Nonzero on HTTPS, digest, path, or promotion failure; never writes a block device |
+| `world readiness` | Ignored inventory, public key inputs, locked caches, and generated DNS artifacts | Schema-version-1 JSON with redacted passed checks and blockers | Nonzero while any required DNS build or artifact input is absent; never prints raw hardware identity or secret material |
+| `world build-image` | Exact byte size, new output path inside the checkout, verified selected artifacts and manifests | Exact-size MBR raw image plus SHA-256 sidecar | Linux requires root; macOS requires Podman or Docker and builds only through a loop device inside the Linux VM; never opens a host physical disk |
 | `world burn` | Whole Linux device, exact `ERASE <device> <serial>`, selected artifacts and manifests | Assembled and readback-verified removable media plus one World event or generation record | Destructive after live removable/root/serial/capacity/artifact checks; any unresolved or mismatched state fails before write |
 | `world burn-image-macos` | Absolute exact-size MBR image, whole `/dev/diskN`, exact target phrase | Two-phase raw readback plus one World event or generation record | Same target and image rejection as `burn-image-macos`; physical events are serialized |
 | `available`, `plan`, `capacity`, `simulate`, `prepare`, `burn` | Installer reference collection rather than the user World | Same shapes as corresponding World commands | Contributor surface; must not be represented as the user's desired state |
 | `include <id>`, `exclude <id>` | Public Catalog ID | Updated reference collection and human confirmation | Nonzero for absent/invalid ID; changes contributor reference selection only |
 | `burn-image-macos` | Absolute MBR raw-image path, whole `/dev/diskN`, exact target phrase | Two-phase write and readback result | Destructive only when image and device sizes match and target is external, writable, non-root, non-virtual, and MBR-compatible |
 
-The macOS writer invalidates the first MiB, writes and verifies the remaining bytes, then writes and verifies the first MiB. It rejects GPT images and images at or below 1 MiB.
+`targets` lists only live removable physical media and prints the current exact
+confirmation. The macOS phrase is `ERASE <device> <media-name> <USB-serial>
+<exact-bytes>`. The writer re-resolves every field, invalidates the first MiB,
+writes and verifies the remaining bytes, then writes and verifies the first
+MiB. It rejects GPT images and images at or below 1 MiB.
 
 ## World Playbook
 
@@ -89,9 +95,9 @@ Restore requires an explicit target URL and `RESTORE <exact-url>`, decrypts and 
 | `installer/build/verify-locks` | Reviewed `build/locks/sources.env` | Prints `source locks: valid`; changes nothing | Nonzero for moving or malformed Debian/Tailscale URLs, malformed versions, timestamps, hashes, or OCI digests |
 | `installer/installer/fetch-locked-sources` | Network access and optional ignored cache path | Downloads Technitium OCI, Tailscale archive, and dependency-license report to temporary files; atomically promotes only verified content; prints checksums | Nonzero for missing tools, network/TLS failure, remote or cached digest mismatch, or license-report mismatch; partial files are removed |
 | `installer/installer/capture-inventory <role> <address> <interface> <whole-disk>` | One fixed DNS role, address, existing NIC, and whole block device on the target HP | Writes a shell-format inventory record to stdout with hashed hardware identities and `destructive_install_enabled=false`; does not modify the disk | Exit 2 for wrong arguments/role; nonzero for absent NIC/disk, a partition instead of whole disk, unreadable/empty identity, or missing SHA-256 tool |
-| `installer/installer/build-image` | Clean committed source; amd64 Debian 13; exact Simple-CDD version; verified caches; three inventories; operator public keys; age recipient | Builds ISO under `installer/installer/simple-cdd/images/`; verifies critical embedded files; writes checksums, build manifest, package lists, package hashes, and SPDX SBOM under the configured artifact directory | Nonzero for unsupported host, dirty source, missing/malformed public input, zero enabled roles, lock/cache mismatch, build failure, stale embedded content, or missing artifact |
+| `installer/installer/build-image` | Clean committed source; amd64 Debian 13; exact Simple-CDD version; verified caches; three inventories; exactly one enabled role; operator public keys; age recipient | Builds ISO under `installer/installer/simple-cdd/images/`; verifies critical embedded files; writes checksums, build manifest, package lists, package hashes, and SPDX SBOM under the configured artifact directory | Nonzero for unsupported host, dirty source, missing/malformed public input, anything other than one enabled role, lock/cache mismatch, build failure, stale embedded content, or missing artifact |
 
-`build-image` requires at least one enabled role but does not authorize media or internal-disk writing. Its manifest is the contract paired with the DNS runtime artifact during capacity and burn.
+`build-image` requires exactly one enabled role but does not authorize media or internal-disk writing. Its manifest is the contract paired with the DNS runtime artifact during capacity and burn.
 
 ## Post-install management interfaces
 

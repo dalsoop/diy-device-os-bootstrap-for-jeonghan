@@ -22,12 +22,16 @@ Usage:
   ./device-os world plan                 Show World-selected USB contents
   ./device-os world capacity [options]   Check a size or physical device
   ./device-os world simulate             Run without downloads or disk writes
+  ./device-os world readiness            Report DNS build and media blockers
   ./device-os world prepare              Download and verify World-selected images
+  ./device-os world build-image <options>
+                                        Build an exact-size raw USB image
   sudo ./device-os world burn <options>  Burn a verified removable USB on Linux
   sudo ./device-os world burn-image-macos <options>
                                         Burn a World image on macOS and record it
 
 Reference/contributor commands:
+  ./device-os targets                    List live removable targets and confirmations
   ./device-os available                 List available catalog entries
   ./device-os include <id>              Add an entry to the reference collection
   ./device-os exclude <id>              Remove an entry from the reference collection
@@ -35,6 +39,7 @@ Reference/contributor commands:
   ./device-os capacity [options]         Check a size or physical device
   ./device-os simulate                   Run without downloads or disk writes
   ./device-os prepare                    Download and verify selected images
+  ./device-os build-image <options>      Build an exact-size raw USB image
   sudo ./device-os burn <options>        Burn a verified removable USB on Linux
   sudo ./device-os burn-image-macos <options>
                                         Burn and verify a full-disk image on macOS
@@ -46,7 +51,7 @@ macOS example:
   sudo ./device-os world burn-image-macos \
     --image /absolute/path/device-os.raw \
     --device /dev/disk5 \
-    --confirm 'ERASE /dev/disk5 SanDisk 3.2Gen1 30784094208'
+    --confirm 'ERASE /dev/disk5 SanDisk 3.2Gen1 USB_SERIAL 30784094208'
 
 Capacity examples:
   ./device-os world capacity
@@ -161,6 +166,9 @@ case "$command" in
         selected=$(jq -c '.entries' "$collection")
         show_available "$selected"
         ;;
+    targets)
+        exec "$repo_root/usb-media/inspect-targets"
+        ;;
     include)
         id=${2:-}
         [ -n "$id" ] || fail "provide an entry ID to include"
@@ -205,6 +213,11 @@ case "$command" in
         resolve
         USB_MEDIA_CATALOG=$resolved "$repo_root/usb-media/fetch-images"
         ;;
+    build-image)
+        shift
+        resolve
+        USB_MEDIA_CATALOG=$resolved exec "$repo_root/usb-media/build-image" "$@"
+        ;;
     burn)
         shift
         resolve
@@ -248,9 +261,17 @@ case "$command" in
                 echo
                 echo "Simulation complete: no network image or disk was changed."
                 ;;
+            readiness)
+                exec "$repo_root/installer/check-readiness"
+                ;;
             prepare)
                 resolve_world
                 USB_MEDIA_CATALOG=$resolved "$repo_root/usb-media/fetch-images"
+                ;;
+            build-image)
+                shift
+                resolve_world
+                USB_MEDIA_CATALOG=$resolved exec "$repo_root/usb-media/build-image" "$@"
                 ;;
             burn)
                 shift

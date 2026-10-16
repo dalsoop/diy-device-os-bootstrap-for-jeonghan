@@ -58,6 +58,7 @@ DEVICE_OS_IMAGE_WRITER="$writer" \
 
 [ -f "$output" ]
 [ -f "$output.sha256" ]
+grep -q '  device-os.raw$' "$output.sha256"
 grep -q '^writer --device /dev/loop9 --catalog .* --image-build$' "$log"
 grep -q '^blockdev --flushbufs /dev/loop9$' "$log"
 grep -q '^losetup -d /dev/loop9$' "$log"
@@ -70,6 +71,18 @@ if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
     echo "image-builder-simulation: existing output was overwritten" >&2
     exit 1
 fi
+
+sidecar_only=$temporary/sidecar-only.raw
+: > "$sidecar_only.sha256"
+if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
+    DEVICE_OS_SKIP_LOOP_NODE_SETUP=1 \
+    DEVICE_OS_IMAGE_WRITER="$writer" \
+    "$builder" --output "$sidecar_only" --size 4294967296 --catalog "$catalog" \
+    >/dev/null 2>&1; then
+    echo "image-builder-simulation: existing checksum was overwritten" >&2
+    exit 1
+fi
+[ ! -e "$sidecar_only" ]
 
 if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
     DEVICE_OS_SKIP_LOOP_NODE_SETUP=1 \

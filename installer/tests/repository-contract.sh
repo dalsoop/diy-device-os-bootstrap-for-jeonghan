@@ -156,9 +156,9 @@ if grep -q -E 'legacy_dns|--dns-iso|--dns-manifest|burn\|write|burn-image-macos\
     exit 1
 fi
 
-if git -C "$repo_root" grep -I -n -i -E \
+if git -C "$repo_root/.." grep -I -n -i -E \
     '(^|[^a-z-])device-os-bootstrap-for-jeonghan|dns-appliance-provisioning|device-install-media|device-os-flasher|device-os-catalog|superusb|homelab-usb|homelab-bootstrap-media|Homelab Bootstrap|homelab-provisioning|Homelab Install & Recovery' \
-    -- . ':!tests/repository-contract.sh'; then
+    -- . ':!installer/tests/repository-contract.sh'; then
     echo "repository-contract: obsolete project name remains" >&2
     exit 1
 fi

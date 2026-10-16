@@ -260,8 +260,29 @@ fi
 blockdev --rereadpt "$device" || true
 udevadm settle
 
+ensure_image_partition_nodes() {
+    local sys_partition name numbers major minor
+    [ "$image_build" -eq 1 ] || return 0
+    for sys_partition in /sys/class/block/"${device#/dev/}"p*; do
+        [ -r "$sys_partition/dev" ] || continue
+        name=$(basename -- "$sys_partition")
+        if [ ! -b "/dev/$name" ]; then
+            numbers=$(cat "$sys_partition/dev")
+            major=${numbers%:*}
+            minor=${numbers#*:}
+            mknod "/dev/$name" b "$major" "$minor"
+        fi
+    done
+}
+ensure_image_partition_nodes
+
 main_partition=$(lsblk -nrpo NAME,LABEL "$device" |
     awk -v label="$data_label" '$2 == label { print $1; exit }')
+if [ -z "$main_partition" ] && [ "$image_build" -eq 1 ] &&
+    [ -b "${device}p1" ] &&
+    [ "$(blkid -s LABEL -o value "${device}p1" 2>/dev/null || true)" = "$data_label" ]; then
+    main_partition=${device}p1
+fi
 if [ -z "$main_partition" ]; then
     while IFS= read -r candidate; do
         candidate_label=$(blkid -s LABEL -o value "$candidate" 2>/dev/null || true)
@@ -283,6 +304,7 @@ if [ "$reserve_mib" -gt 0 ]; then
     printf 'start=%s, type=7\n' "$start" | sfdisk --append "$device"
     blockdev --rereadpt "$device"
     udevadm settle
+    ensure_image_partition_nodes
     enroll_partition=$(lsblk -nrpo NAME,TYPE,START "$device" |
         awk -v start="$start" '$2 == "part" && $3 == start { print $1; exit }')
     [ -b "$enroll_partition" ] || fail "$enrollment_label partition was not found"

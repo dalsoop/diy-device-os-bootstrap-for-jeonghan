@@ -132,7 +132,8 @@ for role in dns01 dns02 dns03; do
     install -m 0644 "$source_file" "$generated_dir/$role.conf"
 done
 
-[ "$enabled_count" -gt 0 ] || fail "all roles remain erase-disabled"
+[ "$enabled_count" -eq 1 ] ||
+    fail "exactly one role must have destructive_install_enabled=true; found $enabled_count"
 
 install -m 0644 "$authorized_keys" "$generated_dir/operator-authorized-keys"
 printf '%s\n' "$recipient" > "$generated_dir/age-recipient"

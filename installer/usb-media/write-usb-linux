@@ -11,6 +11,7 @@ cache_dir=${USB_MEDIA_CACHE_DIR:-$repo_root/cache/usb-media}
 write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
 device=
 confirmation=
+image_build=0
 declare -A runtime_artifacts=()
 declare -A runtime_manifests=()
 declare -A staged_sources=()
@@ -89,6 +90,12 @@ while [ "$#" -gt 0 ]; do
             shift 2
             ;;
         --confirm) confirmation=${2:-}; shift 2 ;;
+        --image-build)
+            [ "${DEVICE_OS_INTERNAL_IMAGE_BUILD:-0}" = 1 ] ||
+                fail "--image-build is reserved for build-image-linux"
+            image_build=1
+            shift
+            ;;
         *) usage ;;
     esac
 done
@@ -116,18 +123,26 @@ for legal_file in LICENSE LICENSE_HISTORY.md THIRD_PARTY_NOTICES.md \
 done
 
 [ -b "$device" ] || usage
-[ "$(lsblk -dnro TYPE "$device")" = disk ] || fail "whole-disk target required"
-[ "$(lsblk -dnro RM "$device")" = 1 ] || fail "target is not reported removable"
+if [ "$image_build" -eq 1 ]; then
+    [ "$(lsblk -dnro TYPE "$device")" = loop ] ||
+        fail "image builds require a loop device"
+    [ -z "$confirmation" ] || fail "image builds do not accept erase confirmation"
+    serial=
+    model="generated raw image"
+else
+    [ "$(lsblk -dnro TYPE "$device")" = disk ] || fail "whole-disk target required"
+    [ "$(lsblk -dnro RM "$device")" = 1 ] || fail "target is not reported removable"
 
-root_source=$(findmnt -nro SOURCE /)
-root_parent=/dev/$(lsblk -no PKNAME "$root_source" 2>/dev/null | sed -n '1p')
-[ "$device" != "$root_parent" ] || fail "refusing root disk"
-serial=$(lsblk -dnro SERIAL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-model=$(lsblk -dnro MODEL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-[ -n "$serial" ] || fail "target has no readable serial"
-[ -n "$model" ] || fail "target has no readable model"
-[ "$confirmation" = "ERASE $device $serial" ] ||
-    fail "exact confirmation must include device and serial: ERASE $device $serial"
+    root_source=$(findmnt -nro SOURCE /)
+    root_parent=/dev/$(lsblk -no PKNAME "$root_source" 2>/dev/null | sed -n '1p')
+    [ "$device" != "$root_parent" ] || fail "refusing root disk"
+    serial=$(lsblk -dnro SERIAL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    model=$(lsblk -dnro MODEL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    [ -n "$serial" ] || fail "target has no readable serial"
+    [ -n "$model" ] || fail "target has no readable model"
+    [ "$confirmation" = "ERASE $device $serial" ] ||
+        fail "exact confirmation must include device and serial: ERASE $device $serial"
+fi
 
 data_label=$(jq -er '.usb.data_label' "$catalog")
 enrollment_label=$(jq -er '.usb.enrollment_label' "$catalog")
@@ -185,11 +200,17 @@ fi
 while IFS= read -r bundle; do
     kind=$(jq -er '.source.kind' <<<"$bundle")
     path=$(jq -er '.source.path' <<<"$bundle")
+    bundle_source=$repo_root/$path
     case "$kind" in
-        repository-file) [ -f "$repo_root/$path" ] || fail "missing repository file: $path" ;;
-        repository-tree) [ -d "$repo_root/$path" ] || fail "missing repository tree: $path" ;;
+        repository-file) [ -f "$bundle_source" ] || fail "missing repository file: $path" ;;
+        repository-tree) [ -d "$bundle_source" ] || fail "missing repository tree: $path" ;;
         *) fail "unsupported bundle source kind: $kind" ;;
     esac
+    [ ! -L "$bundle_source" ] || fail "repository bundle may not be a symlink: $path"
+    if [ "$kind" = repository-tree ] &&
+        find "$bundle_source" -type l -print -quit | grep -q .; then
+        fail "repository bundle tree may not contain symlinks: $path"
+    fi
 done < <(jq -c '.bundles[]' "$catalog")
 
 required_bytes=$((required_bytes + reserve_mib * 1024 * 1024 + overhead_mib * 1024 * 1024))
@@ -202,7 +223,9 @@ emit_write_evidence pending
 
 echo "target: $device"
 echo "model: $model"
-echo "serial: $serial"
+if [ "$image_build" -eq 0 ]; then
+    echo "serial: $serial"
+fi
 echo "bytes: $device_bytes"
 echo "warning: all existing partitions and data will be erased"
 
@@ -388,4 +411,8 @@ if [ -n "$dns_manifest" ]; then
 else
     echo "usb-media write-usb-linux: verified catalog, write readback, and created $data_label"
 fi
-echo "usb-media write-usb-linux: target remains $device; eject it before unplugging"
+if [ "$image_build" -eq 1 ]; then
+    echo "usb-media write-usb-linux: verified generated image on $device"
+else
+    echo "usb-media write-usb-linux: target remains $device; eject it before unplugging"
+fi

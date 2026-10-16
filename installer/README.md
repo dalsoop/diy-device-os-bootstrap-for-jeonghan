@@ -41,12 +41,12 @@ media. After separately building the DNS runtime artifact, the `burn` command
 requires a removable non-root target, a readable serial, sufficient capacity,
 and the exact `ERASE <device> <serial>` confirmation.
 
-macOS may burn a previously prepared, exact-size MBR disk image through the
-guarded `world burn-image-macos` command. This repository does not yet provide the
-Linux/QEMU builder for that image; complete USB assembly uses the Linux
-`device-os world burn` path. The burn commands delegate to the existing internal
-writer implementations. This derivative exposes only the documented `burn`
-spellings and does not retain the old write-command aliases.
+macOS builds an exact-size MBR disk image through the guarded Debian 13
+Podman/Docker loop-device builder, then burns it through the separately guarded
+`world burn-image-macos` command. `device-os targets` prints the current
+device/name/serial/size confirmation tuple. The burn commands delegate to the
+internal writer implementations. This derivative exposes only the documented
+`burn` spellings and does not retain old write-command aliases.
 
 Read [operations](../docs/operations.md), [security](../docs/security.md), and the
 [physical verification gates](docs/verification.md) before any release or disk

@@ -246,6 +246,24 @@ jq -n \
 ' > "$temporary/catalog.json"
 
 "$script_dir/verify-catalog" "$temporary/catalog.json" >/dev/null
+
+jq -c '.bundles[]' "$temporary/catalog.json" > "$temporary/bundles.jsonl"
+while IFS= read -r bundle; do
+    kind=$(printf '%s\n' "$bundle" | jq -er '.source.kind')
+    path=$(printf '%s\n' "$bundle" | jq -er '.source.path')
+    source_path=$repo_root/$path
+    case "$kind" in
+        repository-file) [ -f "$source_path" ] || fail "missing repository bundle: $path" ;;
+        repository-tree) [ -d "$source_path" ] || fail "missing repository bundle: $path" ;;
+        *) fail "unsupported repository bundle kind: $kind" ;;
+    esac
+    [ ! -L "$source_path" ] || fail "repository bundle may not be a symlink: $path"
+    if [ "$kind" = repository-tree ] &&
+        find "$source_path" -type l -print -quit | grep -q .; then
+        fail "repository bundle tree may not contain symlinks: $path"
+    fi
+done < "$temporary/bundles.jsonl"
+
 mkdir -p "$(dirname -- "$output")"
 mv "$temporary/catalog.json" "$output"
 

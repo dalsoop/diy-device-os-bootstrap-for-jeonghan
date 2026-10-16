@@ -11,7 +11,8 @@ verify=$repo_root/usb-media/verify-catalog
 render=$repo_root/usb-media/render-ventoy-config
 capacity=$repo_root/usb-media/calculate-capacity
 temporary=$(mktemp -d)
-trap 'rm -rf "$temporary"' EXIT HUP INT TERM
+test_bundle=$repo_root/work/media-catalog-symlink-fixture
+trap 'rm -rf "$temporary" "$test_bundle"' EXIT HUP INT TERM
 
 fail() {
     echo "media-catalog-simulation: $*" >&2
@@ -30,6 +31,15 @@ expect_resolution_rejected() {
     if DEVICE_MEDIA_WORLD_PLAN=$world_fixture USB_MEDIA_CATALOG=$temporary/rejected.json \
         "$repo_root/usb-media/resolve-catalog" >/dev/null 2>&1; then
         fail "invalid World selection was accepted: $world_fixture"
+    fi
+}
+
+expect_bundle_resolution_rejected() {
+    composition_fixture=$1
+    if DEVICE_MEDIA_COMPOSITION=$composition_fixture \
+        USB_MEDIA_CATALOG=$temporary/rejected-bundle.json \
+        "$repo_root/usb-media/resolve-catalog" >/dev/null 2>&1; then
+        fail "unsafe repository bundle was accepted"
     fi
 }
 
@@ -86,6 +96,15 @@ jq -e '
 jq '.policies.requireTargetSpecificEraseConfirmation = false' \
     "$temporary/world.json" > "$temporary/weakened-world.json"
 expect_resolution_rejected "$temporary/weakened-world.json"
+
+mkdir -p "$test_bundle"
+ln -s /etc/hosts "$test_bundle/escaped-hosts"
+jq '.bundles = [{
+  id: "unsafe-test-bundle",
+  destination: "tools/unsafe-test-bundle",
+  source: {kind: "repository-tree", path: "work/media-catalog-symlink-fixture"}
+}]' "$repo_root/usb-media/composition.json" > "$temporary/symlink-composition.json"
+expect_bundle_resolution_rejected "$temporary/symlink-composition.json"
 
 jq '.entries[1].id = .entries[0].id' "$catalog" > "$temporary/duplicate-id.json"
 expect_rejected "$temporary/duplicate-id.json"

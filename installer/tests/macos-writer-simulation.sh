@@ -37,8 +37,15 @@ case "$2" in
   VirtualOrPhysical) echo Physical ;;
   MediaName) echo "Test USB" ;;
   TotalSize) echo 2097152 ;;
+  DeviceTreePath) echo "IODeviceTree:/test/usb@00100000" ;;
   *) exit 1 ;;
 esac'
+make_mock ioreg '
+cat <<EOF
++-o IOUSBMassStorageInterfaceNub
+  "kUSBSerialNumberString" = "TEST-SERIAL-9"
+  "BSD Name" = "disk9"
+EOF'
 # shellcheck disable=SC2016
 make_mock od '
 case " $* " in
@@ -72,7 +79,7 @@ run_writer() {
     DEVICE_OS_WRITE_EVIDENCE="$temporary/evidence.json" "$writer" \
         --image "$image" \
         --device /dev/disk9 \
-        --confirm 'ERASE /dev/disk9 Test USB 2097152'
+        --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152'
 }
 
 run_writer >/dev/null
@@ -106,7 +113,7 @@ diff -u "$temporary/expected.log" "$log"
 if PATH="$test_path" TEST_LOG="$log" TEST_FAIL_BODY_COMPARE=1 \
     DEVICE_OS_WRITE_EVIDENCE="$temporary/body-failure-evidence.json" \
     "$writer" --image "$image" --device /dev/disk9 \
-    --confirm 'ERASE /dev/disk9 Test USB 2097152' >/dev/null 2>&1; then
+        --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then
     echo "macos-writer-simulation: body readback failure was accepted" >&2
     exit 1
 fi
@@ -124,7 +131,7 @@ fi
 if PATH="$test_path" TEST_LOG="$log" TEST_MBR_TYPE=238 \
     DEVICE_OS_WRITE_EVIDENCE="$temporary/gpt-evidence.json" \
     "$writer" --image "$image" --device /dev/disk9 \
-    --confirm 'ERASE /dev/disk9 Test USB 2097152' >/dev/null 2>&1; then
+        --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then
     echo "macos-writer-simulation: GPT image was accepted" >&2
     exit 1
 fi

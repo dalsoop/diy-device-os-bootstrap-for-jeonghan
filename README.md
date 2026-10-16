@@ -44,7 +44,8 @@ locations or the principal secret store.
 2. Review the local inventories and enable one machine at a time.
 3. On an amd64 Debian 13 builder, build the offline Korean DNS installer ISO.
 4. Check capacity with the exact ISO and its build manifest.
-5. On Linux, burn the confirmed removable USB.
+5. On Linux, burn directly, or on macOS build an exact-size raw image in the
+   bundled Debian 13 container and write it with verified readback.
 6. Verify the USB, boot one machine, and complete all physical gates before
    enabling the next machine.
 
@@ -62,10 +63,27 @@ Resolve the current device path and serial immediately before every burn. The
 writer rejects a non-removable device, the root disk, a missing serial,
 insufficient capacity, an unverified artifact, or an inexact confirmation.
 
-macOS can validate, plan, simulate, and write a prebuilt exact-size MBR raw
-image with `burn-image-macos`. Complete Ventoy assembly and DNS ISO construction
-currently require Linux; the repository does not yet build that macOS-ready raw
-image.
+On macOS, inspect the live target first, then build an image whose size exactly
+matches it. `build-image` runs the Linux-only Ventoy assembler inside a
+privileged Podman or Docker container; the container cannot see macOS block
+devices. The later write remains a separate target-specific action:
+
+```sh
+./device-os targets
+DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
+DEVICE_OS_MEDIA=inventory-capture ./device-os world build-image \
+  --output "$PWD/installer/artifacts/inventory-capture.raw" \
+  --size EXACT_TARGET_BYTES
+sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn-image-macos \
+  --image "$PWD/installer/artifacts/inventory-capture.raw" \
+  --device /dev/diskN \
+  --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_TARGET_BYTES'
+```
+
+The offline DNS installer ISO still requires three real HP inventory captures,
+exactly one erase-enabled role, public operator key material, and an amd64
+Debian 13 build. `./device-os world readiness` reports every missing input
+without printing hardware identities or credentials.
 
 ## Repository map
 

@@ -32,10 +32,15 @@ for file in \
     usb-media/verify-catalog \
     usb-media/render-ventoy-config \
     usb-media/calculate-capacity \
+    usb-media/build-image \
+    usb-media/build-image-linux \
+    usb-media/build-image-container \
+    usb-media/inspect-targets \
     usb-media/write-usb-linux \
     usb-media/write-image-macos \
     management/dns-appliance-status-monitor/start \
     tests/media-catalog-simulation.sh \
+    tests/image-builder-simulation.sh \
     tests/macos-writer-simulation.sh \
     tests/management-simulation.sh \
     ../world/bin/resolve-world \
@@ -100,6 +105,10 @@ grep -q '/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md' \
 grep -q 'debian-installer/locale string ko_KR.UTF-8' \
     "$repo_root/installer/simple-cdd/profiles/default.preseed"
 grep -q 'built ISO is missing /simple-cdd/' "$repo_root/installer/build-image"
+grep -q 'exactly one role must have destructive_install_enabled=true' \
+    "$repo_root/installer/build-image"
+grep -q 'repository bundle tree may not contain symlinks' \
+    "$repo_root/usb-media/write-usb-linux"
 grep -q 'manifests/LICENSES.SHA256' "$repo_root/usb-media/write-usb-linux"
 grep -q 'Source revision:' "$repo_root/usb-media/write-usb-linux"
 grep -q 'resolved catalog revision does not match the checkout' \
@@ -135,8 +144,10 @@ grep -q 'https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan' \
     "$repo_root/usb-media/composition.json"
 grep -q '^    burn)$' "$repo_root/device-os"
 grep -q '^    burn-image-macos)$' "$repo_root/device-os"
+grep -q '^    build-image)$' "$repo_root/device-os"
 grep -q '^            burn)$' "$repo_root/device-os"
 grep -q '^            burn-image-macos)$' "$repo_root/device-os"
+grep -q '^            build-image)$' "$repo_root/device-os"
 grep -q './device-os world burn' "$repo_root/../README.md"
 
 if grep -q -E 'legacy_dns|--dns-iso|--dns-manifest|burn\|write|burn-image-macos\|write-image-macos' \

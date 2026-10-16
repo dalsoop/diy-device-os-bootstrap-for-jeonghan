@@ -6,17 +6,16 @@ Under the original Ventoy boot path, the installer resolved `/dev/mapper/Ventoy`
 
 The source now resolves the physical parent, rejects unresolved ancestry, USB-backed and mounted candidates, and delays signature clearing until all checks pass. The finding remains open because source simulation cannot prove the repaired path on firmware and hardware. Rebuild the ISO and USB, pass VM BIOS/UEFI, and run one disposable physical `dns01` pilot before enabling another role.
 
-## Revised macOS writer lacks physical qualification and an image builder
+## Revised macOS image path lacks physical qualification
 
 Two earlier physical writes copied selected ISO payloads correctly, but whole-device comparison differed after macOS mounted exFAT and changed filesystem metadata. The MBR-last writer now prevents mounting before body readback and passes isolated simulations.
 
-The revised sequence has not been rerun on disposable hardware, and the repository cannot yet produce its required exact-size MBR raw image. This blocks calling macOS a complete build-and-burn path. Add a reproducible Linux/QEMU raw-image builder, then run the revised writer, filesystem checks, payload checks, and BIOS/UEFI boot on disposable media.
-
-## Repository bundle symlinks can escape the checkout
-
-When a configured repository bundle contains a symlink, current staging validates the textual relative path but ordinary copy behavior can follow the link outside the checkout. A malicious or accidental link could copy host files into generated media.
-
-The current mitigation is to reject symlinks by review and repository policy. Closing the defect requires executable staging changes: resolve every source entry, prove it remains below the checkout, reject link escapes and race-prone replacements, and add file/tree escape fixtures before permitting symlinks.
+The repository now builds an exact-size MBR image through a privileged Debian
+13 container whose loop device is isolated inside the Linux VM. It rejects
+repository-bundle symlinks before assembly, and the macOS writer binds its exact
+confirmation to device path, media name, USB serial, and byte size. The revised
+sequence has not yet been run on disposable hardware, so filesystem checks,
+payload checks, and BIOS/UEFI boot remain required before qualification.
 
 ## DNS apply is not bound to the reviewed plan
 
@@ -65,9 +64,3 @@ The current mitigation is the fixed command allowlist, protected credential-file
 `restore-node` always invokes the selected Technitium HTTPS origin with certificate verification disabled while sending a bearer token and decrypted backup. Exact URL confirmation prevents accidental target substitution by the operator but does not authenticate that endpoint.
 
 The command is restricted to isolated restore drills and is not production-qualified. Closing this requires a trusted-CA or pinned-fingerprint input, endpoint validation, failure tests for an untrusted certificate, and a successful isolated restore with verification enabled.
-
-## The image builder accepts more than one erase-enabled role
-
-The rollout policy enables only the current pilot role, but `build-image` checks only that the enabled-role count is greater than zero. If two or three real inventory files are enabled, one ISO can authorize unattended installation on every matching machine even though operations require one-at-a-time expansion.
-
-The current mitigation is operator review of all three ignored inventory files before every build. Closing the gap requires deciding whether later steady-state media may intentionally enable several roles; if not, the builder must require exactly one enabled role and add rejection coverage for multiple enabled inventories.

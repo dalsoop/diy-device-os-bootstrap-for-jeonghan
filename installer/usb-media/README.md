@@ -10,7 +10,9 @@ verified Korean-first Ventoy USB.
 ./device-os world available
 ./device-os world capacity --capacity 16GB
 ./device-os world simulate
+./device-os targets
 ./device-os world prepare
+./device-os world build-image --output /absolute/path/device-os.raw --size EXACT_BYTES
 sudo ./device-os world burn --device /dev/sdX ...
 ```
 
@@ -19,23 +21,29 @@ sudo ./device-os world burn --device /dev/sdX ...
 partitions and overwrites the confirmed removable target. The command delegates
 to the internal writer after all safety checks pass.
 
-On macOS, a prepared full-disk image can be written and read back with:
+On macOS, `build-image` starts a privileged Debian 13 Podman or Docker
+container, assembles Ventoy through a loop device inside that VM, and returns an
+exact-size MBR raw image. The container receives only the checkout bind and
+cannot open a macOS block device. Inspect the live target immediately before
+building and writing:
 
 ```sh
+./device-os targets
+./device-os world build-image \
+  --output "$PWD/installer/artifacts/device-os.raw" \
+  --size EXACT_BYTES
 sudo ./device-os world burn-image-macos \
-  --image /absolute/path/device-os.raw \
+  --image "$PWD/installer/artifacts/device-os.raw" \
   --device /dev/diskN \
-  --confirm 'ERASE /dev/diskN MEDIA_NAME EXACT_BYTES'
+  --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
 ```
 
 The macOS writer accepts only a physical, writable, removable whole disk whose
 size exactly matches an MBR image. It invalidates the old partition map, writes
 and verifies the image body while automatic mounting is impossible, commits and
 verifies the first MiB last, then unmounts and ejects. GPT images are rejected.
-Creating the full-disk image remains a separate build step. This repository does
-not currently provide a Linux/QEMU builder for that image, and Ventoy does not
-provide a native macOS installer. Use the Linux `./device-os world burn` workflow for
-complete USB assembly until a full-disk image builder is implemented.
+Image assembly and physical writing remain separate operations: building an
+image never authorizes erasure.
 
 `capacity` sums selected image sizes, the enrollment reserve, and configured
 overhead. Cached files and runtime artifacts with matching manifests provide
@@ -79,6 +87,10 @@ tests in the Installer.
 - Only the DNS local profile uses guarded unattended installation.
 - The writer requires a removable non-root device, readable serial, sufficient
   capacity, and exact `ERASE <device> <serial>` confirmation.
+- The macOS writer additionally binds confirmation to media name and exact byte
+  size: `ERASE <device> <media-name> <serial> <bytes>`.
+- Repository-file and repository-tree bundles reject every symlink before
+  staging so a checkout path cannot escape into host files.
 - Generated media and caches remain outside Git.
 - Removing the DNS profile requires setting `enrollment_reserve_mib` to zero.
 

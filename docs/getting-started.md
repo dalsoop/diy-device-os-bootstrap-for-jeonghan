@@ -310,20 +310,25 @@ the forced-command example, and MCP client configuration.
 
 ## macOS boundary
 
-macOS supports the `world validate`, `world available`, `world plan`,
-`world capacity`, and `world simulate` commands. The command
-below burns and verifies an already prepared exact-size MBR full-disk image:
+macOS supports the complete prepare, raw-image assembly, and physical-write
+sequence. Podman or Docker supplies the isolated Linux loop-device builder;
+the container does not receive a macOS block device:
 
 ```sh
+./device-os targets
+DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
+DEVICE_OS_MEDIA=inventory-capture ./device-os world build-image \
+  --output "$PWD/installer/artifacts/inventory-capture.raw" \
+  --size EXACT_BYTES
 sudo ./device-os world burn-image-macos \
-  --image /absolute/path/device-os.raw \
+  --image "$PWD/installer/artifacts/inventory-capture.raw" \
   --device /dev/diskN \
-  --confirm 'ERASE /dev/diskN MEDIA_NAME EXACT_BYTES'
+  --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
 ```
 
-This repository does not currently provide the Linux/QEMU builder that creates
-`device-os.raw`. Use the Linux `./device-os world burn` workflow for complete USB
-assembly until such a builder is implemented and verified.
+Image creation is non-destructive to physical media. The later writer resolves
+the live USB serial again and refuses a stale phrase, a size mismatch, a GPT
+image, an internal or virtual device, or failed raw readback.
 
 ## World generation boundary
 

@@ -33,7 +33,7 @@ upstream components is stored at `LICENSE`.
 The USB writer copies this file, the project license, the licensing history,
 and an exact source-revision pointer into `licenses/`. The DNS image builder
 also places them in the installer and installs them under
-`/usr/share/doc/device-os-bootstrap-for-jeonghan/`.
+`/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/`.
 
 Opaque upstream ISOs remain unmodified and retain their embedded notices. This
 project does not extract enough information from every ISO to prove that a

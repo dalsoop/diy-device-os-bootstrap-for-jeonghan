@@ -67,13 +67,49 @@ done
 
 [ "$(uname -s)" = Darwin ] || fail "macOS is required"
 [ "$(id -u)" -eq 0 ] || fail "run with sudo"
-if [ -n "$write_evidence" ]; then
-    command -v jq >/dev/null 2>&1 || fail "jq is required when recording write evidence"
-fi
+command -v jq >/dev/null 2>&1 || fail "jq is required"
+command -v shasum >/dev/null 2>&1 || fail "shasum is required"
 command -v ioreg >/dev/null 2>&1 || fail "ioreg is required"
 [[ "$image" = /* ]] || fail "--image must be an absolute path"
 [ -f "$image" ] || fail "raw image not found: $image"
 [[ "$device" =~ ^/dev/disk[0-9]+$ ]] || fail "whole-disk /dev/diskN target required"
+catalog=${USB_MEDIA_CATALOG:-}
+[[ "$catalog" = /* ]] || fail "USB_MEDIA_CATALOG must be an absolute path"
+[ -r "$catalog" ] || fail "resolved catalog is missing: $catalog"
+manifest=$image.manifest.json
+[ -r "$manifest" ] || fail "raw image manifest is missing: $manifest"
+
+image_bytes=$(stat -f %z "$image")
+image_filename=$(basename -- "$image")
+image_sha256=$(shasum -a 256 "$image" | awk 'NR == 1 { print $1 }')
+[[ "$image_sha256" =~ ^[a-f0-9]{64}$ ]] || fail "raw image checksum is invalid"
+catalog_sha256=$(shasum -a 256 "$catalog" | awk 'NR == 1 { print $1 }')
+[[ "$catalog_sha256" =~ ^[a-f0-9]{64}$ ]] || fail "resolved catalog checksum is invalid"
+catalog_revision=$(jq -er '.catalog.revision | select(test("^[a-f0-9]{40}$"))' "$catalog")
+catalog_tree=$(jq -er '.catalog.tree | select(test("^[a-f0-9]{40}$"))' "$catalog")
+catalog_world=$(jq -c '
+  if has("world") then
+    {slug: .world.world.slug, media_id: .world.media.id}
+  else
+    null
+  end
+' "$catalog")
+jq -e \
+    --arg filename "$image_filename" \
+    --argjson bytes "$image_bytes" \
+    --arg image_sha256 "$image_sha256" \
+    --arg catalog_sha256 "$catalog_sha256" \
+    --arg revision "$catalog_revision" \
+    --arg tree "$catalog_tree" \
+    --argjson world "$catalog_world" '
+      keys == ["catalog", "image", "kind", "schema_version", "world"] and
+      .schema_version == 1 and
+      .kind == "device-os-raw-image" and
+      .image == {filename: $filename, bytes: $bytes, sha256: $image_sha256} and
+      .catalog == {sha256: $catalog_sha256, revision: $revision, tree: $tree} and
+      .world == $world
+    ' "$manifest" >/dev/null ||
+    fail "raw image manifest does not match the image and selected media"
 
 info=$(mktemp /tmp/device-os-disk-info.XXXXXX)
 cleanup() {
@@ -110,7 +146,6 @@ awk -v bsd="$device_identifier" '
   END { if (result != "") print result }
 ')
 [ -n "$serial" ] || fail "target has no readable USB serial"
-image_bytes=$(stat -f %z "$image")
 [ "$image_bytes" = "$device_bytes" ] ||
     fail "image and target sizes differ: image=$image_bytes target=$device_bytes"
 

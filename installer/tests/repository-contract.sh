@@ -57,6 +57,7 @@ for required in \
     installer/inputs/age-recipient.example \
     build/locks/sources.env \
     schemas/enrollment-record.schema.json \
+    schemas/raw-image-manifest.schema.json \
     zones/home.arpa.zone \
     management/tailscale-policy.example.hujson \
     usb-media/composition.json \
@@ -116,6 +117,8 @@ grep -q 'resolved catalog revision does not match the checkout' \
 
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/schemas/enrollment-record.schema.json"
+python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
+    "$repo_root/schemas/raw-image-manifest.schema.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/management/dns-appliance-status-monitor/config.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \

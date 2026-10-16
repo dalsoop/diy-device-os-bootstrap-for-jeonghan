@@ -261,30 +261,44 @@ blockdev --rereadpt "$device" || true
 udevadm settle
 
 ensure_image_partition_nodes() {
-    local sys_partition name numbers major minor
+    local sys_partition name numbers major minor expected actual
     [ "$image_build" -eq 1 ] || return 0
     for sys_partition in /sys/class/block/"${device#/dev/}"p*; do
         [ -r "$sys_partition/dev" ] || continue
         name=$(basename -- "$sys_partition")
-        if [ ! -b "/dev/$name" ]; then
-            numbers=$(cat "$sys_partition/dev")
-            major=${numbers%:*}
-            minor=${numbers#*:}
-            mknod "/dev/$name" b "$major" "$minor"
+        numbers=$(cat "$sys_partition/dev")
+        major=${numbers%:*}
+        minor=${numbers#*:}
+        expected=$(printf '%x:%x' "$major" "$minor")
+        actual=$(stat -c '%t:%T' "/dev/$name" 2>/dev/null || true)
+        if [ "$actual" != "$expected" ]; then
+            # Ventoy can create a partition node just before the kernel assigns
+            # the final dynamic major/minor. Replace that stale node from the
+            # authoritative sysfs identity before probing the filesystem.
+            rm -f -- "/dev/$name"
+            mknod -m 0660 "/dev/$name" b "$major" "$minor"
         fi
     done
 }
 ensure_image_partition_nodes
 
-main_partition=$(lsblk -nrpo NAME,LABEL "$device" |
-    awk -v label="$data_label" '$2 == label { print $1; exit }')
-if [ -z "$main_partition" ] && [ "$image_build" -eq 1 ] &&
-    [ -b "${device}p1" ] &&
-    [ "$(blkid -s LABEL -o value "${device}p1" 2>/dev/null || true)" = "$data_label" ]; then
+main_partition=
+if [ "$image_build" -eq 1 ]; then
     main_partition=${device}p1
-fi
-if [ -z "$main_partition" ]; then
+    [ -b "$main_partition" ] || fail "Ventoy data partition node was not created"
+    main_sys=/sys/class/block/${main_partition#/dev/}
+    [ -r "$main_sys/start" ] || fail "Ventoy data partition identity is unavailable"
+    [ "$(cat "$main_sys/start")" = 2048 ] ||
+        fail "Ventoy data partition has an unexpected start sector"
+    [ "$(blkid -p -s TYPE -o value "$main_partition" 2>/dev/null || true)" = exfat ] ||
+        fail "Ventoy data partition is not exFAT"
+    [ "$(blkid -p -s LABEL -o value "$main_partition" 2>/dev/null || true)" = "$data_label" ] ||
+        fail "Ventoy data partition label does not match $data_label"
+else
+    main_partition=$(lsblk -nrpo NAME,LABEL "$device" |
+        awk -v label="$data_label" '$2 == label { print $1; exit }')
     while IFS= read -r candidate; do
+        [ -z "$main_partition" ] || break
         candidate_label=$(blkid -s LABEL -o value "$candidate" 2>/dev/null || true)
         if [ "$candidate_label" = "$data_label" ]; then
             main_partition=$candidate
@@ -305,8 +319,16 @@ if [ "$reserve_mib" -gt 0 ]; then
     blockdev --rereadpt "$device"
     udevadm settle
     ensure_image_partition_nodes
-    enroll_partition=$(lsblk -nrpo NAME,TYPE,START "$device" |
-        awk -v start="$start" '$2 == "part" && $3 == start { print $1; exit }')
+    if [ "$image_build" -eq 1 ]; then
+        enroll_partition=${device}p3
+        enroll_sys=/sys/class/block/${enroll_partition#/dev/}
+        [ -r "$enroll_sys/start" ] || fail "$enrollment_label partition identity is unavailable"
+        [ "$(cat "$enroll_sys/start")" = "$start" ] ||
+            fail "$enrollment_label partition has an unexpected start sector"
+    else
+        enroll_partition=$(lsblk -nrpo NAME,TYPE,START "$device" |
+            awk -v start="$start" '$2 == "part" && $3 == start { print $1; exit }')
+    fi
     [ -b "$enroll_partition" ] || fail "$enrollment_label partition was not found"
     mkfs.exfat -n "$enrollment_label" "$enroll_partition"
 fi

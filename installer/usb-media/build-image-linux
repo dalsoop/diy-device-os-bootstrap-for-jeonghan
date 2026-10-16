@@ -44,7 +44,7 @@ done
 
 [ "$(uname -s)" = Linux ] || fail "Linux is required"
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-for command in losetup truncate sha256sum blockdev mknod seq; do
+for command in losetup truncate sha256sum blockdev; do
     command -v "$command" >/dev/null 2>&1 || fail "$command is required"
 done
 [[ "$output" = /* ]] || fail "--output must be an absolute path"
@@ -58,6 +58,8 @@ esac
 
 if [ "${DEVICE_OS_SKIP_LOOP_NODE_SETUP:-0}" != 1 ] &&
     [ -c /dev/loop-control ] && [ ! -b /dev/loop0 ]; then
+    command -v mknod >/dev/null 2>&1 || fail "mknod is required"
+    command -v seq >/dev/null 2>&1 || fail "seq is required"
     for number in $(seq 0 31); do
         [ -e "/dev/loop$number" ] || mknod "/dev/loop$number" b 7 "$number"
     done

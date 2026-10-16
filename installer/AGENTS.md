@@ -1,104 +1,35 @@
-# DNS Device OS Installer for Jeonghan
+# Installer Module
 
-This engine module assembles Jeonghan's selected device installation and
-inventory media. The current guarded unattended profile installs three HP DNS
-appliances; future media remain explicit World selections.
-Users manage the repository as one source of truth while this directory remains
-the execution boundary. The guarded offline installer for three HP DNS
-appliances is the primary product; public Catalog entries remain reusable data
-and are staged only when the active World selects them.
+This module is the repository's execution and safety boundary. It resolves World-selected entries, revalidates the data-only Catalog, verifies downloads and runtime artifacts, assembles removable media, builds the guarded DNS image, and runs management-host operations.
 
-## Project map
+## Boundaries
 
-```text
-installer/
-├── AGENTS.md
-├── CLAUDE.md
-├── device-os
-├── collections/
-│   ├── AGENTS.md
-│   └── device-os.json
-├── usb-media/
-│   ├── AGENTS.md
-│   ├── composition.json
-│   ├── local-entries/
-│   ├── resolve-catalog
-│   ├── verify-catalog
-│   ├── fetch-images
-│   ├── calculate-capacity
-│   ├── write-usb-linux
-│   └── write-image-macos
-├── installer/
-│   ├── AGENTS.md
-│   ├── build-image
-│   ├── scripts/install-gate
-│   └── payload/
-├── management/
-│   ├── AGENTS.md
-│   ├── dnsctl
-│   ├── cluster-bootstrap
-│   ├── tailscale-enroll
-│   └── dns-appliance-status-monitor/
-│       └── AGENTS.md
-├── build/AGENTS.md
-├── inventory/AGENTS.md
-├── schemas/AGENTS.md
-├── tests/AGENTS.md
-├── zones/AGENTS.md
-└── docs/
-    ├── architecture.md
-    ├── business-rules.md
-    ├── security.md
-    ├── standards.md
-    ├── engineering-notes.md
-    ├── operations.md
-    ├── contracts.md
-    └── tracking/
-        ├── status.md
-        ├── findings.md
-        └── decisions/
-            ├── index.md
-            └── NNNN-*.md
-```
+- `usb-media/` owns resolution, capacity, download, staging, Ventoy rendering, and physical USB writers.
+- `collections/` owns contributor reference grouping, not the personal selection used by ordinary World commands.
+- `installer/` owns the offline DNS image, install gate, and first-boot enrollment; it does not own general public OS behavior.
+- `inventory/` contains public examples only. Real hardware captures live in ignored local storage.
+- `management/` owns post-install DNS, Tailscale, backup, restore, reinstall authorization, and read-only monitoring from a trusted host.
+- `build/` owns immutable external input locks; `schemas/` owns exchanged record shapes; `tests/` owns non-destructive simulations; `zones/` owns reviewed DNS desired state.
+- Long-lived credentials belong outside the checkout. Router mutation and arbitrary remote administration are outside this module.
 
-## Hard rules
+## Invariants
 
-- Never commit secrets, recovery archives, real hardware inventory, enrollment
-  output, generated media, packages, or disk images. Only explicitly public
-  inputs such as SSH public keys and age recipients may be tracked.
-- Planning and simulation never write disks. USB and DNS installation writes
-  require live target identity checks and exact target-specific confirmation;
-  zero, removable, installer-media, or ambiguous internal candidates fail closed.
-- Treat the sibling Catalog as untrusted data: record the monorepo commit and
-  Catalog tree identity, execute none of its code, and validate its JSON again.
-- General installers remain interactive. DNS unattended installation is limited
-  to its local guarded adapter and generation-bound reinstall authorization.
-- Report source, VM, physical-media, firmware, installation, and network
-  verification as separate states; one never implies the next.
+- World and Catalog input are revalidated before execution. Catalog files are never executed.
+- `validate`, `plan`, `capacity`, and `simulate` never download full images or write a device; `prepare` may download but never writes a block device.
+- A USB write accepts only the currently inspected removable non-root device with readable serial, sufficient capacity, verified artifacts, and exact `ERASE <device> <serial>`.
+- General OS entries remain interactive. Guarded unattended behavior is isolated to the local DNS adapter with exact hardware, internal-disk, installer-media, and reinstall checks.
+- Mapper and partition ancestry resolve to one physical parent before target preparation. Unresolved, ambiguous, USB-backed, removable, mounted, zero-candidate, or multiple-candidate states fail before disk signatures are cleared.
+- Secrets never enter arguments, URLs, logs, generated public JSON, or Git. Any removable-media secret is age-encrypted before its first write.
+- Source, image, VM, physical USB, firmware, installation, network, and recovery evidence remain separate claims.
 
-## Read before changing
+## Change pattern
 
-- Always read `docs/standards.md`, `docs/engineering-notes.md`, and the
-  `AGENTS.md` in the directory being changed.
-- Read all of `docs/security.md` before changing disk erasure, credentials,
-  privilege, or network exposure.
-- Read `docs/contracts.md` before changing JSON, CLI, USB, or enrollment formats.
-- Read `docs/operations.md` before release, USB writing, installation, or restore work.
-- Record ownership or safety decisions under `docs/tracking/decisions/`.
+Existing source kinds and profile adapters drive shared code paths. Do not add a product-name conditional for an entry that fits an existing strategy. A new strategy requires a versioned contract, implementation, cleanup behavior, and success plus rejection coverage.
 
-## Change and verification workflow
+CLI and record changes update every producer, consumer, schema, fixture, and operator surface together. Preserve nonzero failure for rejected and incomplete operations. Use temporary files and atomic promotion for downloads, enrollment, and other durable output.
 
-- Protect `main`; land substantive changes through pull requests.
-- User-owned selection and environment intent belong in the sibling `world/`
-  module. Direct ordinary users to the monorepo root.
-- Change public OS metadata in the Catalog. The existing
-  `usb-media/local-entries/` content is an Installer-owned reference profile;
-  new user-specific selection, hardware binding, and policy belong in the World
-  Playbook once the external consumer is implemented.
-- Existing source kinds are data-driven. A new source kind or profile adapter
-  requires fetch, verify, stage, success, and rejection coverage.
-- `dnsctl apply` currently enforces literal `APPLY`, a caller-supplied commit
-  equal to `HEAD`, and a clean zone file. Human review and plan comparison are
-  operational requirements, not fully machine-enforced approval proofs.
-- Releasing an image and writing a physical USB are separate approvals.
+## Verification
 
+Run shell syntax and ShellCheck for executable shell files, Python syntax for the status monitor, and all scripts under `installer/tests/`. Destructive fixtures use temporary fake device trees and must never open a real block device, mounted USB, live DNS node, or production credential.
+
+An image build requires the supported amd64 Debian 13 environment and immutable locks. Physical qualification then advances through disposable VM BIOS/UEFI, one `dns01` pilot, and one-at-a-time expansion. Passing source simulations must not be reported as physical qualification.

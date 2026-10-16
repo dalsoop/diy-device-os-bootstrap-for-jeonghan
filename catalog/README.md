@@ -34,6 +34,7 @@ index contracts together and rely on the root CI for validation. A passing
 Catalog test proves metadata consistency only, not download provenance, boot,
 firmware, or installation behavior.
 
-See [contracts](docs/contracts.md), [security](docs/security.md), and
-[engineering standards](docs/standards.md).
+See the repository [contracts](../docs/contracts.md),
+[security policy](../docs/security.md), and
+[engineering standards](../docs/standards.md).
 

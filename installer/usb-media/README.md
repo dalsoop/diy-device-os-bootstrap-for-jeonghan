@@ -22,7 +22,7 @@ to the internal writer after all safety checks pass.
 On macOS, a prepared full-disk image can be written and read back with:
 
 ```sh
-sudo ./device-os burn-image-macos \
+sudo ./device-os world burn-image-macos \
   --image /absolute/path/device-os.raw \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME EXACT_BYTES'

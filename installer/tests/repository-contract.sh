@@ -39,6 +39,8 @@ for file in \
     tests/macos-writer-simulation.sh \
     tests/management-simulation.sh \
     ../world/bin/resolve-world \
+    ../world/bin/record-usb-event \
+    ../world/tests/usb-event-simulation.rb \
     ../world/tests/world-contract-simulation.rb; do
     [ -x "$repo_root/$file" ] || {
         echo "repository-contract: $file must be executable" >&2
@@ -56,7 +58,7 @@ for required in \
     usb-media/local-entries/dns-appliance.json \
     collections/device-os.json \
     usb-media/guides/dns-inventory.md \
-    docs/tracking/decisions/0002-pinned-declarative-catalog.md \
+    ../docs/tracking/decisions/0010-resolve-media-through-declarative-catalog.md \
     management/dns-appliance-status-monitor/config.json \
     management/dns-appliance-status-monitor/server.py \
     ../agent/AGENTS.md \
@@ -65,6 +67,9 @@ for required in \
     ../agent/tailscale-policy.example.hujson \
     ../world/world-playbook.yaml \
     ../world/drafts/jeonghan-home/world.yaml \
+    ../world/events/README.md \
+    ../world/schemas/usb-event.schema.json \
+    ../world/schemas/usb-verification.schema.json \
     ../.github/workflows/ci.yml \
     ../LICENSE \
     ../LICENSE_HISTORY.md \
@@ -110,6 +115,10 @@ python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/collections/device-os.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/usb-media/local-entries/dns-appliance.json"
+python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
+    "$repo_root/../world/schemas/usb-event.schema.json"
+python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
+    "$repo_root/../world/schemas/usb-verification.schema.json"
 python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' \
     "$repo_root/management/dns-appliance-status-monitor/server.py"
 python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' \
@@ -127,6 +136,7 @@ grep -q 'https://github.com/dalsoop/device-os-bootstrap-for-jeonghan' \
 grep -q '^    burn)$' "$repo_root/device-os"
 grep -q '^    burn-image-macos)$' "$repo_root/device-os"
 grep -q '^            burn)$' "$repo_root/device-os"
+grep -q '^            burn-image-macos)$' "$repo_root/device-os"
 grep -q './device-os world burn' "$repo_root/../README.md"
 
 if grep -q -E 'legacy_dns|--dns-iso|--dns-manifest|burn\|write|burn-image-macos\|write-image-macos' \

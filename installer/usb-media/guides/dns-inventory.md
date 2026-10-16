@@ -18,7 +18,7 @@ been built from inventory captured on each target HP computer.
 
    ```sh
    lsblk -o NAME,LABEL,FSTYPE,MOUNTPOINTS
-   sudo mkdir -p /mnt/device-inst
+   sudo mkdir -p /mnt/device-os
    sudo mount -L DEVICE-OS /mnt/device-os
    ```
 
@@ -26,9 +26,9 @@ been built from inventory captured on each target HP computer.
    disk, and actual mounted path:
 
    ```sh
-   sudo sh /mnt/device-inst/tools/capture-inventory \
+   sudo sh /mnt/device-os/tools/capture-inventory \
      dns01 10.0.5.1 enp1s0 /dev/sda | \
-     sudo tee /mnt/device-inst/inventory-dns01.conf >/dev/null
+     sudo tee /mnt/device-os/inventory-dns01.conf >/dev/null
    sync
    ```
 

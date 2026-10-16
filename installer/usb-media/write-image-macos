@@ -6,6 +6,7 @@ set -euo pipefail
 image=
 device=
 confirmation=
+write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
 
 usage() {
     cat >&2 <<'EOF'
@@ -26,6 +27,35 @@ fail() {
     exit 1
 }
 
+emit_write_evidence() {
+    local readback_status=$1
+    local completed_at=${2:-}
+    local evidence_temporary
+    [ -n "$write_evidence" ] || return 0
+    [[ "$write_evidence" = /* ]] || fail "DEVICE_OS_WRITE_EVIDENCE must be an absolute path"
+    [ -d "$(dirname -- "$write_evidence")" ] || fail "write-evidence directory is missing"
+    evidence_temporary=$write_evidence.tmp.$$
+    jq -n \
+        --arg writer macos-mbr-last \
+        --arg device_path "$device" \
+        --arg display_name "$media_name" \
+        --argjson bytes "$device_bytes" \
+        --arg preflight_at "$preflight_at" \
+        --arg completed_at "$completed_at" \
+        --arg readback_status "$readback_status" \
+        '{
+          schema_version: 1,
+          writer: $writer,
+          device_path: $device_path,
+          target: {display_name: $display_name, bytes: $bytes},
+          preflight_at: $preflight_at,
+          completed_at: (if $completed_at == "" then null else $completed_at end),
+          readback: {method: "mbr-last-raw-compare", status: $readback_status}
+        }' > "$evidence_temporary"
+    chmod 0600 "$evidence_temporary"
+    mv "$evidence_temporary" "$write_evidence"
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --image) image=${2:-}; shift 2 ;;
@@ -37,6 +67,9 @@ done
 
 [ "$(uname -s)" = Darwin ] || fail "macOS is required"
 [ "$(id -u)" -eq 0 ] || fail "run with sudo"
+if [ -n "$write_evidence" ]; then
+    command -v jq >/dev/null 2>&1 || fail "jq is required when recording write evidence"
+fi
 [[ "$image" = /* ]] || fail "--image must be an absolute path"
 [ -f "$image" ] || fail "raw image not found: $image"
 [[ "$device" =~ ^/dev/disk[0-9]+$ ]] || fail "whole-disk /dev/diskN target required"
@@ -79,6 +112,9 @@ expected="ERASE $device $media_name $device_bytes"
 [ "$confirmation" = "$expected" ] ||
     fail "exact confirmation required: $expected"
 
+preflight_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+emit_write_evidence pending
+
 echo "target: $device"
 echo "media: $media_name"
 echo "bytes: $device_bytes"
@@ -103,5 +139,7 @@ sync
 cmp -n "$prefix_bytes" "$image" "$raw_device"
 diskutil unmountDisk "$device"
 diskutil eject "$device"
+
+emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 echo "write-image-macos: two-phase raw readback passed and $device was ejected"

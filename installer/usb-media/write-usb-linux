@@ -8,6 +8,7 @@ repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 monorepo_root=$(CDPATH='' cd -- "$repo_root/.." && pwd)
 catalog=${USB_MEDIA_CATALOG:-$repo_root/work/device-os/catalog.json}
 cache_dir=${USB_MEDIA_CACHE_DIR:-$repo_root/cache/usb-media}
+write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
 device=
 confirmation=
 declare -A runtime_artifacts=()
@@ -30,6 +31,35 @@ EOF
 fail() {
     echo "usb-media write-usb-linux: $*" >&2
     exit 1
+}
+
+emit_write_evidence() {
+    local readback_status=$1
+    local completed_at=${2:-}
+    local evidence_temporary
+    [ -n "$write_evidence" ] || return 0
+    [[ "$write_evidence" = /* ]] || fail "DEVICE_OS_WRITE_EVIDENCE must be an absolute path"
+    [ -d "$(dirname -- "$write_evidence")" ] || fail "write-evidence directory is missing"
+    evidence_temporary=$write_evidence.tmp.$$
+    jq -n \
+        --arg writer linux-ventoy \
+        --arg device_path "$device" \
+        --arg display_name "$model" \
+        --argjson bytes "$device_bytes" \
+        --arg preflight_at "$preflight_at" \
+        --arg completed_at "$completed_at" \
+        --arg readback_status "$readback_status" \
+        '{
+          schema_version: 1,
+          writer: $writer,
+          device_path: $device_path,
+          target: {display_name: $display_name, bytes: $bytes},
+          preflight_at: $preflight_at,
+          completed_at: (if $completed_at == "" then null else $completed_at end),
+          readback: {method: "remount-and-sha256", status: $readback_status}
+        }' > "$evidence_temporary"
+    chmod 0600 "$evidence_temporary"
+    mv "$evidence_temporary" "$write_evidence"
 }
 
 assignment_parts() {
@@ -166,6 +196,9 @@ required_bytes=$((required_bytes + reserve_mib * 1024 * 1024 + overhead_mib * 10
 device_bytes=$(blockdev --getsize64 "$device")
 [ "$device_bytes" -gt "$required_bytes" ] ||
     fail "USB is too small; need more than $required_bytes bytes"
+
+preflight_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+emit_write_evidence pending
 
 echo "target: $device"
 echo "model: $model"
@@ -321,13 +354,38 @@ if [ -n "$dns_manifest" ]; then
     install -d -m 0700 "$enroll_dir/records" "$enroll_dir/reinstall"
     jq '{schema_version:1,build_id:.build_id,image_sha256:.iso_sha256,debian_point_release,technitium_version,technitium_image_digest,tailscale_version,tailscale_archive_sha256}' \
         "$dns_manifest" > "$enroll_dir/installer.json"
+    enrollment_digest=$(sha256sum "$enroll_dir/installer.json" | awk '{print $1}')
     sync -f "$enroll_dir"
     umount "$enroll_dir"
 fi
 
+blockdev --flushbufs "$device"
+mount -o ro,nodev,nosuid,noexec "$main_partition" "$mount_dir"
+(
+    cd "$mount_dir"
+    sha256sum -c manifests/SHA256SUMS
+    sha256sum -c manifests/MEDIA-CATALOG.SHA256
+    sha256sum -c manifests/LICENSES.SHA256
+    python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
+        ventoy/ventoy.json
+)
+umount "$mount_dir"
+
 if [ -n "$dns_manifest" ]; then
-    echo "usb-media write-usb-linux: verified catalog and created $data_label plus $enrollment_label"
+    mount -o ro,nodev,nosuid,noexec "$enroll_partition" "$enroll_dir"
+    actual_enrollment_digest=$(sha256sum "$enroll_dir/installer.json" | awk '{print $1}')
+    [ "$actual_enrollment_digest" = "$enrollment_digest" ] ||
+        fail "$enrollment_label installer metadata readback failed"
+    python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
+        "$enroll_dir/installer.json"
+    umount "$enroll_dir"
+fi
+
+emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+if [ -n "$dns_manifest" ]; then
+    echo "usb-media write-usb-linux: verified catalog, write readback, and created $data_label plus $enrollment_label"
 else
-    echo "usb-media write-usb-linux: verified catalog and created $data_label"
+    echo "usb-media write-usb-linux: verified catalog, write readback, and created $data_label"
 fi
 echo "usb-media write-usb-linux: target remains $device; eject it before unplugging"

@@ -11,6 +11,9 @@ trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 mock_bin=$temporary/bin
 log=$temporary/commands.log
 image=$temporary/device-os.raw
+jq_bin=$(command -v jq)
+jq_dir=$(dirname -- "$jq_bin")
+test_path=$mock_bin:$jq_dir:/usr/bin:/bin
 mkdir -p "$mock_bin"
 truncate -s 2097152 "$image"
 
@@ -65,13 +68,24 @@ if [ "${TEST_FAIL_BODY_COMPARE:-0}" = 1 ] && [ "$1" = -i ]; then
 fi'
 
 run_writer() {
-    PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" "$writer" \
+    PATH="$test_path" TEST_LOG="$log" \
+    DEVICE_OS_WRITE_EVIDENCE="$temporary/evidence.json" "$writer" \
         --image "$image" \
         --device /dev/disk9 \
         --confirm 'ERASE /dev/disk9 Test USB 2097152'
 }
 
 run_writer >/dev/null
+"$jq_bin" -e '
+  .schema_version == 1 and
+  .writer == "macos-mbr-last" and
+  .device_path == "/dev/disk9" and
+  .target.display_name == "Test USB" and
+  .target.bytes == 2097152 and
+  .readback == {method:"mbr-last-raw-compare",status:"passed"} and
+  (.completed_at | type == "string") and
+  (has("serial") | not)
+' "$temporary/evidence.json" >/dev/null
 cat > "$temporary/expected.log" <<EOF
 diskutil info -plist /dev/disk9
 diskutil unmountDisk /dev/disk9
@@ -89,7 +103,8 @@ EOF
 diff -u "$temporary/expected.log" "$log"
 
 : > "$log"
-if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" TEST_FAIL_BODY_COMPARE=1 \
+if PATH="$test_path" TEST_LOG="$log" TEST_FAIL_BODY_COMPARE=1 \
+    DEVICE_OS_WRITE_EVIDENCE="$temporary/body-failure-evidence.json" \
     "$writer" --image "$image" --device /dev/disk9 \
     --confirm 'ERASE /dev/disk9 Test USB 2097152' >/dev/null 2>&1; then
     echo "macos-writer-simulation: body readback failure was accepted" >&2
@@ -106,7 +121,8 @@ if grep -q '^diskutil eject ' "$log"; then
 fi
 
 : > "$log"
-if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" TEST_MBR_TYPE=238 \
+if PATH="$test_path" TEST_LOG="$log" TEST_MBR_TYPE=238 \
+    DEVICE_OS_WRITE_EVIDENCE="$temporary/gpt-evidence.json" \
     "$writer" --image "$image" --device /dev/disk9 \
     --confirm 'ERASE /dev/disk9 Test USB 2097152' >/dev/null 2>&1; then
     echo "macos-writer-simulation: GPT image was accepted" >&2

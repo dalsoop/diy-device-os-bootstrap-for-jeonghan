@@ -29,6 +29,12 @@ exact target-specific confirmation. Publishing an immutable completed World
 generation remains a separate future transaction after verified physical write
 and readback.
 
+## Alternatives
+
+- Keeping the Installer reference collection as the operator source was rejected because it could not represent personal assets, network intent, or multiple media passes.
+- Automatically appending every local profile was rejected because omitting DNS from World intent still retained DNS capacity and behavior.
+- Allowing World policy to authorize erasure was rejected because declarative review cannot identify the live device attached at execution time.
+
 ## Consequences
 
 Users customize one World draft and can review the exact resulting media plan.

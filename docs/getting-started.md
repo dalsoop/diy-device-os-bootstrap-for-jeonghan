@@ -20,7 +20,7 @@ The repository connects the World model, Catalog data, and Installer tooling:
 Do not treat a World edit, plan, capacity result, or simulation as evidence that
 a USB was written or a machine was installed.
 
-## 1. Clone the DNS derivative
+## 1. Clone the personal World repository
 
 Clone the operator repository. Its `upstream` remote tracks the generic source
 repository so safety updates can be reviewed and adopted selectively:
@@ -136,8 +136,8 @@ DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
 ```
 
 Burn that selection on Linux using the normal exact removable-device gate. It
-contains Debian Live, TrueNAS SCALE, the inventory capture command, and its
-guide, but deliberately contains no DNS installer:
+contains Debian Live, the inventory capture command, and its guide, but
+deliberately contains no DNS installer or unrelated OS image:
 
 ```sh
 sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn \
@@ -315,7 +315,7 @@ macOS supports the `world validate`, `world available`, `world plan`,
 below burns and verifies an already prepared exact-size MBR full-disk image:
 
 ```sh
-sudo ./device-os burn-image-macos \
+sudo ./device-os world burn-image-macos \
   --image /absolute/path/device-os.raw \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME EXACT_BYTES'
@@ -333,7 +333,8 @@ The intended history key is the physical USB creation time:
 world/worlds/{YYYYMMDDHHmmss}-{world-slug}/
 ```
 
-The publication transaction is not implemented. Do not create a completed
-generation merely because a plan, simulation, build, or write command started.
-A generation is valid only after physical write and required readback evidence
-succeed, and the future publication command records that evidence atomically.
+Do not create a completed generation merely because a plan, simulation, build,
+or write command started. `world burn` and `world burn-image-macos` publish a
+generation atomically only after physical write and required readback evidence
+succeed. Failed and cancelled physical attempts are recorded under
+`world/events/YYYY/` without becoming generations.

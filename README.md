@@ -85,22 +85,27 @@ device-os-bootstrap-for-jeonghan/
 - `agent/` exposes planning and reviewed DNS operations, never USB burn or OS
   installation.
 
-Each verified physical USB creation is intended to publish an immutable World
+Each verified physical USB creation publishes an immutable World
 generation named `{YYYYMMDDHHmmss}-{world-slug}`. The timestamp is the USB
-creation event in `Asia/Seoul`, not draft or commit time. Automatic generation
-publication is not implemented yet, so do not claim a completed generation
-until write and readback evidence exist.
+creation event in `Asia/Seoul`, not draft or commit time. Failed or cancelled
+physical attempts are recorded separately under `world/events/`; simulations
+do not create physical evidence.
 
 ## Documentation
 
 - [Getting started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
+- [Business rules](docs/business-rules.md)
 - [Security](docs/security.md)
+- [Engineering standards](docs/standards.md)
+- [Engineering notes](docs/engineering-notes.md)
+- [Operations](docs/operations.md)
+- [External contracts](docs/contracts.md)
+- [Implementation status](docs/tracking/status.md)
+- [Open findings](docs/tracking/findings.md)
+- [Decision history](docs/tracking/decisions/index.md)
 - [DNS install usability audit](installer/docs/dns-install-usability-audit.md)
-- [Installer operations](installer/docs/operations.md)
 - [Physical verification gates](installer/docs/verification.md)
-- [World contract](world/docs/contracts.md)
-- [Catalog contract](catalog/docs/contracts.md)
 - [Agent Gateway](agent/README.md)
 
 ## Upstream updates

@@ -18,3 +18,8 @@ local/inventory/dns03.yaml
 
 The Installer integration must reject a missing, ambiguous, stale, or
 non-matching inventory before any destructive operation.
+
+`local/usb-events/` is created automatically for the checkout-local writer
+lock, pending event transactions, safe writer evidence, and atomic staging.
+It is ignored and is not the durable event history. Successful records move to
+`worlds/`; failed and cancelled physical attempts move to `events/`.

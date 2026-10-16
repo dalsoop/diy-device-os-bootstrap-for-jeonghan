@@ -34,15 +34,19 @@ overwritten.
 world/
 ├── world-playbook.yaml
 ├── drafts/jeonghan-home/world.yaml
+├── events/README.md
 ├── worlds/README.md
-├── local/README.md
-└── docs/
+├── schemas/
+└── local/README.md
 ```
 
 `drafts/` is mutable desired state. `worlds/` is append-only completed history.
+`events/` is append-only failed and cancelled physical-attempt history.
 `local/` contains ignored machine-local observations and reviewed public inputs.
 Generated images, caches, credentials, private keys, raw hardware identifiers,
 and recovery material do not belong in Git.
 
-Automatic generation publication remains unimplemented. A plan or successful
-simulation is not evidence that a physical USB was written.
+`world burn` and `world burn-image-macos` serialize physical attempts. They
+stage pending state under ignored `local/`, publish a completed generation only
+after writer readback passes, and retain redacted unsuccessful event records.
+A plan or successful simulation is not evidence that a physical USB was written.

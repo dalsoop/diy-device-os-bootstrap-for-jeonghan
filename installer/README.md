@@ -31,8 +31,8 @@ writes.
 
 World commands resolve selection from `../world/drafts/`. The reference
 selection in `collections/device-os.json` remains for contributors and defines
-menu groups. Publishing the append-only completed generation is explicitly
-unfinished.
+menu groups. World burn commands delegate through the event recorder so a
+successful readback atomically publishes an append-only completed generation.
 
 ## Destructive workflow
 
@@ -42,13 +42,13 @@ requires a removable non-root target, a readable serial, sufficient capacity,
 and the exact `ERASE <device> <serial>` confirmation.
 
 macOS may burn a previously prepared, exact-size MBR disk image through the
-guarded `burn-image-macos` command. This repository does not yet provide the
+guarded `world burn-image-macos` command. This repository does not yet provide the
 Linux/QEMU builder for that image; complete USB assembly uses the Linux
-`device-os burn` path. The burn commands delegate to the existing internal
-writer implementations; the old write command spellings remain compatibility
-aliases.
+`device-os world burn` path. The burn commands delegate to the existing internal
+writer implementations. This derivative exposes only the documented `burn`
+spellings and does not retain the old write-command aliases.
 
-Read [operations](docs/operations.md), [security](docs/security.md), and the
+Read [operations](../docs/operations.md), [security](../docs/security.md), and the
 [physical verification gates](docs/verification.md) before any release or disk
 write. Ordinary operators should begin with the root
 [Getting Started guide](../docs/getting-started.md).

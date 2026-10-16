@@ -1,6 +1,6 @@
 # 0001: Consolidate World, Installer, and Catalog into One Monorepo
 
-- Status: Accepted
+- Status: Accepted; repository identity superseded by 0005
 - Date: 2026-10-16
 
 ## Context
@@ -14,7 +14,7 @@ independent release benefit.
 
 ## Decision
 
-`dalsoop/diy-device-os-bootstrap` is the canonical repository. It contains three explicit
+`dalsoop/diy-device-os-bootstrap` was chosen as the canonical generic repository. It contains three explicit
 modules:
 
 - `world/` for operator intent and immutable USB generations;
@@ -26,9 +26,19 @@ operator entry point. Catalog and Installer are no longer separately pinned by
 the draft World; a resolved plan and completed generation record the monorepo
 commit and Catalog tree identity instead.
 
-The three former repositories remain available during migration and are not
+The three former repositories remain available during consolidation and are not
 deleted. They may be archived with a pointer to this monorepo only after the
 monorepo CI passes and its `main` branch is verified.
+
+Decision 0005 later created `dalsoop/device-os-bootstrap-for-jeonghan` as the
+canonical operator repository for Jeonghan while retaining this monorepo shape
+and the generic repository as a selectively reviewed upstream.
+
+## Alternatives
+
+- Keeping three repositories was rejected because one operator had to coordinate three pull requests and exact cross-repository pins before the modules had independent release value.
+- Copying everything into one undifferentiated module was rejected because Catalog data, personal intent, and destructive execution retain different trust and review boundaries.
+- Deleting the former repositories immediately was rejected because users and links needed a verifiable transition after the monorepo passed CI.
 
 ## Consequences
 

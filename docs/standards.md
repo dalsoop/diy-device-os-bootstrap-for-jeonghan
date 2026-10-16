@@ -1,0 +1,56 @@
+# Standards
+
+## Repository workflow
+
+- `main` MUST change through a pull request. The required `contracts` check MUST pass before merge; direct push, force-push, protection removal, and bypass merge are violations.
+- Substantive work MUST occur on a branch. A change is not complete merely because it exists locally or CI started.
+- Generated media, caches, work directories, local inventories, credentials, enrollment output, and recovery archives MUST remain untracked. A tracked sensitive or generated file fails review even when CI passes.
+- The project license is GPL-3.0-only unless a file-specific notice says otherwise. Executable files MUST retain the repository SPDX copyright and license headers checked by CI.
+- Repository documentation, examples, identifiers, and contributor-facing messages MUST remain in English. Korean is reserved for the current World's end-user menu and installer presentation unless an explicit product decision changes the documentation language.
+
+## Module boundaries
+
+- `world/` MAY define desired state and evidence identity but MUST NOT implement downloads, execute Catalog code, or authorize a write.
+- `catalog/` MAY contain public declarative metadata and schemas but MUST NOT contain hooks, credentials, private profiles, collection policy, download execution, or disk behavior.
+- `installer/` MUST revalidate World and Catalog input before use and is the only module that MAY download, assemble, or write media. It MUST NOT become the long-lived secret store.
+- `agent/` MUST delegate to reviewed CLI surfaces and MUST NOT reimplement World, Catalog, Installer, or DNS policy. Its tool set MUST exclude physical write, install, restore, reinstall authorization, enrollment, arbitrary command, arbitrary path, and arbitrary URL operations.
+- Router mutation MUST remain outside automated command and agent surfaces until a separately reviewed authenticated, reversible, model-specific mechanism and console recovery path exist.
+
+## Contracts and inputs
+
+- Machine-facing output MUST use versioned JSON or a documented filesystem record. Downstream automation MUST NOT parse human prose when a structured surface exists.
+- IDs and configured relative paths MUST be validated before filesystem use. Absolute paths, empty segments, `.`, `..`, duplicate IDs, duplicate destinations, and unknown enum values MUST fail rather than normalize into acceptance.
+- A contract change MUST update its producer, every repository consumer, schema representation, success fixture, rejection fixtures, and operator-facing contract in one pull request. Incompatible meaning requires a schema-version decision.
+- Public media IDs MUST remain stable across releases. Version, filename, URL, digest, and destination MUST be reviewed as one update; moving tags, branches, or `latest` MUST NOT replace immutable release identity.
+- Every resolved repository-bundle source MUST remain inside the checkout at staging time. A textual relative path is insufficient when its resolved target escapes the checkout.
+
+## Source and dependency management
+
+- External executable inputs MUST be pinned by exact release, dated snapshot, digest, or SHA-256 as appropriate. A warning-only verification mode is forbidden.
+- Public downloads MUST use HTTPS and MUST be promoted from a temporary file only after the reviewed digest passes. Partial or failed downloads MUST be removed.
+- Python dependencies for the agent gateway MUST remain exactly pinned in `agent/requirements.lock`. The status monitor MUST remain Python-standard-library-only so it can run from assembled media without Internet access.
+- Catalog checksum updates MUST include authoritative vendor provenance in pull-request evidence. Re-hashing the same downloaded file is not independent verification.
+
+## Destructive execution
+
+- Planning, validation, simulation, capacity calculation, and Catalog verification MUST NOT write block devices or internal disks.
+- A USB writer MUST inspect the current live device and accept only a removable, non-root, non-virtual target with a readable serial and sufficient capacity. Confirmation MUST equal `ERASE <device> <serial>` for that current inspection.
+- World physical writes MUST be serialized. A successful write MUST publish exactly one immutable generation only after readback passes; a failed or cancelled write MUST publish only a redacted event record. Neither record may contain a raw serial, MAC address, UUID, credential, image, or recovery material.
+- The DNS installer MUST resolve mapper and partition ancestry to a physical parent and MUST reject installer media, USB-backed targets, mounted targets, removable disks, unresolved devices, and zero or multiple candidates before any signature clearing or partitioning.
+- General OS entries MUST remain interactive. Automatic boot timeout MUST remain disabled. Guarded unattended behavior MAY exist only in the DNS-local adapter behind exact hardware and reinstall gates.
+- Restore MUST bind confirmation to the exact target URL. DNS apply MUST bind confirmation to `APPLY`, the exact current commit, and a clean tracked zone file; these checks MUST NOT be replaced by agent-side assumptions.
+
+## Change shape
+
+- Shell entry points MUST fail nonzero on rejected or incomplete operations, quote expansions, resolve repository paths from their own location, and use temporary files plus atomic promotion for durable output.
+- Known `source.kind` and `profile_adapter` values MUST drive shared media behavior. Adding a product-specific branch for an entry that fits an existing strategy is a structural violation.
+- A new source kind or profile adapter MUST include fetch, verify, stage, success, unknown-value, unsafe-path, digest-failure, and cleanup coverage before it is accepted.
+- Secrets MUST travel through protected files or headers, never command arguments, URLs, repository values, logs, or MCP results. Child processes receive only an explicit environment allowlist.
+
+## Verification gates
+
+Before merge, run the repository's `contracts` job surface: SPDX/license checks, shell syntax, ShellCheck, Python and Ruby syntax, World contract simulation, Catalog verification and fixtures, Installer simulations, and Agent Gateway simulation. A failure in any required command blocks merge; removing or weakening a check is itself a security-sensitive change.
+
+Before an image candidate, additionally verify immutable build locks, build twice on the designated amd64 Debian 13 builder when reproducibility is being claimed, and retain manifests, package closure, checksums, and SBOM.
+
+Before physical rollout, pass disposable VM BIOS and UEFI installation, then one physical `dns01` pilot, then one-at-a-time `dns02` and `dns03`. CI or source inspection MUST NOT substitute for firmware, real disk identity, Secure Boot, power-loss, network, or restore evidence.

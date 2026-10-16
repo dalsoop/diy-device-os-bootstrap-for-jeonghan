@@ -10,8 +10,9 @@ and writes the resulting multiboot USB.
   branches for entries that fit an existing source kind.
 - Reject unknown source kinds, profile adapters, duplicate IDs or destinations,
   unsafe configured paths, malformed digests, and inconsistent DNS reserves.
-- Do not add symlinks to repository bundles. The current staging path follows
-  symlinks and does not prove that their resolved targets stay in the checkout.
+- Every resolved repository-bundle source must remain inside the checkout.
+  Current staging cannot prove that for symlinks, so reject all tracked bundle
+  symlinks until resolved-target containment and escape fixtures exist.
 - `plan` and `simulate` must not download images or write block devices.
 - `calculate-capacity` may inspect files, device size, or remote headers but
   must never write a device or download a complete image. Unknown artifacts

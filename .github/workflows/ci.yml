@@ -58,9 +58,13 @@ jobs:
       - name: Check Ruby syntax
         run: |
           ruby -c world/bin/resolve-world
+          ruby -c world/bin/record-usb-event
           ruby -c world/tests/world-contract-simulation.rb
+          ruby -c world/tests/usb-event-simulation.rb
       - name: Validate World contract
-        run: world/tests/world-contract-simulation.rb
+        run: |
+          world/tests/world-contract-simulation.rb
+          world/tests/usb-event-simulation.rb
       - name: Validate Catalog contracts
         run: |
           catalog/bin/verify-catalog

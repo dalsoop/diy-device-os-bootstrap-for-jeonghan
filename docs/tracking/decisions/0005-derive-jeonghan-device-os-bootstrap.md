@@ -37,6 +37,13 @@ The repository records its own URL in resolved plans, source archives, license
 material, schemas, and SBOM output. Upstream changes are reviewed before being
 selectively merged or cherry-picked.
 
+## Alternatives
+
+- A formal same-owner GitHub fork was unavailable because both repositories are owned by `dalsoop`.
+- Editing the generic upstream as the personal operator source was rejected because local device intent and generation history should not define the reusable product for every user.
+- A DNS-specific derivative was rejected because Proxmox, storage, desktop, and later device roles must accumulate in the same personal World.
+- Separate personal World, Installer, and Catalog repositories were rejected because the earlier split created coordination cost without independent release value.
+
 ## Consequences
 
 The operator normally edits only the home World and ignored local inventory.

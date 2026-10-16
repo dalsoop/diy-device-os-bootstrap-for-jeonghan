@@ -1,8 +1,9 @@
-# DNS Device OS Bootstrap for Jeonghan
+# Device OS Bootstrap for Jeonghan
 
-This user-owned DNS device-OS bootstrap monorepo is the single source of truth
-for Jeonghan's home DNS World, public OS metadata, guarded installation-media
-tooling, and append-only physical USB generation evidence.
+This user-owned device-OS bootstrap monorepo is the single source of truth for
+Jeonghan's home World, public OS metadata, guarded installation-media tooling,
+and append-only physical USB generation evidence. DNS is the first deployed
+service, not the repository boundary.
 
 ## Source-of-truth boundaries
 

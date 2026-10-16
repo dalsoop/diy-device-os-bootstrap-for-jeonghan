@@ -14,6 +14,6 @@
 These decisions are retained as history. Root decision
 [`0001`](../../../../docs/tracking/decisions/0001-consolidate-into-one-monorepo.md)
 is authoritative for repository structure and source identity; root decision
-[`0005`](../../../../docs/tracking/decisions/0005-derive-jeonghan-dns-bootstrap.md)
+[`0005`](../../../../docs/tracking/decisions/0005-derive-jeonghan-device-os-bootstrap.md)
 is authoritative for current product naming.
 

@@ -4,4 +4,4 @@
 - [0002: World Drives Operator Media Selection](0002-world-drives-operator-media-selection.md)
 - [0003: Adopt the DIY Device OS Bootstrap Name](0003-adopt-diy-device-os-bootstrap-name.md)
 - [0004: Add a Constrained Management-host Agent Gateway](0004-add-constrained-agent-gateway.md)
-- [0005: Derive Jeonghan's DNS Bootstrap](0005-derive-jeonghan-dns-bootstrap.md)
+- [0005: Derive Jeonghan's Device OS Bootstrap](0005-derive-jeonghan-device-os-bootstrap.md)

@@ -13,7 +13,7 @@ world_plan=${DEVICE_OS_WORLD_PLAN:-$repo_root/work/device-os/world.json}
 
 usage() {
     cat <<'EOF'
-DNS Device OS Bootstrap for Jeonghan
+Device OS Bootstrap for Jeonghan
 
 Usage:
   ./device-os world validate             Validate the selected World and media
@@ -58,7 +58,7 @@ EOF
 }
 
 fail() {
-    echo "DNS Device OS Bootstrap for Jeonghan: $*" >&2
+    echo "Device OS Bootstrap for Jeonghan: $*" >&2
     exit 1
 }
 
@@ -86,7 +86,7 @@ resolve_world() {
 }
 
 print_plan() {
-    echo "DNS Install USB for Jeonghan contents"
+    echo "Device OS USB for Jeonghan contents"
     echo
     jq -r '.entries[] |
       "- [" +

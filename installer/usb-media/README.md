@@ -1,4 +1,4 @@
-# DNS Install USB for Jeonghan
+# Device OS USB for Jeonghan
 
 This module combines public Catalog entries with Installer-local entries into a
 verified Korean-first Ventoy USB.
@@ -75,7 +75,7 @@ tests in the Installer.
 ## Safety boundary
 
 - The menu has no automatic selection timer.
-- The active DNS World does not select Proxmox, TrueNAS, or desktop images.
+- The current `dns-install` media does not select Proxmox, TrueNAS, or desktop images.
 - Only the DNS local profile uses guarded unattended installation.
 - The writer requires a removable non-root device, readable serial, sufficient
   capacity, and exact `ERASE <device> <serial>` confirmation.
@@ -85,7 +85,7 @@ tests in the Installer.
 ## Resulting layout
 
 ```text
-DNS-INSTALL/                   exFAT label used by Ventoy's bundled formatter
+DEVICE-OS/                     exFAT label used by Ventoy's bundled formatter
 ├── images/
 ├── tools/dns-appliance-status-monitor/
 ├── manifests/
@@ -95,7 +95,7 @@ DNS-INSTALL/                   exFAT label used by Ventoy's bundled formatter
 │   ├── dns-build-manifest.json
 │   └── SHA256SUMS
 ├── licenses/
-│   ├── DNS-DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt
+│   ├── DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt
 │   ├── LICENSE_HISTORY.md
 │   ├── THIRD_PARTY_NOTICES.md
 │   ├── Tailscale-BSD-3-Clause.txt

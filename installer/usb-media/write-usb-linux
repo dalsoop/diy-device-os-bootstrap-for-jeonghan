@@ -229,7 +229,7 @@ mount "$main_partition" "$mount_dir"
 install -d -m 0755 "$mount_dir/manifests" "$mount_dir/ventoy" \
     "$mount_dir/licenses"
 install -m 0644 "$monorepo_root/LICENSE" \
-    "$mount_dir/licenses/DNS-DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt"
+    "$mount_dir/licenses/DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt"
 install -m 0644 "$monorepo_root/LICENSE_HISTORY.md" \
     "$mount_dir/licenses/LICENSE_HISTORY.md"
 install -m 0644 "$monorepo_root/THIRD_PARTY_NOTICES.md" \
@@ -239,7 +239,7 @@ install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt"
 {
     echo "# Corresponding Source"
     echo
-    echo "Project: DNS Device OS Bootstrap for Jeonghan"
+    echo "Project: Device OS Bootstrap for Jeonghan"
     echo "License: GPL-3.0-only"
     echo "Source revision: $repository_revision"
     echo "Repository: $repository_url"

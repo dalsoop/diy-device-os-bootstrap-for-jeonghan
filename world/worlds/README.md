@@ -13,7 +13,7 @@ Generation names use:
 For example:
 
 ```text
-20261015143022-jeonghan-home-dns/
+20261015143022-jeonghan-home/
 ├── world.yaml
 ├── world.lock.json
 ├── media-manifest.json

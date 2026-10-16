@@ -95,7 +95,7 @@ capacity with the exact runtime artifact and manifest, and rewrite the USB. The
 final selection also retains Debian Live for recovery. Never promote the
 inventory-stage USB or a superseded test image as a production DNS installer.
 
-## Burn a DNS Install USB for Jeonghan
+## Burn a Device OS USB for Jeonghan
 
 Immediately before burning, inspect the attached devices and identify the
 removable target by path and serial. Unplug ambiguous devices. Use absolute

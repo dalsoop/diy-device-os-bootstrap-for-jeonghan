@@ -64,7 +64,7 @@ for required in \
     ../agent/requirements.lock \
     ../agent/tailscale-policy.example.hujson \
     ../world/world-playbook.yaml \
-    ../world/drafts/jeonghan-home-dns/world.yaml \
+    ../world/drafts/jeonghan-home/world.yaml \
     ../.github/workflows/ci.yml \
     ../LICENSE \
     ../LICENSE_HISTORY.md \
@@ -90,7 +90,7 @@ grep -q 'TAILSCALE_LICENSES_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'tailscale-dependency-licenses.md' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/installer/build-image"
-grep -q '/usr/share/doc/dns-device-os-bootstrap-for-jeonghan/SOURCE.md' \
+grep -q '/usr/share/doc/device-os-bootstrap-for-jeonghan/SOURCE.md' \
     "$repo_root/installer/simple-cdd/profiles/dns.postinst"
 grep -q 'debian-installer/locale string ko_KR.UTF-8' \
     "$repo_root/installer/simple-cdd/profiles/default.preseed"
@@ -122,7 +122,7 @@ grep -q 'runtime-artifact' "$repo_root/README.md"
 grep -q 'locked-download' "$repo_root/usb-media/README.md"
 grep -q '"kind": "workspace"' "$repo_root/usb-media/composition.json"
 grep -q '"path": "catalog"' "$repo_root/usb-media/composition.json"
-grep -q 'https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan' \
+grep -q 'https://github.com/dalsoop/device-os-bootstrap-for-jeonghan' \
     "$repo_root/usb-media/composition.json"
 grep -q '^    burn)$' "$repo_root/device-os"
 grep -q '^    burn-image-macos)$' "$repo_root/device-os"

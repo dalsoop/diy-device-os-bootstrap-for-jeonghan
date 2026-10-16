@@ -1,6 +1,8 @@
 # DNS Device OS Installer for Jeonghan
 
-This engine module assembles Jeonghan's DNS installation and inventory media.
+This engine module assembles Jeonghan's selected device installation and
+inventory media. The current guarded unattended profile installs three HP DNS
+appliances; future media remain explicit World selections.
 Users manage the repository as one source of truth while this directory remains
 the execution boundary. The guarded offline installer for three HP DNS
 appliances is the primary product; public Catalog entries remain reusable data

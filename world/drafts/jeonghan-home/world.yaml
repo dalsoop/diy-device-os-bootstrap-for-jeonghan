@@ -2,8 +2,8 @@ apiVersion: device-os.bootstrap/v1alpha1
 kind: World
 
 metadata:
-  name: Jeonghan Home DNS
-  slug: jeonghan-home-dns
+  name: Jeonghan Home
+  slug: jeonghan-home
   lifecycle: draft
 
 spec:

@@ -38,7 +38,7 @@ required. The slug uses lowercase ASCII kebab-case.
 Example:
 
 ```text
-worlds/20261015143022-jeonghan-home-dns/
+worlds/20261015143022-jeonghan-home/
 ```
 
 The full generation ID is immutable. A tool must fail rather than overwrite an
@@ -51,9 +51,9 @@ Completed generations accumulate in chronological order:
 
 ```text
 worlds/
-├── 20261015143022-jeonghan-home-dns/
-├── 20261018110543-jeonghan-home-dns/
-└── 20261103091408-jeonghan-home-dns/
+├── 20261015143022-jeonghan-home/
+├── 20261018110543-jeonghan-home/
+└── 20261103091408-jeonghan-home/
 ```
 
 Changing an address, selected operating system, safety policy, hardware
@@ -73,7 +73,7 @@ Each completed directory records only the small, reviewable material needed to
 explain and reproduce the USB generation:
 
 ```text
-worlds/20261015143022-jeonghan-home-dns/
+worlds/20261015143022-jeonghan-home/
 ├── world.yaml
 ├── world.lock.json
 ├── media-manifest.json

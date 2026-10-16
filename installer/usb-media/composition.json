@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "product": {
-    "name": "DNS Install USB for Jeonghan",
-    "repository": "https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan"
+    "name": "Device OS USB for Jeonghan",
+    "repository": "https://github.com/dalsoop/device-os-bootstrap-for-jeonghan"
   },
   "catalog": {
     "kind": "workspace",
@@ -15,7 +15,7 @@
     "usb-media/local-entries/dns-appliance.json"
   ],
   "usb": {
-    "data_label": "DNS-INSTALL",
+    "data_label": "DEVICE-OS",
     "enrollment_label": "DNS-ENROLL",
     "enrollment_reserve_mib": 2048,
     "capacity_overhead_mib": 768,

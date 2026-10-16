@@ -1,18 +1,20 @@
-# DNS Device OS Bootstrap for Jeonghan
+# Device OS Bootstrap for Jeonghan
 
-[![CI](https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml)
+[![CI](https://github.com/dalsoop/device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-This repository builds and operates the installation media for the three-node
-Jeonghan's home DNS cluster. It is a history-preserving derivative of
+This repository is Jeonghan's personal device-OS World: it accumulates device
+intent, installation media, and immutable physical USB generations over time.
+The first deployment is a three-node home DNS cluster. This is a
+history-preserving derivative of
 [`dalsoop/diy-device-os-bootstrap`](https://github.com/dalsoop/diy-device-os-bootstrap),
-trimmed to one operator-owned DNS World.
+the generic upstream, with one operator-owned World.
 
 The default `dns-install` media contains only the guarded DNS appliance image.
 The separate `inventory-capture` media contains only Debian Live for collecting
 hardware identity before any unattended installation is enabled. Proxmox,
 TrueNAS, and desktop images remain available as Catalog metadata for upstream
-compatibility, but this World never downloads or stages them.
+compatibility, but the current media selections do not download or stage them.
 
 > Current assurance: contracts and isolated simulations run in CI. A successful
 > CI run does not prove a physical USB, firmware boot, internal-disk install, or
@@ -21,8 +23,8 @@ compatibility, but this World never downloads or stages them.
 ## Start here
 
 ```sh
-git clone https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan.git
-cd dns-device-os-bootstrap-for-jeonghan
+git clone https://github.com/dalsoop/device-os-bootstrap-for-jeonghan.git
+cd device-os-bootstrap-for-jeonghan
 ./device-os world validate
 ./device-os world plan
 ./device-os world capacity --capacity 16GB
@@ -30,7 +32,7 @@ cd dns-device-os-bootstrap-for-jeonghan
 ```
 
 The operator normally changes only
-[`world/drafts/jeonghan-home-dns/world.yaml`](world/drafts/jeonghan-home-dns/world.yaml).
+[`world/drafts/jeonghan-home/world.yaml`](world/drafts/jeonghan-home/world.yaml).
 It defines `dns01`, `dns02`, and `dns03` at `10.0.5.1` through `10.0.5.3`, with
 the router at `10.0.0.1`. Hardware observations, keys, generated media,
 credentials, and recovery material stay outside Git in the documented ignored
@@ -68,9 +70,9 @@ image.
 ## Repository map
 
 ```text
-dns-device-os-bootstrap-for-jeonghan/
+device-os-bootstrap-for-jeonghan/
 ├── device-os              operator command
-├── world/                 DNS intent and append-only USB generations
+├── world/                 home intent and append-only USB generations
 ├── catalog/               data-only public OS and bootloader metadata
 ├── installer/             builders, media assembly, and destructive gates
 ├── agent/                 constrained management-host MCP access plane
@@ -111,8 +113,8 @@ git fetch upstream
 ```
 
 Review upstream changes to Catalog data, installation gates, media writers, and
-safety policy before selectively merging or cherry-picking them. Do not replace
-the DNS World or relax its target checks while updating.
+safety policy before selectively merging or cherry-picking them. Extend the
+existing World with new devices and media; do not weaken target checks.
 
 ## License
 

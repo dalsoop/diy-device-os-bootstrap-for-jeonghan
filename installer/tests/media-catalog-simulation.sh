@@ -48,7 +48,7 @@ DEVICE_MEDIA_WORLD_PLAN=$temporary/world.json USB_MEDIA_CATALOG=$temporary/world
 "$verify" "$temporary/world-catalog.json" >/dev/null
 jq -e '
   [.entries[].id] == ["dns-appliance"] and
-  .world.world.slug == "jeonghan-home-dns" and
+  .world.world.slug == "jeonghan-home" and
   .world.media.id == "dns-install" and
   .usb.default_language == "ko_KR" and
   .usb.enrollment_reserve_mib == 2048
@@ -81,7 +81,7 @@ jq -e '
   [.entries[].id] == ["debian-live"] and
   .usb.enrollment_reserve_mib == 0
 ' "$temporary/no-dns-catalog.json" >/dev/null ||
-    fail "non-DNS World selection retained DNS media or its enrollment reserve"
+    fail "non-DNS media selection retained DNS media or its enrollment reserve"
 
 jq '.policies.requireTargetSpecificEraseConfirmation = false' \
     "$temporary/world.json" > "$temporary/weakened-world.json"

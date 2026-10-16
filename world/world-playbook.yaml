@@ -2,13 +2,13 @@ apiVersion: device-os.bootstrap/v1alpha1
 kind: WorldPlaybook
 
 metadata:
-  name: DNS Device OS Bootstrap for Jeonghan
+  name: Device OS Bootstrap for Jeonghan
 
 spec:
   timezone: Asia/Seoul
   drafts:
-    - slug: jeonghan-home-dns
-      path: drafts/jeonghan-home-dns/world.yaml
+    - slug: jeonghan-home
+      path: drafts/jeonghan-home/world.yaml
   generations:
     root: worlds
     idFormat: "{YYYYMMDDHHmmss}-{world-slug}"

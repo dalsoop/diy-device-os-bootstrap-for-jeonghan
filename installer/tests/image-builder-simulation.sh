@@ -52,6 +52,7 @@ EOF
 chmod +x "$writer"
 
 PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
+DEVICE_OS_SKIP_LOOP_NODE_SETUP=1 \
 DEVICE_OS_IMAGE_WRITER="$writer" \
     "$builder" --output "$output" --size 4294967296 --catalog "$catalog" >/dev/null
 
@@ -62,6 +63,7 @@ grep -q '^blockdev --flushbufs /dev/loop9$' "$log"
 grep -q '^losetup -d /dev/loop9$' "$log"
 
 if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
+    DEVICE_OS_SKIP_LOOP_NODE_SETUP=1 \
     DEVICE_OS_IMAGE_WRITER="$writer" \
     "$builder" --output "$output" --size 4294967296 --catalog "$catalog" \
     >/dev/null 2>&1; then
@@ -70,6 +72,7 @@ if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
 fi
 
 if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
+    DEVICE_OS_SKIP_LOOP_NODE_SETUP=1 \
     DEVICE_OS_IMAGE_WRITER="$writer" \
     "$builder" --output "$temporary/small.raw" --size 1073741824 --catalog "$catalog" \
     >/dev/null 2>&1; then

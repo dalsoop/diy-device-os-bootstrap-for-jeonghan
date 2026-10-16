@@ -44,7 +44,7 @@ done
 
 [ "$(uname -s)" = Linux ] || fail "Linux is required"
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-for command in losetup truncate sha256sum blockdev; do
+for command in losetup truncate sha256sum blockdev mknod seq; do
     command -v "$command" >/dev/null 2>&1 || fail "$command is required"
 done
 [[ "$output" = /* ]] || fail "--output must be an absolute path"
@@ -55,6 +55,13 @@ esac
 [ -d "$(dirname -- "$output")" ] || fail "output directory does not exist"
 [ ! -e "$output" ] || fail "output already exists: $output"
 [ -r "$catalog" ] || fail "resolved catalog is missing: $catalog"
+
+if [ "${DEVICE_OS_SKIP_LOOP_NODE_SETUP:-0}" != 1 ] &&
+    [ -c /dev/loop-control ] && [ ! -b /dev/loop0 ]; then
+    for number in $(seq 0 31); do
+        [ -e "/dev/loop$number" ] || mknod "/dev/loop$number" b 7 "$number"
+    done
+fi
 
 output_dir=$(CDPATH='' cd -- "$(dirname -- "$output")" && pwd)
 output_name=$(basename -- "$output")

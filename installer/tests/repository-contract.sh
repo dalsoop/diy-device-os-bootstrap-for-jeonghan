@@ -55,7 +55,6 @@ for required in \
     usb-media/composition.json \
     usb-media/local-entries/dns-appliance.json \
     collections/device-os.json \
-    usb-media/guides/pop-os-ko.md \
     usb-media/guides/dns-inventory.md \
     docs/tracking/decisions/0002-pinned-declarative-catalog.md \
     management/dns-appliance-status-monitor/config.json \
@@ -65,7 +64,7 @@ for required in \
     ../agent/requirements.lock \
     ../agent/tailscale-policy.example.hujson \
     ../world/world-playbook.yaml \
-    ../world/drafts/gujo-home/world.yaml \
+    ../world/drafts/gujo-home-dns/world.yaml \
     ../.github/workflows/ci.yml \
     ../LICENSE \
     ../LICENSE_HISTORY.md \
@@ -91,8 +90,11 @@ grep -q 'TAILSCALE_LICENSES_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'tailscale-dependency-licenses.md' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/installer/build-image"
-grep -q '/usr/share/doc/diy-device-os-bootstrap/SOURCE.md' \
+grep -q '/usr/share/doc/gujo-dns-device-os-bootstrap/SOURCE.md' \
     "$repo_root/installer/simple-cdd/profiles/dns.postinst"
+grep -q 'debian-installer/locale string ko_KR.UTF-8' \
+    "$repo_root/installer/simple-cdd/profiles/default.preseed"
+grep -q 'built ISO is missing /simple-cdd/' "$repo_root/installer/build-image"
 grep -q 'manifests/LICENSES.SHA256' "$repo_root/usb-media/write-usb-linux"
 grep -q 'Source revision:' "$repo_root/usb-media/write-usb-linux"
 grep -q 'resolved catalog revision does not match the checkout' \
@@ -120,10 +122,18 @@ grep -q 'runtime-artifact' "$repo_root/README.md"
 grep -q 'locked-download' "$repo_root/usb-media/README.md"
 grep -q '"kind": "workspace"' "$repo_root/usb-media/composition.json"
 grep -q '"path": "catalog"' "$repo_root/usb-media/composition.json"
-grep -q 'https://github.com/dalsoop/diy-device-os-bootstrap' "$repo_root/usb-media/composition.json"
-grep -q 'burn|write)' "$repo_root/device-os"
-grep -q 'burn-image-macos|write-image-macos)' "$repo_root/device-os"
+grep -q 'https://github.com/dalsoop/gujo-dns-device-os-bootstrap' \
+    "$repo_root/usb-media/composition.json"
+grep -q '^    burn)$' "$repo_root/device-os"
+grep -q '^    burn-image-macos)$' "$repo_root/device-os"
+grep -q '^            burn)$' "$repo_root/device-os"
 grep -q './device-os world burn' "$repo_root/../README.md"
+
+if grep -q -E 'legacy_dns|--dns-iso|--dns-manifest|burn\|write|burn-image-macos\|write-image-macos' \
+    "$repo_root/device-os" "$repo_root/usb-media/write-usb-linux"; then
+    echo "repository-contract: removed compatibility alias remains" >&2
+    exit 1
+fi
 
 if git -C "$repo_root" grep -I -n -i -E \
     'dns-appliance-provisioning|device-install-media|device-os-flasher|device-os-catalog|superusb|homelab-usb|homelab-bootstrap-media|Homelab Bootstrap|homelab-provisioning|Homelab Install & Recovery' \

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 dalsoop
 # SPDX-License-Identifier: GPL-3.0-only
-"""Constrained MCP gateway for DIY Device OS Bootstrap."""
+"""Constrained MCP gateway for Gujo DNS Device OS Bootstrap."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from mcp.types import ToolAnnotations
 
 Role = Literal["dns01", "dns02", "dns03"]
 ROLES: tuple[Role, ...] = ("dns01", "dns02", "dns03")
-Media = Literal["dns-bootstrap", "inventory-capture"]
-MEDIA: tuple[Media, ...] = ("dns-bootstrap", "inventory-capture")
+Media = Literal["dns-install", "inventory-capture"]
+MEDIA: tuple[Media, ...] = ("dns-install", "inventory-capture")
 CAPACITY_PATTERN = re.compile(r"^[1-9][0-9]*(?:\.[0-9]+)?(?:GB|GiB|TB|TiB)$")
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 MAX_OUTPUT_BYTES = 64 * 1024
@@ -127,7 +127,7 @@ class Gateway:
             return None
         if media not in MEDIA:
             raise ToolError(
-                "world.media: media must be dns-bootstrap or inventory-capture"
+                "world.media: media must be dns-install or inventory-capture"
             )
         return media  # type: ignore[return-value]
 
@@ -386,8 +386,8 @@ class Gateway:
 
 gateway = Gateway()
 mcp = MCPServer(
-    "diy-device-os-bootstrap",
-    title="DIY Device OS Bootstrap",
+    "gujo-dns-device-os-bootstrap",
+    title="Gujo DNS Device OS Bootstrap",
     version="0.1.0",
     instructions=(
         "Operate only through these constrained tools. Planning and simulation do not "
@@ -424,7 +424,7 @@ def world_validate(media: Media | None = None) -> dict[str, object]:
 
 @mcp.tool(annotations=READ_ONLY_LOCAL, structured_output=True)
 def world_plan(media: Media | None = None) -> dict[str, object]:
-    """Resolve the default, inventory-capture, or dns-bootstrap media plan."""
+    """Resolve the default dns-install or inventory-capture media plan."""
     return gateway.world_plan(media)
 
 

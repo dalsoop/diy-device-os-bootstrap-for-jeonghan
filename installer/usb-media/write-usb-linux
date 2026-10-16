@@ -10,8 +10,6 @@ catalog=${USB_MEDIA_CATALOG:-$repo_root/work/device-os/catalog.json}
 cache_dir=${USB_MEDIA_CACHE_DIR:-$repo_root/cache/usb-media}
 device=
 confirmation=
-legacy_dns_iso=
-legacy_dns_manifest=
 declare -A runtime_artifacts=()
 declare -A runtime_manifests=()
 declare -A staged_sources=()
@@ -24,7 +22,6 @@ usage: sudo $0 --device /dev/sdX \\
   --runtime-manifest dns-appliance=/path/build-manifest.json \\
   --confirm 'ERASE /dev/sdX SERIAL'
 
-Compatibility aliases: --dns-iso PATH --dns-manifest PATH
 Optional: --catalog PATH
 EOF
     exit 2
@@ -61,19 +58,10 @@ while [ "$#" -gt 0 ]; do
             runtime_manifests["$assignment_id"]=$assignment_path
             shift 2
             ;;
-        --dns-iso) legacy_dns_iso=${2:-}; shift 2 ;;
-        --dns-manifest) legacy_dns_manifest=${2:-}; shift 2 ;;
         --confirm) confirmation=${2:-}; shift 2 ;;
         *) usage ;;
     esac
 done
-
-if [ -n "$legacy_dns_iso" ]; then
-    runtime_artifacts[dns-appliance]=$legacy_dns_iso
-fi
-if [ -n "$legacy_dns_manifest" ]; then
-    runtime_manifests[dns-appliance]=$legacy_dns_manifest
-fi
 
 [ "$(uname -s)" = Linux ] || fail "Linux is required"
 [ "$(id -u)" -eq 0 ] || fail "run as root"
@@ -241,7 +229,7 @@ mount "$main_partition" "$mount_dir"
 install -d -m 0755 "$mount_dir/manifests" "$mount_dir/ventoy" \
     "$mount_dir/licenses"
 install -m 0644 "$monorepo_root/LICENSE" \
-    "$mount_dir/licenses/DIY-DEVICE-OS-BOOTSTRAP-GPL-3.0.txt"
+    "$mount_dir/licenses/GUJO-DNS-DEVICE-OS-BOOTSTRAP-GPL-3.0.txt"
 install -m 0644 "$monorepo_root/LICENSE_HISTORY.md" \
     "$mount_dir/licenses/LICENSE_HISTORY.md"
 install -m 0644 "$monorepo_root/THIRD_PARTY_NOTICES.md" \
@@ -251,7 +239,7 @@ install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt"
 {
     echo "# Corresponding Source"
     echo
-    echo "Project: DIY Device OS Bootstrap"
+    echo "Project: Gujo DNS Device OS Bootstrap"
     echo "License: GPL-3.0-only"
     echo "Source revision: $repository_revision"
     echo "Repository: $repository_url"

@@ -1,11 +1,10 @@
-# DIY Device OS Installer
+# Gujo DNS Device OS Installer
 
-This engine module assembles verified public installation media into one
-multiboot USB inside the DIY Device OS Bootstrap monorepo. Users manage it as one
-source of truth while this directory remains the execution boundary. General
-media composition is the primary product. The guarded
-offline installer for three HP DNS appliances is a bundled local reference
-profile, not the identity of the whole repository.
+This engine module assembles the Gujo DNS installation and inventory media.
+Users manage the repository as one source of truth while this directory remains
+the execution boundary. The guarded offline installer for three HP DNS
+appliances is the primary product; public Catalog entries remain reusable data
+and are staged only when the active World selects them.
 
 ## Project map
 

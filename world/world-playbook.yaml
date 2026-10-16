@@ -2,13 +2,13 @@ apiVersion: homelab.gujo.dev/v1alpha1
 kind: WorldPlaybook
 
 metadata:
-  name: DIY Device OS Bootstrap
+  name: Gujo DNS Device OS Bootstrap
 
 spec:
   timezone: Asia/Seoul
   drafts:
-    - slug: gujo-home
-      path: drafts/gujo-home/world.yaml
+    - slug: gujo-home-dns
+      path: drafts/gujo-home-dns/world.yaml
   generations:
     root: worlds
     idFormat: "{YYYYMMDDHHmmss}-{world-slug}"

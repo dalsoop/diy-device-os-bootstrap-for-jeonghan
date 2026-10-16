@@ -12,7 +12,7 @@ check mark does not imply successful physical installation.
 | New source kinds or profile adapters without core changes | No | No | Requires an explicit plug-in design |
 | HTTPS download and SHA-256 cache verification | Yes | Source tests | Clean Linux download run for current pins |
 | Capacity planning for nominal sizes or read-only device queries | Yes | Read-only 16GB macOS run | CI fixture, runtime-artifact result, and live device query |
-| Korean-first Ventoy menu with no timer | Yes | Source tests | Physical legacy BIOS and UEFI menu |
+| Korean-first Ventoy menu with no timer | Yes | Source tests | Physical BIOS (non-UEFI) and UEFI menu |
 | Serial-bound removable USB writer | Yes | Two physical macOS writes; payload SHA-256 and exFAT checks passed | Physical rerun of the two-phase writer and BIOS/UEFI boot |
 | Proxmox VE interactive entry | Yes | Metadata only | Boot and install on disposable disk |
 | Proxmox Backup Server interactive entry | Yes | Metadata only | Boot and install on disposable disk |

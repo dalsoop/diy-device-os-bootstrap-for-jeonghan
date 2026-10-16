@@ -60,7 +60,7 @@ rechecks cached files. A failed or partial download is not promoted.
 
 ## Build the DNS runtime artifact
 
-The default World has two media definitions. `dns-bootstrap` is the default
+The default World has two media definitions. `dns-install` is the default
 production selection. `inventory-capture` is a non-destructive first pass with
 Debian Live, TrueNAS SCALE, the inventory command, and no DNS installer:
 
@@ -90,12 +90,12 @@ The build must run on amd64 Debian 13. Retain the ISO, build manifest, package
 closure, checksums, and SBOM outside Git. A successful build is not permission
 to write media.
 
-After the build, return to the default `dns-bootstrap` selection, calculate
+After the build, return to the default `dns-install` selection, calculate
 capacity with the exact runtime artifact and manifest, and rewrite the USB. The
 final selection also retains Debian Live for recovery. Never promote the
-inventory-stage USB or a legacy test image as a production DNS installer.
+inventory-stage USB or a superseded test image as a production DNS installer.
 
-## Burn a DIY Device OS USB
+## Burn a Gujo DNS Install USB
 
 Immediately before burning, inspect the attached devices and identify the
 removable target by path and serial. Unplug ambiguous devices. Use absolute

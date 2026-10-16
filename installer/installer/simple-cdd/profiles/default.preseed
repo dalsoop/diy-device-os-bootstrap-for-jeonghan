@@ -1,6 +1,6 @@
 # Debian 13 installer answers shared by all three appliances.
 
-d-i debian-installer/locale string en_US.UTF-8
+d-i debian-installer/locale string ko_KR.UTF-8
 d-i keyboard-configuration/xkb-keymap select us
 d-i console-setup/ask_detect boolean false
 

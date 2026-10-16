@@ -19,7 +19,7 @@ exactly the listed entry IDs from either the embedded public Catalog or the
 reviewed local-profile registry.
 
 `installer/collections/device-os.json` remains the menu-group definition and a
-legacy contributor reference selection. It is not the ordinary user's source
+contributor-only reference selection. It is not the ordinary user's source
 of truth. When the World omits the DNS profile, the resolved USB plan sets the
 DNS enrollment reserve to zero.
 

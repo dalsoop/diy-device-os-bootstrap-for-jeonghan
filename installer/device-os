@@ -13,7 +13,7 @@ world_plan=${DEVICE_OS_WORLD_PLAN:-$repo_root/work/device-os/world.json}
 
 usage() {
     cat <<'EOF'
-DIY Device OS Bootstrap
+Gujo DNS Device OS Bootstrap
 
 Usage:
   ./device-os world validate             Validate the selected World and media
@@ -36,10 +36,8 @@ Reference/contributor commands:
   sudo ./device-os burn-image-macos <options>
                                         Burn and verify a full-disk image on macOS
 
-The burner delegates to the existing verified media writers. Burning erases the
-selected USB and requires the exact target-specific --confirm phrase. The old
-`write`, `world write`, and `write-image-macos` spellings remain compatibility
-aliases.
+The burner delegates to the verified media writers. Burning erases the selected
+USB and requires the exact target-specific --confirm phrase.
 
 macOS example:
   sudo ./device-os burn-image-macos \
@@ -60,7 +58,7 @@ EOF
 }
 
 fail() {
-    echo "DIY Device OS Bootstrap: $*" >&2
+    echo "Gujo DNS Device OS Bootstrap: $*" >&2
     exit 1
 }
 
@@ -88,7 +86,7 @@ resolve_world() {
 }
 
 print_plan() {
-    echo "DIY Device OS USB contents"
+    echo "Gujo DNS Install USB contents"
     echo
     jq -r '.entries[] |
       "- [" +
@@ -190,12 +188,12 @@ case "$command" in
         resolve
         USB_MEDIA_CATALOG=$resolved "$repo_root/usb-media/fetch-images"
         ;;
-    burn|write)
+    burn)
         shift
         resolve
         USB_MEDIA_CATALOG=$resolved exec "$repo_root/usb-media/write-usb-linux" "$@"
         ;;
-    burn-image-macos|write-image-macos)
+    burn-image-macos)
         shift
         exec "$repo_root/usb-media/write-image-macos" "$@"
         ;;
@@ -237,7 +235,7 @@ case "$command" in
                 resolve_world
                 USB_MEDIA_CATALOG=$resolved "$repo_root/usb-media/fetch-images"
                 ;;
-            burn|write)
+            burn)
                 shift
                 resolve_world
                 USB_MEDIA_CATALOG=$resolved exec "$repo_root/usb-media/write-usb-linux" "$@"

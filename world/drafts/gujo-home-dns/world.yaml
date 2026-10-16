@@ -2,21 +2,14 @@ apiVersion: homelab.gujo.dev/v1alpha1
 kind: World
 
 metadata:
-  name: Gujo Home
-  slug: gujo-home
+  name: Gujo Home DNS
+  slug: gujo-home-dns
   lifecycle: draft
 
 spec:
-  defaultMedia: dns-bootstrap
+  defaultMedia: dns-install
 
   assets:
-    - id: router-main
-      type: router
-      managementAddress: 10.0.0.1
-      assurance: planned-unverified
-    - id: switch-main
-      type: ethernet-switch
-      assurance: planned-unverified
     - id: hp-dns-01
       type: computer
       inventoryRef: local/inventory/dns01.yaml
@@ -59,16 +52,13 @@ spec:
         - dns03
 
   media:
-    - id: dns-bootstrap
+    - id: dns-install
       entries:
         - dns-appliance
-        - truenas-scale
-        - debian-live
       language: ko-KR
     - id: inventory-capture
       entries:
         - debian-live
-        - truenas-scale
       language: ko-KR
 
   policies:

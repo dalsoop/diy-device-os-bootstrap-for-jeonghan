@@ -66,10 +66,10 @@ async def inspect_tools(race_enabled: Path) -> None:
         race_enabled.touch()
         inventory, dns = await asyncio.gather(
             client.call_tool("world_plan", {"media": "inventory-capture"}),
-            client.call_tool("world_plan", {"media": "dns-bootstrap"}),
+            client.call_tool("world_plan", {"media": "dns-install"}),
         )
         assert inventory.structured_content["data"]["media"] == "inventory-capture"
-        assert dns.structured_content["data"]["media"] == "dns-bootstrap"
+        assert dns.structured_content["data"]["media"] == "dns-install"
 
 
 def main() -> None:
@@ -90,7 +90,7 @@ def main() -> None:
             "#!/bin/sh\n"
             "set -eu\n"
             "repo_root=$(CDPATH='' cd -- \"$(dirname -- \"$0\")\" && pwd)\n"
-            "selected=${DEVICE_OS_MEDIA:-dns-bootstrap}\n"
+            "selected=${DEVICE_OS_MEDIA:-dns-install}\n"
             "plan=${DEVICE_OS_WORLD_PLAN:-$repo_root/work/device-os/world.json}\n"
             "if [ -e \"$repo_root/race-enabled\" ] && [ \"${2:-}\" = plan ]; then\n"
             "  mkdir -p \"$(dirname -- \"$plan\")\" \"$repo_root/race\"\n"

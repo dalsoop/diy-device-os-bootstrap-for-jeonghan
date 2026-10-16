@@ -8,8 +8,8 @@ Debian/Ubuntu:
 ```sh
 sudo apt-get update
 sudo apt-get install -y git jq shellcheck
-git clone https://github.com/dalsoop/diy-device-os-bootstrap.git
-cd diy-device-os-bootstrap/catalog
+git clone https://github.com/dalsoop/gujo-dns-device-os-bootstrap.git
+cd gujo-dns-device-os-bootstrap/catalog
 ```
 
 Catalog operations do not require root after package installation and must not

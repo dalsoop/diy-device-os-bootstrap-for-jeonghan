@@ -24,7 +24,7 @@ installer is considered safe for the remaining nodes.
 ## Physical qualification is incomplete
 
 The repository has simulations and source contracts, but no recorded end-to-end
-physical DIY Device OS USB qualification on the target HP hardware. This
+physical Gujo DNS Install USB qualification on the target HP hardware. This
 cannot be closed in source alone because firmware, removable-media behavior,
 disk identity, Secure Boot, and power-loss behavior require disposable media
 and controlled physical access.

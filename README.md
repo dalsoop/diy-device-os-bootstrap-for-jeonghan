@@ -1,61 +1,52 @@
-# DIY Device OS Bootstrap
+# Gujo DNS Device OS Bootstrap
 
-[![CI](https://github.com/dalsoop/diy-device-os-bootstrap/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/diy-device-os-bootstrap/actions/workflows/ci.yml)
+[![CI](https://github.com/dalsoop/gujo-dns-device-os-bootstrap/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/gujo-dns-device-os-bootstrap/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-This user-owned device bootstrap holds the complete source for a homelab World:
-operator intent, public operating-system metadata, guarded installation-media
-tooling, and the append-only record of verified physical USB generations.
+This repository builds and operates the installation media for the three-node
+Gujo Home DNS cluster. It is a history-preserving derivative of
+[`dalsoop/diy-device-os-bootstrap`](https://github.com/dalsoop/diy-device-os-bootstrap),
+trimmed to one operator-owned DNS World.
 
-The repository and product are **DIY Device OS Bootstrap**. The operator
-command remains `device-os`; its destructive USB surface is the **Device OS
-Burner** exposed through `burn`, and the generated removable-media product is
-**DIY Device OS USB**.
+The default `dns-install` media contains only the guarded DNS appliance image.
+The separate `inventory-capture` media contains only Debian Live for collecting
+hardware identity before any unattended installation is enabled. Proxmox,
+TrueNAS, and desktop images remain available as Catalog metadata for upstream
+compatibility, but this World never downloads or stages them.
 
-This monorepo replaces the former World Playbook, OS Installer, and OS Catalog
-repository split. The boundaries still exist as modules, but users clone or
-fork only this repository and agents can change a contract and all of its
-consumers in one pull request.
-
-> Current assurance: source contracts and isolated simulations run in CI.
-> Physical USB behavior, firmware compatibility, destructive installation, and
-> post-install boot remain separate qualification gates. A passing CI run is
-> not permission to erase a device.
+> Current assurance: contracts and isolated simulations run in CI. A successful
+> CI run does not prove a physical USB, firmware boot, internal-disk install, or
+> network cutover. Each remains a separate verification gate.
 
 ## Start here
 
-Clone one repository:
-
 ```sh
-git clone https://github.com/dalsoop/diy-device-os-bootstrap.git
-cd diy-device-os-bootstrap
-```
-
-Follow the [Getting Started guide](docs/getting-started.md) for the implemented
-fork, selection, capacity, DNS build, Linux USB burn, verification, and
-enrollment workflow.
-
-The example [`world/drafts/gujo-home/world.yaml`](world/drafts/gujo-home/world.yaml)
-describes intended devices, networks, services, media, and fail-closed policy.
-`device-os world ...` validates that draft and uses its media entries as the
-USB selection. Local hardware observations belong in ignored directories, and
-passwords, tokens, private keys, generated images, and raw hardware identifiers
-never belong in Git.
-
-Use the root command for read-only media operations:
-
-```sh
+git clone https://github.com/dalsoop/gujo-dns-device-os-bootstrap.git
+cd gujo-dns-device-os-bootstrap
 ./device-os world validate
-./device-os world available
 ./device-os world plan
 ./device-os world capacity --capacity 16GB
 ./device-os world simulate
 ```
 
-`simulate` does not download images or write a disk. A capacity check may make
-small HTTPS size probes unless `--offline` is supplied. Destructive USB commands
-retain live target checks and require an exact device-specific confirmation.
-On a supported Linux builder, the preferred destructive surface is:
+The operator normally changes only
+[`world/drafts/gujo-home-dns/world.yaml`](world/drafts/gujo-home-dns/world.yaml).
+It defines `dns01`, `dns02`, and `dns03` at `10.0.5.1` through `10.0.5.3`, with
+the router at `10.0.0.1`. Hardware observations, keys, generated media,
+credentials, and recovery material stay outside Git in the documented ignored
+locations or the principal secret store.
+
+## Build and burn flow
+
+1. Boot `inventory-capture` and collect each HP machine's exact hardware data.
+2. Review the local inventories and enable one machine at a time.
+3. On an amd64 Debian 13 builder, build the offline Korean DNS installer ISO.
+4. Check capacity with the exact ISO and its build manifest.
+5. On Linux, burn the confirmed removable USB.
+6. Verify the USB, boot one machine, and complete all physical gates before
+   enabling the next machine.
+
+The destructive command is intentionally explicit:
 
 ```sh
 sudo ./device-os world burn \
@@ -65,97 +56,68 @@ sudo ./device-os world burn \
   --confirm 'ERASE /dev/sdX USB_SERIAL'
 ```
 
-Resolve the current removable target and serial immediately before every burn;
-never reuse this placeholder or a previous confirmation.
+Resolve the current device path and serial immediately before every burn. The
+writer rejects a non-removable device, the root disk, a missing serial,
+insufficient capacity, an unverified artifact, or an inexact confirmation.
 
-## One World, accumulating USB generations
-
-One World covers the connected environment: router, switch, computers,
-networks, logical nodes, services, and selected media. DNS, Proxmox, TrueNAS,
-and workstations are members of the World rather than separate Worlds.
-
-The intended contract publishes each successfully verified physical USB as a
-distinct immutable directory:
-
-```text
-world/worlds/{YYYYMMDDHHmmss}-{world-slug}/
-```
-
-The timestamp is captured in `Asia/Seoul` when the resolved World is sealed
-immediately before a target-specific write. The automatic publication
-transaction is not implemented yet. A future generation may be published only
-after the physical write and required readback verification succeed. Rewriting
-the same intent to another USB creates another generation; completed
-generations are never edited or replaced.
+macOS can validate, plan, simulate, and write a prebuilt exact-size MBR raw
+image with `burn-image-macos`. Complete Ventoy assembly and DNS ISO construction
+currently require Linux; the repository does not yet build that macOS-ready raw
+image.
 
 ## Repository map
 
 ```text
-diy-device-os-bootstrap/
-├── device-os              root operator command
-├── world/                 user intent and immutable USB generations
-│   ├── drafts/            mutable desired state
-│   ├── local/             ignored machine-local observations
-│   └── worlds/            append-only completed generations
+gujo-dns-device-os-bootstrap/
+├── device-os              operator command
+├── world/                 DNS intent and append-only USB generations
 ├── catalog/               data-only public OS and bootloader metadata
-├── installer/             resolution, verification, builders, and safety gates
+├── installer/             builders, media assembly, and destructive gates
 ├── agent/                 constrained management-host MCP access plane
-├── docs/                  monorepo architecture and decisions
-└── .github/workflows/     one CI and release surface
+└── docs/                  architecture, workflow, and decisions
 ```
 
-The module boundaries are security boundaries, not repository boundaries:
+- `world/` owns operator intent, not erasure authority.
+- `catalog/` owns public metadata and executes nothing.
+- `installer/` validates all inputs and live targets before writing.
+- `agent/` exposes planning and reviewed DNS operations, never USB burn or OS
+  installation.
 
-- `world/` owns user choices and policy but never authorizes erasure by itself.
-- `catalog/` owns public metadata and never downloads, executes, or writes it.
-- `installer/` owns execution and independently validates Catalog and live
-  targets before any destructive operation.
-- `agent/` exposes only reviewed commands through stdio and owns neither state
-  nor destructive authority.
-
-The embedded Catalog is locked by the monorepo commit and Catalog tree identity
-recorded in each resolved plan and completed World generation. Generated media,
-caches, credentials, and recovery material remain outside Git.
-
-## Current World media
-
-The example World selects TrueNAS SCALE and a guarded offline installer for the
-three HP DNS appliances. The embedded Catalog also offers Proxmox VE, Proxmox
-Backup Server, Pop!_OS, and Debian Live; add or remove their stable IDs in the
-World's `spec.media[].entries`. General operating-system installers remain
-interactive. Only the DNS profile has guarded unattended behavior.
+Each verified physical USB creation is intended to publish an immutable World
+generation named `{YYYYMMDDHHmmss}-{world-slug}`. The timestamp is the USB
+creation event in `Asia/Seoul`, not draft or commit time. Automatic generation
+publication is not implemented yet, so do not claim a completed generation
+until write and readback evidence exist.
 
 ## Documentation
 
 - [Getting started](docs/getting-started.md)
-- [Monorepo architecture](docs/architecture.md)
-- [Security boundaries](docs/security.md)
-- [Migration decision](docs/tracking/decisions/0001-consolidate-into-one-monorepo.md)
-- [World selection decision](docs/tracking/decisions/0002-world-drives-operator-media-selection.md)
-- [Product naming decision](docs/tracking/decisions/0003-adopt-diy-device-os-bootstrap-name.md)
-- [World contract](world/docs/contracts.md)
+- [Architecture](docs/architecture.md)
+- [Security](docs/security.md)
+- [DNS install usability audit](installer/docs/dns-install-usability-audit.md)
 - [Installer operations](installer/docs/operations.md)
 - [Physical verification gates](installer/docs/verification.md)
-- [Catalog contracts](catalog/docs/contracts.md)
+- [World contract](world/docs/contracts.md)
+- [Catalog contract](catalog/docs/contracts.md)
 - [Agent Gateway](agent/README.md)
-- [License history](LICENSE_HISTORY.md)
-- [Third-party notices](THIRD_PARTY_NOTICES.md)
-- [Contributing](CONTRIBUTING.md)
+
+## Upstream updates
+
+The local `upstream` remote should point to the generic source repository:
+
+```sh
+git remote add upstream https://github.com/dalsoop/diy-device-os-bootstrap.git
+git fetch upstream
+```
+
+Review upstream changes to Catalog data, installation gates, media writers, and
+safety policy before selectively merging or cherry-picking them. Do not replace
+the DNS World or relax its target checks while updating.
 
 ## License
 
-Copyright (C) 2026 dalsoop.
-
-Except where a file-specific or upstream notice states otherwise, all original
-content authored for this repository is licensed under the
-[GNU General Public License version 3 only](LICENSE), identified by the SPDX
-expression `GPL-3.0-only`. The exact MIT-to-GPL transition boundary is recorded
-in [LICENSE_HISTORY.md](LICENSE_HISTORY.md).
-
-This license does not relicense third-party operating systems, bootloaders,
-packages, container images, trademarks, or installation media merely because
-the Catalog describes them or the Installer downloads them. Those materials
-remain subject to their respective upstream terms. Review and preserve the
-applicable upstream notices when distributing generated USB or ISO artifacts.
-The reviewed upstream inventory and the limits of that review are recorded in
+Except where a file-specific or upstream notice states otherwise, original
+content is licensed under GPL-3.0-only. Third-party operating systems,
+bootloaders, packages, and container images retain their upstream terms. See
+[LICENSE_HISTORY.md](LICENSE_HISTORY.md) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

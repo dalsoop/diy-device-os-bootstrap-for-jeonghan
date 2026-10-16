@@ -47,9 +47,9 @@ DEVICE_MEDIA_WORLD_PLAN=$temporary/world.json USB_MEDIA_CATALOG=$temporary/world
     "$repo_root/usb-media/resolve-catalog" >/dev/null
 "$verify" "$temporary/world-catalog.json" >/dev/null
 jq -e '
-  [.entries[].id] == ["dns-appliance", "truenas-scale", "debian-live"] and
-  .world.world.slug == "gujo-home" and
-  .world.media.id == "dns-bootstrap" and
+  [.entries[].id] == ["dns-appliance"] and
+  .world.world.slug == "gujo-home-dns" and
+  .world.media.id == "dns-install" and
   .usb.default_language == "ko_KR" and
   .usb.enrollment_reserve_mib == 2048
 ' "$temporary/world-catalog.json" >/dev/null ||
@@ -62,7 +62,7 @@ USB_MEDIA_CATALOG=$temporary/inventory-catalog.json \
     "$repo_root/usb-media/resolve-catalog" >/dev/null
 "$verify" "$temporary/inventory-catalog.json" >/dev/null
 jq -e '
-  [.entries[].id] == ["debian-live", "truenas-scale"] and
+  [.entries[].id] == ["debian-live"] and
   .world.media.id == "inventory-capture" and
   .usb.enrollment_reserve_mib == 0 and
   ([.bundles[].id] | index("dns-inventory-capture")) != null and
@@ -73,12 +73,12 @@ jq -e '
 jq '.media.entries = ["missing-entry"]' "$temporary/world.json" > "$temporary/unknown-world-entry.json"
 expect_resolution_rejected "$temporary/unknown-world-entry.json"
 
-jq '.media.entries = ["truenas-scale"]' "$temporary/world.json" > "$temporary/no-dns-world.json"
+jq '.media.entries = ["debian-live"]' "$temporary/world.json" > "$temporary/no-dns-world.json"
 DEVICE_MEDIA_WORLD_PLAN=$temporary/no-dns-world.json USB_MEDIA_CATALOG=$temporary/no-dns-catalog.json \
     "$repo_root/usb-media/resolve-catalog" >/dev/null
 "$verify" "$temporary/no-dns-catalog.json" >/dev/null
 jq -e '
-  [.entries[].id] == ["truenas-scale"] and
+  [.entries[].id] == ["debian-live"] and
   .usb.enrollment_reserve_mib == 0
 ' "$temporary/no-dns-catalog.json" >/dev/null ||
     fail "non-DNS World selection retained DNS media or its enrollment reserve"

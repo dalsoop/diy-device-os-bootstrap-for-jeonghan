@@ -1,4 +1,4 @@
-# DIY Device OS USB
+# Gujo DNS Install USB
 
 This module combines public Catalog entries with Installer-local entries into a
 verified Korean-first Ventoy USB.
@@ -75,7 +75,7 @@ tests in the Installer.
 ## Safety boundary
 
 - The menu has no automatic selection timer.
-- Proxmox VE, Proxmox Backup Server, TrueNAS, and Pop!_OS remain interactive.
+- The active DNS World does not select Proxmox, TrueNAS, or desktop images.
 - Only the DNS local profile uses guarded unattended installation.
 - The writer requires a removable non-root device, readable serial, sufficient
   capacity, and exact `ERASE <device> <serial>` confirmation.
@@ -85,9 +85,8 @@ tests in the Installer.
 ## Resulting layout
 
 ```text
-DEVICE-INST/                   11-character exFAT label used by Ventoy's bundled formatter
+GUJO-DNS/                      exFAT label used by Ventoy's bundled formatter
 ├── images/
-├── guides/POP_OS_KO.md
 ├── tools/dns-appliance-status-monitor/
 ├── manifests/
 │   ├── media-catalog.json
@@ -96,7 +95,7 @@ DEVICE-INST/                   11-character exFAT label used by Ventoy's bundled
 │   ├── dns-build-manifest.json
 │   └── SHA256SUMS
 ├── licenses/
-│   ├── DIY-DEVICE-OS-BOOTSTRAP-GPL-3.0.txt
+│   ├── GUJO-DNS-DEVICE-OS-BOOTSTRAP-GPL-3.0.txt
 │   ├── LICENSE_HISTORY.md
 │   ├── THIRD_PARTY_NOTICES.md
 │   ├── Tailscale-BSD-3-Clause.txt

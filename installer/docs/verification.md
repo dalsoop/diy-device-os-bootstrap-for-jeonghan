@@ -62,14 +62,14 @@ evidence.
   routes/exit-node/Serve/Funnel/SSH, management-port ACLs, `tailscale ping`, and
   keyless reconnection after reboot.
 
-## DIY Device OS USB gates
+## Gujo DNS Install USB gates
 
 - Verify Ventoy, Debian Live, Proxmox VE, Proxmox Backup Server, TrueNAS SCALE,
   and Pop!_OS against committed SHA-256 locks before copying.
 - Verify `manifests/MEDIA-CATALOG.SHA256` and retain the exact catalog copied to
   the USB with release evidence.
 - Verify every copied ISO using the USB's generated `manifests/SHA256SUMS`.
-- Test legacy BIOS and UEFI menus; treat Secure Boot as failed until the exact
+- Test BIOS (non-UEFI) and UEFI menus; treat Secure Boot as failed until the exact
   HP firmware and every selected image boot successfully.
 - Prove all menu entries require deliberate selection and that Proxmox VE,
   Proxmox Backup Server, TrueNAS, and Pop!_OS remain interactive.

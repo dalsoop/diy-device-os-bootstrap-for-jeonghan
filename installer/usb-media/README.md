@@ -1,4 +1,4 @@
-# DIY Device OS USB
+# Device OS USB for Jeonghan
 
 This module combines public Catalog entries with Installer-local entries into a
 verified Korean-first Ventoy USB.
@@ -22,7 +22,7 @@ to the internal writer after all safety checks pass.
 On macOS, a prepared full-disk image can be written and read back with:
 
 ```sh
-sudo ./device-os burn-image-macos \
+sudo ./device-os world burn-image-macos \
   --image /absolute/path/device-os.raw \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME EXACT_BYTES'
@@ -75,7 +75,7 @@ tests in the Installer.
 ## Safety boundary
 
 - The menu has no automatic selection timer.
-- Proxmox VE, Proxmox Backup Server, TrueNAS, and Pop!_OS remain interactive.
+- The current `dns-install` media does not select Proxmox, TrueNAS, or desktop images.
 - Only the DNS local profile uses guarded unattended installation.
 - The writer requires a removable non-root device, readable serial, sufficient
   capacity, and exact `ERASE <device> <serial>` confirmation.
@@ -85,9 +85,8 @@ tests in the Installer.
 ## Resulting layout
 
 ```text
-DEVICE-INST/                   11-character exFAT label used by Ventoy's bundled formatter
+DEVICE-OS/                     exFAT label used by Ventoy's bundled formatter
 ├── images/
-├── guides/POP_OS_KO.md
 ├── tools/dns-appliance-status-monitor/
 ├── manifests/
 │   ├── media-catalog.json
@@ -96,7 +95,7 @@ DEVICE-INST/                   11-character exFAT label used by Ventoy's bundled
 │   ├── dns-build-manifest.json
 │   └── SHA256SUMS
 ├── licenses/
-│   ├── DIY-DEVICE-OS-BOOTSTRAP-GPL-3.0.txt
+│   ├── DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt
 │   ├── LICENSE_HISTORY.md
 │   ├── THIRD_PARTY_NOTICES.md
 │   ├── Tailscale-BSD-3-Clause.txt

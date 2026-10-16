@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "DIY Device OS Catalog",
-  "repository": "https://github.com/dalsoop/diy-device-os-bootstrap",
+  "name": "Device OS Catalog for Jeonghan",
+  "repository": "https://github.com/dalsoop/device-os-bootstrap-for-jeonghan",
   "bootloaders": [
     { "id": "ventoy", "path": "catalog/bootloaders/ventoy.json" }
   ],

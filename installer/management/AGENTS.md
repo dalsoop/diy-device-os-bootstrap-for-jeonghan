@@ -17,8 +17,9 @@ This module runs from a trusted management host after appliance installation.
   failed or interrupted enrollment until the one-hour key has expired.
 - Backup collection transfers only already-encrypted files. A collected file is
   not a verified restore.
-- Restore requires an exact target URL confirmation and one-node-at-a-time
-  canary verification.
+- Restore requires an exact target URL confirmation. The current command uses
+  unverified TLS and is limited to isolated drills until trusted-CA or
+  pinned-fingerprint verification is implemented and tested.
 - Reinstall authorization must bind the active generation and hardware UUID; an
   old token must not authorize a replacement generation.
 - The status monitor is read-only and dependency-free. It must not become an

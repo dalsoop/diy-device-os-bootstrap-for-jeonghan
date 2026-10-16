@@ -108,7 +108,7 @@ begin
   fail_contract("playbook must be a readable regular file") unless playbook_path.file? && playbook_path.readable? && !playbook_path.symlink?
 
   playbook = load_yaml(playbook_path, "WorldPlaybook")
-  fail_contract("unsupported WorldPlaybook apiVersion") unless playbook["apiVersion"] == "homelab.gujo.dev/v1alpha1"
+  fail_contract("unsupported WorldPlaybook apiVersion") unless playbook["apiVersion"] == "device-os.bootstrap/v1alpha1"
   fail_contract("document is not a WorldPlaybook") unless playbook["kind"] == "WorldPlaybook"
   playbook_spec = mapping(playbook["spec"], "WorldPlaybook.spec")
   timezone = text(playbook_spec["timezone"], "WorldPlaybook.spec.timezone")
@@ -135,7 +135,7 @@ begin
 
   world_path = contained_file(module_root, draft["path"], "draft.path")
   world = load_yaml(world_path, "World")
-  fail_contract("unsupported World apiVersion") unless world["apiVersion"] == "homelab.gujo.dev/v1alpha1"
+  fail_contract("unsupported World apiVersion") unless world["apiVersion"] == "device-os.bootstrap/v1alpha1"
   fail_contract("document is not a World") unless world["kind"] == "World"
   metadata = mapping(world["metadata"], "World.metadata")
   world_slug = safe_id(metadata["slug"], "World.metadata.slug")

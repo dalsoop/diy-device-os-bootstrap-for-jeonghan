@@ -8,10 +8,9 @@ repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 monorepo_root=$(CDPATH='' cd -- "$repo_root/.." && pwd)
 catalog=${USB_MEDIA_CATALOG:-$repo_root/work/device-os/catalog.json}
 cache_dir=${USB_MEDIA_CACHE_DIR:-$repo_root/cache/usb-media}
+write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
 device=
 confirmation=
-legacy_dns_iso=
-legacy_dns_manifest=
 declare -A runtime_artifacts=()
 declare -A runtime_manifests=()
 declare -A staged_sources=()
@@ -24,7 +23,6 @@ usage: sudo $0 --device /dev/sdX \\
   --runtime-manifest dns-appliance=/path/build-manifest.json \\
   --confirm 'ERASE /dev/sdX SERIAL'
 
-Compatibility aliases: --dns-iso PATH --dns-manifest PATH
 Optional: --catalog PATH
 EOF
     exit 2
@@ -33,6 +31,35 @@ EOF
 fail() {
     echo "usb-media write-usb-linux: $*" >&2
     exit 1
+}
+
+emit_write_evidence() {
+    local readback_status=$1
+    local completed_at=${2:-}
+    local evidence_temporary
+    [ -n "$write_evidence" ] || return 0
+    [[ "$write_evidence" = /* ]] || fail "DEVICE_OS_WRITE_EVIDENCE must be an absolute path"
+    [ -d "$(dirname -- "$write_evidence")" ] || fail "write-evidence directory is missing"
+    evidence_temporary=$write_evidence.tmp.$$
+    jq -n \
+        --arg writer linux-ventoy \
+        --arg device_path "$device" \
+        --arg display_name "$model" \
+        --argjson bytes "$device_bytes" \
+        --arg preflight_at "$preflight_at" \
+        --arg completed_at "$completed_at" \
+        --arg readback_status "$readback_status" \
+        '{
+          schema_version: 1,
+          writer: $writer,
+          device_path: $device_path,
+          target: {display_name: $display_name, bytes: $bytes},
+          preflight_at: $preflight_at,
+          completed_at: (if $completed_at == "" then null else $completed_at end),
+          readback: {method: "remount-and-sha256", status: $readback_status}
+        }' > "$evidence_temporary"
+    chmod 0600 "$evidence_temporary"
+    mv "$evidence_temporary" "$write_evidence"
 }
 
 assignment_parts() {
@@ -61,19 +88,10 @@ while [ "$#" -gt 0 ]; do
             runtime_manifests["$assignment_id"]=$assignment_path
             shift 2
             ;;
-        --dns-iso) legacy_dns_iso=${2:-}; shift 2 ;;
-        --dns-manifest) legacy_dns_manifest=${2:-}; shift 2 ;;
         --confirm) confirmation=${2:-}; shift 2 ;;
         *) usage ;;
     esac
 done
-
-if [ -n "$legacy_dns_iso" ]; then
-    runtime_artifacts[dns-appliance]=$legacy_dns_iso
-fi
-if [ -n "$legacy_dns_manifest" ]; then
-    runtime_manifests[dns-appliance]=$legacy_dns_manifest
-fi
 
 [ "$(uname -s)" = Linux ] || fail "Linux is required"
 [ "$(id -u)" -eq 0 ] || fail "run as root"
@@ -179,6 +197,9 @@ device_bytes=$(blockdev --getsize64 "$device")
 [ "$device_bytes" -gt "$required_bytes" ] ||
     fail "USB is too small; need more than $required_bytes bytes"
 
+preflight_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+emit_write_evidence pending
+
 echo "target: $device"
 echo "model: $model"
 echo "serial: $serial"
@@ -241,7 +262,7 @@ mount "$main_partition" "$mount_dir"
 install -d -m 0755 "$mount_dir/manifests" "$mount_dir/ventoy" \
     "$mount_dir/licenses"
 install -m 0644 "$monorepo_root/LICENSE" \
-    "$mount_dir/licenses/DIY-DEVICE-OS-BOOTSTRAP-GPL-3.0.txt"
+    "$mount_dir/licenses/DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt"
 install -m 0644 "$monorepo_root/LICENSE_HISTORY.md" \
     "$mount_dir/licenses/LICENSE_HISTORY.md"
 install -m 0644 "$monorepo_root/THIRD_PARTY_NOTICES.md" \
@@ -251,7 +272,7 @@ install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt"
 {
     echo "# Corresponding Source"
     echo
-    echo "Project: DIY Device OS Bootstrap"
+    echo "Project: Device OS Bootstrap for Jeonghan"
     echo "License: GPL-3.0-only"
     echo "Source revision: $repository_revision"
     echo "Repository: $repository_url"
@@ -333,13 +354,38 @@ if [ -n "$dns_manifest" ]; then
     install -d -m 0700 "$enroll_dir/records" "$enroll_dir/reinstall"
     jq '{schema_version:1,build_id:.build_id,image_sha256:.iso_sha256,debian_point_release,technitium_version,technitium_image_digest,tailscale_version,tailscale_archive_sha256}' \
         "$dns_manifest" > "$enroll_dir/installer.json"
+    enrollment_digest=$(sha256sum "$enroll_dir/installer.json" | awk '{print $1}')
     sync -f "$enroll_dir"
     umount "$enroll_dir"
 fi
 
+blockdev --flushbufs "$device"
+mount -o ro,nodev,nosuid,noexec "$main_partition" "$mount_dir"
+(
+    cd "$mount_dir"
+    sha256sum -c manifests/SHA256SUMS
+    sha256sum -c manifests/MEDIA-CATALOG.SHA256
+    sha256sum -c manifests/LICENSES.SHA256
+    python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
+        ventoy/ventoy.json
+)
+umount "$mount_dir"
+
 if [ -n "$dns_manifest" ]; then
-    echo "usb-media write-usb-linux: verified catalog and created $data_label plus $enrollment_label"
+    mount -o ro,nodev,nosuid,noexec "$enroll_partition" "$enroll_dir"
+    actual_enrollment_digest=$(sha256sum "$enroll_dir/installer.json" | awk '{print $1}')
+    [ "$actual_enrollment_digest" = "$enrollment_digest" ] ||
+        fail "$enrollment_label installer metadata readback failed"
+    python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
+        "$enroll_dir/installer.json"
+    umount "$enroll_dir"
+fi
+
+emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+if [ -n "$dns_manifest" ]; then
+    echo "usb-media write-usb-linux: verified catalog, write readback, and created $data_label plus $enrollment_label"
 else
-    echo "usb-media write-usb-linux: verified catalog and created $data_label"
+    echo "usb-media write-usb-linux: verified catalog, write readback, and created $data_label"
 fi
 echo "usb-media write-usb-linux: target remains $device; eject it before unplugging"

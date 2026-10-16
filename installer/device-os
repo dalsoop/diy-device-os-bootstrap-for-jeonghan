@@ -10,10 +10,11 @@ collection=$(jq -er '.collection' "$composition")
 collection=$repo_root/$collection
 resolved=${USB_MEDIA_CATALOG:-$repo_root/work/device-os/catalog.json}
 world_plan=${DEVICE_OS_WORLD_PLAN:-$repo_root/work/device-os/world.json}
+event_recorder=$monorepo_root/world/bin/record-usb-event
 
 usage() {
     cat <<'EOF'
-DIY Device OS Bootstrap
+Device OS Bootstrap for Jeonghan
 
 Usage:
   ./device-os world validate             Validate the selected World and media
@@ -23,6 +24,8 @@ Usage:
   ./device-os world simulate             Run without downloads or disk writes
   ./device-os world prepare              Download and verify World-selected images
   sudo ./device-os world burn <options>  Burn a verified removable USB on Linux
+  sudo ./device-os world burn-image-macos <options>
+                                        Burn a World image on macOS and record it
 
 Reference/contributor commands:
   ./device-os available                 List available catalog entries
@@ -36,13 +39,11 @@ Reference/contributor commands:
   sudo ./device-os burn-image-macos <options>
                                         Burn and verify a full-disk image on macOS
 
-The burner delegates to the existing verified media writers. Burning erases the
-selected USB and requires the exact target-specific --confirm phrase. The old
-`write`, `world write`, and `write-image-macos` spellings remain compatibility
-aliases.
+The burner delegates to the verified media writers. Burning erases the selected
+USB and requires the exact target-specific --confirm phrase.
 
 macOS example:
-  sudo ./device-os burn-image-macos \
+  sudo ./device-os world burn-image-macos \
     --image /absolute/path/device-os.raw \
     --device /dev/disk5 \
     --confirm 'ERASE /dev/disk5 SanDisk 3.2Gen1 30784094208'
@@ -60,8 +61,22 @@ EOF
 }
 
 fail() {
-    echo "DIY Device OS Bootstrap: $*" >&2
+    echo "Device OS Bootstrap for Jeonghan: $*" >&2
     exit 1
+}
+
+option_value() {
+    option_name=$1
+    shift
+    while [ "$#" -gt 0 ]; do
+        if [ "$1" = "$option_name" ]; then
+            [ "$#" -ge 2 ] || return 1
+            printf '%s\n' "$2"
+            return 0
+        fi
+        shift
+    done
+    return 1
 }
 
 command -v jq >/dev/null 2>&1 || fail "jq is required"
@@ -88,7 +103,7 @@ resolve_world() {
 }
 
 print_plan() {
-    echo "DIY Device OS USB contents"
+    echo "Device OS USB for Jeonghan contents"
     echo
     jq -r '.entries[] |
       "- [" +
@@ -190,12 +205,12 @@ case "$command" in
         resolve
         USB_MEDIA_CATALOG=$resolved "$repo_root/usb-media/fetch-images"
         ;;
-    burn|write)
+    burn)
         shift
         resolve
         USB_MEDIA_CATALOG=$resolved exec "$repo_root/usb-media/write-usb-linux" "$@"
         ;;
-    burn-image-macos|write-image-macos)
+    burn-image-macos)
         shift
         exec "$repo_root/usb-media/write-image-macos" "$@"
         ;;
@@ -237,10 +252,27 @@ case "$command" in
                 resolve_world
                 USB_MEDIA_CATALOG=$resolved "$repo_root/usb-media/fetch-images"
                 ;;
-            burn|write)
+            burn)
                 shift
                 resolve_world
-                USB_MEDIA_CATALOG=$resolved exec "$repo_root/usb-media/write-usb-linux" "$@"
+                target_device=$(option_value --device "$@") || fail "world burn requires --device"
+                USB_MEDIA_CATALOG=$resolved exec "$event_recorder" \
+                    --world-plan "$world_plan" \
+                    --catalog "$resolved" \
+                    --writer linux-ventoy \
+                    --device "$target_device" \
+                    -- "$repo_root/usb-media/write-usb-linux" "$@"
+                ;;
+            burn-image-macos)
+                shift
+                resolve_world
+                target_device=$(option_value --device "$@") || fail "world burn-image-macos requires --device"
+                USB_MEDIA_CATALOG=$resolved exec "$event_recorder" \
+                    --world-plan "$world_plan" \
+                    --catalog "$resolved" \
+                    --writer macos-mbr-last \
+                    --device "$target_device" \
+                    -- "$repo_root/usb-media/write-image-macos" "$@"
                 ;;
             help|-h|--help)
                 usage

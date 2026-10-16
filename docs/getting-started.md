@@ -20,17 +20,18 @@ The repository connects the World model, Catalog data, and Installer tooling:
 Do not treat a World edit, plan, capacity result, or simulation as evidence that
 a USB was written or a machine was installed.
 
-## 1. Fork and clone
+## 1. Clone the personal World repository
 
-Create a GitHub fork for your homelab, then clone that fork:
+Clone the operator repository. Its `upstream` remote tracks the generic source
+repository so safety updates can be reviewed and adopted selectively:
 
 ```sh
-git clone https://github.com/<your-account>/diy-device-os-bootstrap.git
-cd diy-device-os-bootstrap
+git clone https://github.com/dalsoop/device-os-bootstrap-for-jeonghan.git
+cd device-os-bootstrap-for-jeonghan
 git remote add upstream https://github.com/dalsoop/diy-device-os-bootstrap.git
 ```
 
-Keep personal intent in your fork. Before adopting an upstream change, review
+Keep personal intent in this derivative. Before adopting an upstream change, review
 the Catalog, Installer, and safety-policy diff rather than merging it blindly.
 
 ## 2. Install planning prerequisites
@@ -80,21 +81,20 @@ Change the media selection in the mutable World draft:
 ```yaml
 spec:
   media:
-    - id: dns-bootstrap
+    - id: dns-install
       entries:
         - dns-appliance
-        - truenas-scale
       language: ko-KR
 ```
 
 The full file is:
 
 ```text
-world/drafts/gujo-home/world.yaml
+world/drafts/jeonghan-home/world.yaml
 ```
 
 Entry IDs may name public Catalog entries or reviewed Installer-local profiles.
-An unknown or duplicate ID is rejected. The legacy top-level `include` and
+An unknown or duplicate ID is rejected. The contributor-only top-level `include` and
 `exclude` commands edit only the contributor reference collection; ordinary
 operators should manage their World instead.
 
@@ -136,8 +136,8 @@ DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
 ```
 
 Burn that selection on Linux using the normal exact removable-device gate. It
-contains Debian Live, TrueNAS SCALE, the inventory capture command, and its
-guide, but deliberately contains no DNS installer:
+contains Debian Live, the inventory capture command, and its guide, but
+deliberately contains no DNS installer or unrelated OS image:
 
 ```sh
 sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn \
@@ -198,10 +198,10 @@ The ISO is created under `installer/installer/simple-cdd/images/`; its matching
 manifest is `installer/artifacts/build-manifest.json`. Both remain ignored by
 Git. A successful build is not permission to erase a USB or internal disk.
 
-The default `dns-bootstrap` selection contains the guarded DNS image, TrueNAS
-SCALE, and Debian Live for recovery. Re-run exact capacity and burn the USB a
-second time with the production DNS ISO and matching manifest. A legacy or
-test-only DNS image is never a substitute.
+The default `dns-install` selection contains only the guarded DNS image. The
+separate `inventory-capture` selection contains only Debian Live. Re-run exact
+capacity and burn the USB a second time with the production DNS ISO and matching
+manifest. A superseded or test-only DNS image is never a substitute.
 
 ## 6. Prepare public images on Linux
 
@@ -250,7 +250,7 @@ unverified artifacts, and an inexact confirmation phrase.
 
 After burning:
 
-1. From the mounted `DEVICE-INST` root, verify the resolved Catalog and every
+1. From the mounted `DEVICE-OS` root, verify the resolved Catalog and every
    staged image:
 
    ```sh
@@ -315,7 +315,7 @@ macOS supports the `world validate`, `world available`, `world plan`,
 below burns and verifies an already prepared exact-size MBR full-disk image:
 
 ```sh
-sudo ./device-os burn-image-macos \
+sudo ./device-os world burn-image-macos \
   --image /absolute/path/device-os.raw \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME EXACT_BYTES'
@@ -333,7 +333,8 @@ The intended history key is the physical USB creation time:
 world/worlds/{YYYYMMDDHHmmss}-{world-slug}/
 ```
 
-The publication transaction is not implemented. Do not create a completed
-generation merely because a plan, simulation, build, or write command started.
-A generation is valid only after physical write and required readback evidence
-succeed, and the future publication command records that evidence atomically.
+Do not create a completed generation merely because a plan, simulation, build,
+or write command started. `world burn` and `world burn-image-macos` publish a
+generation atomically only after physical write and required readback evidence
+succeed. Failed and cancelled physical attempts are recorded under
+`world/events/YYYY/` without becoming generations.

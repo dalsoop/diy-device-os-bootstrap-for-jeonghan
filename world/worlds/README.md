@@ -13,11 +13,12 @@ Generation names use:
 For example:
 
 ```text
-20261015143022-gujo-home/
+20261015143022-jeonghan-home/
 ├── world.yaml
 ├── world.lock.json
 ├── media-manifest.json
-└── verification.json
+├── verification.json
+└── event.json
 ```
 
 The timestamp is the generation seal time for that USB creation in
@@ -27,3 +28,6 @@ write creates another directory, even when the desired content is unchanged.
 Completed directories are append-only. Never edit, rename, overwrite, or
 silently migrate them. A convenience `latest` view may be derived, but it is
 not an authority.
+
+Failed and cancelled physical write attempts are not generations. Their
+redacted append-only records live under `world/events/YYYY/` instead.

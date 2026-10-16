@@ -39,6 +39,8 @@ for file in \
     tests/macos-writer-simulation.sh \
     tests/management-simulation.sh \
     ../world/bin/resolve-world \
+    ../world/bin/record-usb-event \
+    ../world/tests/usb-event-simulation.rb \
     ../world/tests/world-contract-simulation.rb; do
     [ -x "$repo_root/$file" ] || {
         echo "repository-contract: $file must be executable" >&2
@@ -55,9 +57,8 @@ for required in \
     usb-media/composition.json \
     usb-media/local-entries/dns-appliance.json \
     collections/device-os.json \
-    usb-media/guides/pop-os-ko.md \
     usb-media/guides/dns-inventory.md \
-    docs/tracking/decisions/0002-pinned-declarative-catalog.md \
+    ../docs/tracking/decisions/0010-resolve-media-through-declarative-catalog.md \
     management/dns-appliance-status-monitor/config.json \
     management/dns-appliance-status-monitor/server.py \
     ../agent/AGENTS.md \
@@ -65,7 +66,10 @@ for required in \
     ../agent/requirements.lock \
     ../agent/tailscale-policy.example.hujson \
     ../world/world-playbook.yaml \
-    ../world/drafts/gujo-home/world.yaml \
+    ../world/drafts/jeonghan-home/world.yaml \
+    ../world/events/README.md \
+    ../world/schemas/usb-event.schema.json \
+    ../world/schemas/usb-verification.schema.json \
     ../.github/workflows/ci.yml \
     ../LICENSE \
     ../LICENSE_HISTORY.md \
@@ -91,8 +95,11 @@ grep -q 'TAILSCALE_LICENSES_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'tailscale-dependency-licenses.md' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/installer/build-image"
-grep -q '/usr/share/doc/diy-device-os-bootstrap/SOURCE.md' \
+grep -q '/usr/share/doc/device-os-bootstrap-for-jeonghan/SOURCE.md' \
     "$repo_root/installer/simple-cdd/profiles/dns.postinst"
+grep -q 'debian-installer/locale string ko_KR.UTF-8' \
+    "$repo_root/installer/simple-cdd/profiles/default.preseed"
+grep -q 'built ISO is missing /simple-cdd/' "$repo_root/installer/build-image"
 grep -q 'manifests/LICENSES.SHA256' "$repo_root/usb-media/write-usb-linux"
 grep -q 'Source revision:' "$repo_root/usb-media/write-usb-linux"
 grep -q 'resolved catalog revision does not match the checkout' \
@@ -108,6 +115,10 @@ python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/collections/device-os.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/usb-media/local-entries/dns-appliance.json"
+python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
+    "$repo_root/../world/schemas/usb-event.schema.json"
+python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
+    "$repo_root/../world/schemas/usb-verification.schema.json"
 python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' \
     "$repo_root/management/dns-appliance-status-monitor/server.py"
 python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' \
@@ -120,10 +131,19 @@ grep -q 'runtime-artifact' "$repo_root/README.md"
 grep -q 'locked-download' "$repo_root/usb-media/README.md"
 grep -q '"kind": "workspace"' "$repo_root/usb-media/composition.json"
 grep -q '"path": "catalog"' "$repo_root/usb-media/composition.json"
-grep -q 'https://github.com/dalsoop/diy-device-os-bootstrap' "$repo_root/usb-media/composition.json"
-grep -q 'burn|write)' "$repo_root/device-os"
-grep -q 'burn-image-macos|write-image-macos)' "$repo_root/device-os"
+grep -q 'https://github.com/dalsoop/device-os-bootstrap-for-jeonghan' \
+    "$repo_root/usb-media/composition.json"
+grep -q '^    burn)$' "$repo_root/device-os"
+grep -q '^    burn-image-macos)$' "$repo_root/device-os"
+grep -q '^            burn)$' "$repo_root/device-os"
+grep -q '^            burn-image-macos)$' "$repo_root/device-os"
 grep -q './device-os world burn' "$repo_root/../README.md"
+
+if grep -q -E 'legacy_dns|--dns-iso|--dns-manifest|burn\|write|burn-image-macos\|write-image-macos' \
+    "$repo_root/device-os" "$repo_root/usb-media/write-usb-linux"; then
+    echo "repository-contract: removed compatibility alias remains" >&2
+    exit 1
+fi
 
 if git -C "$repo_root" grep -I -n -i -E \
     'dns-appliance-provisioning|device-install-media|device-os-flasher|device-os-catalog|superusb|homelab-usb|homelab-bootstrap-media|Homelab Bootstrap|homelab-provisioning|Homelab Install & Recovery' \

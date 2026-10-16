@@ -1,0 +1,348 @@
+# Operations
+
+Run repository commands from the checkout root unless a procedure explicitly changes directories. Do not run a destructive example until its placeholder device, serial, artifact, and credential paths have been replaced from current live inspection.
+
+## Prerequisites and checkout
+
+Planning and simulation require Git, `jq`, and Ruby. Capacity probes and downloads also require `curl` and a SHA-256 implementation. Clone the personal repository and keep the generic source as a review-only upstream:
+
+```sh
+git clone https://github.com/dalsoop/device-os-bootstrap-for-jeonghan.git
+cd device-os-bootstrap-for-jeonghan
+git remote add upstream https://github.com/dalsoop/diy-device-os-bootstrap.git
+```
+
+On Debian or Ubuntu, install the read-only tool set:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y git jq ruby curl coreutils age
+```
+
+On macOS, install the read-only tool set with Homebrew:
+
+```sh
+brew install git jq ruby age
+```
+
+Complete Ventoy assembly and the DNS ISO build require Linux. macOS can validate, plan, calculate nominal capacity, and write a prebuilt exact-size MBR raw image; this repository does not yet build that raw image. Windows is intentionally unsupported and is not a planned preparation or write platform.
+
+## Validate the source checkout
+
+Install the CI tools on Ubuntu, create an isolated Python environment, and run the same non-destructive surfaces used by the required `contracts` job:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y jq ruby shellcheck python3-venv
+python3 -m venv /tmp/device-os-agent-check
+/tmp/device-os-agent-check/bin/python -m pip install --requirement agent/requirements.lock
+
+catalog/bin/verify-catalog
+catalog/tests/catalog-contract.sh
+world/tests/world-contract-simulation.rb
+(cd installer && tests/install-gate-simulation.sh)
+(cd installer && tests/management-simulation.sh)
+(cd installer && tests/tailscale-enrollment-simulation.sh)
+(cd installer && tests/media-catalog-simulation.sh)
+(cd installer && tests/macos-writer-simulation.sh)
+(cd installer && tests/repository-contract.sh)
+/tmp/device-os-agent-check/bin/python agent/tests/gateway_simulation.py
+```
+
+ShellCheck, shell syntax, Python syntax, Ruby syntax, and SPDX checks remain part of CI even when an operator runs only the focused simulations above. A source pass proves no physical media or appliance state.
+
+## Inspect the current World
+
+```sh
+./device-os world validate
+./device-os world available
+./device-os world plan
+./device-os world capacity --capacity 16GB
+./device-os world simulate
+```
+
+These commands do not download an image or write a device. Select the non-default inventory pass by setting the media ID for one invocation:
+
+```sh
+DEVICE_OS_MEDIA=inventory-capture ./device-os world plan
+DEVICE_OS_MEDIA=inventory-capture ./device-os world simulate
+```
+
+Edit `world/drafts/jeonghan-home/world.yaml` to change desired devices or media. Keep real inventories and observations under the ignored local paths, never in the draft.
+
+## Check network readiness
+
+From the management host, inspect the expected `/16` topology, node reachability, and Internet readiness separately:
+
+```sh
+installer/management/network-preflight --json 10.0.0.1/16 | jq
+installer/management/network-preflight --offline --json 10.0.0.1/16 | jq
+```
+
+The offline form marks outbound DNS and HTTPS readiness unknown. Internet is required to fetch public artifacts and enroll Tailscale, but the already-built DNS installer boots and installs offline. A passing Internet probe does not establish LAN routing, node health, or DNS readiness.
+
+## First pass: capture hardware inventory
+
+Prepare and burn only the `inventory-capture` selection on Linux:
+
+```sh
+DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
+lsblk -d -o NAME,MODEL,SERIAL,SIZE,TRAN,RM
+sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn \
+  --device /dev/sdX \
+  --confirm 'ERASE /dev/sdX USB_SERIAL'
+```
+
+The resulting media contains Debian Live only. Boot each HP computer deliberately and follow the inventory guide on the USB. Capture one role at a time from the trusted live environment:
+
+```sh
+mkdir -p installer/inventory/local
+sudo installer/installer/capture-inventory \
+  dns01 10.0.5.1 enp1s0 /dev/sda \
+  > installer/inventory/local/dns01.conf
+```
+
+Repeat for `dns02` and `dns03` with their actual interface and disk. Review product, UUID, NIC MAC, disk model, disk serial, size, role, and address. Keep `destructive_install_enabled=false` except for the single current physical pilot.
+
+## Build the offline DNS image
+
+Use an amd64 Debian 13 builder. Copy only the operator's public SSH key and public age recipient into ignored input files:
+
+```sh
+cp /path/to/id_ed25519.pub \
+  installer/installer/inputs/operator-authorized-keys
+age-keygen -o /secure/dns-recovery-age-key.txt
+age-keygen -y /secure/dns-recovery-age-key.txt \
+  > installer/installer/inputs/age-recipient
+```
+
+Install build dependencies, verify locked external inputs, fetch the digest-pinned Technitium source, and build:
+
+```sh
+sudo apt-get install -y simple-cdd debian-cd debian-archive-keyring \
+  reprepro rsync xorriso isolinux syslinux-common skopeo jq curl
+installer/build/verify-locks
+installer/installer/fetch-locked-sources
+installer/installer/build-image
+```
+
+The ISO appears under `installer/installer/simple-cdd/images/`; its matching manifest is `installer/artifacts/build-manifest.json`. Retain the package closure, checksums, SBOM, and build manifest outside Git. A successful build does not authorize a USB write.
+
+## Calculate exact fit and burn production media
+
+Use the exact runtime artifact and matching manifest. A `PENDING` result is not a fit decision:
+
+```sh
+./device-os world capacity --capacity 16GB \
+  --runtime-artifact dns-appliance=/absolute/path/dns-appliance.iso \
+  --runtime-manifest dns-appliance=/absolute/path/build-manifest.json
+```
+
+On Linux, install `python3`, block-device tools, and exFAT support. Reconnect one disposable USB, resolve its current whole-disk path and serial, then burn:
+
+```sh
+sudo apt-get install -y python3 util-linux exfatprogs
+lsblk -d -o NAME,MODEL,SERIAL,SIZE,TRAN,RM
+sudo ./device-os world burn \
+  --device /dev/sdX \
+  --runtime-artifact dns-appliance=/absolute/path/dns-appliance.iso \
+  --runtime-manifest dns-appliance=/absolute/path/build-manifest.json \
+  --confirm 'ERASE /dev/sdX USB_SERIAL'
+```
+
+The command destroys the selected USB. Never reuse a previous device path, serial, or confirmation after a reconnect. The production `dns-install` selection contains only the DNS appliance image.
+
+On macOS, an already prepared exact-size MBR full-disk image can be written with:
+
+```sh
+diskutil list external physical
+sudo ./device-os world burn-image-macos \
+  --image /absolute/path/device-os.raw \
+  --device /dev/diskN \
+  --confirm 'ERASE /dev/diskN MODEL SERIAL SIZE'
+```
+
+The image byte size must equal the target and the target must be removable, writable, MBR-compatible, and non-root. World burn commands process one device at a time. Passed readback creates a new tracked generation directory; failed or cancelled physical attempts create a tracked redacted event file. Review those new files and publish them through the normal pull-request path—the root writer never commits or pushes.
+
+## Verify and install one appliance at a time
+
+From the mounted `DEVICE-OS` partition, verify the resolved input and staged files before boot:
+
+```sh
+sha256sum -c manifests/MEDIA-CATALOG.SHA256
+sha256sum -c manifests/SHA256SUMS
+sha256sum -c manifests/LICENSES.SHA256
+```
+
+Boot both BIOS and UEFI paths on disposable media before a production pilot. At the HP machine, choose the DNS entry deliberately and confirm that the reported internal disk serial matches the reviewed inventory. If the USB itself becomes a target or the physical parent is unresolved, stop rather than retry.
+
+After the internal-disk boot, verify host-key fingerprint and key-only SSH, DNS over UDP and TCP, Cockpit, Technitium certificate fingerprint, NTP, metrics, encrypted enrollment output, and the active generation. Keep `dns02` and `dns03` disabled until the preceding role passes every gate.
+
+## Import enrollment and form the DNS cluster
+
+After all three standalone nodes have complete enrollment records:
+
+```sh
+installer/management/import-enrollment \
+  --enrollment /Volumes/DNS-ENROLL \
+  --identity /secure/dns-recovery-age-key.txt \
+  --output /secure/dns-bootstrap
+
+DNS_CLUSTER_CREDENTIALS_DIR=/secure/dns-bootstrap \
+DNS_CLUSTER_ACCESS_OUTPUT=/secure/cluster-access.json.age \
+  installer/management/cluster-bootstrap
+```
+
+Move imported values into the principal secret store, rotate bootstrap credentials, and delete temporary plaintext. Verify cluster peers and a DNS canary before enabling another management step.
+
+## Enroll Tailscale
+
+Apply the reviewed tailnet policy first. Then provide protected OAuth file paths:
+
+```sh
+TAILSCALE_OAUTH_CLIENT_ID_FILE=/secure/tailscale/client-id \
+TAILSCALE_OAUTH_CLIENT_SECRET_FILE=/secure/tailscale/client-secret \
+  installer/management/tailscale-enroll --all
+```
+
+Confirm each node's hostname, `tag:dns-appliance`, Tailscale address, peer reachability, `accept-dns=false`, and absence of routes, exit-node behavior, Tailscale SSH, Serve, and Funnel.
+
+## DNS change and router cutover
+
+Check health, create a plan, compare it with the reviewed zone change, then apply from the exact approved clean commit using the command's literal confirmation:
+
+```sh
+export TECHNITIUM_URL=https://10.0.5.1:53443
+export TECHNITIUM_TOKEN_FILE=/secure/dns/reader-token
+export TECHNITIUM_CA_FILE=/secure/dns/technitium-ca.pem
+installer/management/dnsctl health
+
+export TECHNITIUM_TOKEN_FILE=/secure/dns/planner-token
+installer/management/dnsctl plan installer/zones/home.arpa.zone
+
+approved_commit=$(git rev-parse HEAD)
+export TECHNITIUM_TOKEN_FILE=/secure/dns/applier-token
+installer/management/dnsctl apply installer/zones/home.arpa.zone \
+  --approved-commit "$approved_commit" \
+  --confirm APPLY
+```
+
+The zone file must be clean and the approved commit must equal the checkout's `HEAD`. Change one logical zone operation at a time and query the canary over UDP and TCP before continuing.
+
+Router DHCP DNS changes are last. Record old values, retain a wired recovery client, advertise all three resolver addresses, renew one test lease, and observe a full lease cycle. If client resolution fails, restore the old DHCP DNS values before investigating the nodes.
+
+## Backup, restore, and reinstall
+
+Collect only already-encrypted backups:
+
+```sh
+installer/management/collect-backups /secure/dns-backups
+```
+
+Periodically decrypt and restore one in an isolated Technitium environment; file presence alone is not recovery proof. The current restore command always disables TLS certificate verification. Use it only for an isolated restore drill; it is not qualified for a production node until trusted-CA or pinned-fingerprint verification is implemented. The drill still binds confirmation to the exact target URL:
+
+```sh
+installer/management/restore-node \
+  --url https://restore-lab.local:53443 \
+  --token-file /secure/dns/restore-token \
+  --backup /secure/dns-backups/dns01/backup.zip.age \
+  --identity /secure/dns-recovery-age-key.txt \
+  --confirm 'RESTORE https://restore-lab.local:53443'
+```
+
+Verify the restored canary and remove the isolated lab plaintext afterward; do not target a production node with this command. A completed appliance can be reinstalled only after a generation-bound authorization is written:
+
+```sh
+installer/management/authorize-reinstall \
+  --enrollment /Volumes/DNS-ENROLL \
+  --role dns01 \
+  --confirm 'ERASE dns01'
+```
+
+## Deploy the Agent Gateway
+
+Use a dedicated non-sudo management-host account and a checkout at `/srv/device-os-bootstrap-for-jeonghan`. Create a Python 3.10-or-newer environment outside the checkout and install only the locked dependencies:
+
+```sh
+sudo useradd --create-home --shell /bin/sh device-agent
+sudo install -d -o device-agent -g device-agent /opt/device-os-agent
+sudo -u device-agent python3 -m venv /opt/device-os-agent/venv
+sudo -u device-agent /opt/device-os-agent/venv/bin/python -m pip install \
+  --requirement /srv/device-os-bootstrap-for-jeonghan/agent/requirements.lock
+```
+
+Provision mode-0600 reader, planner, and optional applier token files readable by only `device-agent`; provision the trusted Technitium CA separately. Set the fixed gateway variables in the account's reviewed host-side environment and never accept them from the SSH client:
+
+```sh
+DEVICE_OS_AGENT_PYTHON=/opt/device-os-agent/venv/bin/python
+DEVICE_OS_AGENT_DNS_READER_TOKEN_FILE=/secure/dns/reader.token
+DEVICE_OS_AGENT_DNS_PLANNER_TOKEN_FILE=/secure/dns/planner.token
+DEVICE_OS_AGENT_DNS_APPLIER_TOKEN_FILE=/secure/dns/applier.token
+DEVICE_OS_AGENT_TECHNITIUM_CA_FILE=/secure/dns/technitium-ca.pem
+DEVICE_OS_AGENT_DNS01_URL=https://dns01:53443
+DEVICE_OS_AGENT_DNS02_URL=https://dns02:53443
+DEVICE_OS_AGENT_DNS03_URL=https://dns03:53443
+```
+
+Omit the applier token and `DEVICE_OS_AGENT_ALLOW_APPLY` for the initial read-only deployment. Add the client's public key to the dedicated account with a forced command:
+
+```text
+restrict,command="/srv/device-os-bootstrap-for-jeonghan/agent/run" ssh-ed25519 AAAA... operator-agent
+```
+
+The SSH server must not use `AcceptEnv` for gateway variables. Tailnet ACL and the host firewall permit only the reviewed client identity to reach this account's SSH port; no router port is forwarded. Configure the remote MCP client to invoke ordinary SSH:
+
+```json
+{
+  "mcpServers": {
+    "device-os": {
+      "command": "ssh",
+      "args": ["-T", "device-agent@management-host"]
+    }
+  }
+}
+```
+
+Verify the isolated tool boundary and then the live forced-command path:
+
+```sh
+/opt/device-os-agent/venv/bin/python \
+  /srv/device-os-bootstrap-for-jeonghan/agent/tests/gateway_simulation.py
+ssh -T device-agent@management-host
+```
+
+Prove repository, World, capacity, network, tunnel, DNS health, and DNS plan calls first. Confirm physical-media, installation, restore, enrollment, arbitrary command, path, and URL tools are absent. Only after trusted TLS and rollback are proven may the host administrator add the applier token, set `DEVICE_OS_AGENT_ALLOW_APPLY=1`, and run one separately approved canary apply.
+
+## Runtime configuration
+
+| Name | Role and allowed scope |
+| --- | --- |
+| `DEVICE_OS_MEDIA` | Selects one declared World media ID for the current invocation; current values are `dns-install` and `inventory-capture` |
+| `DEVICE_OS_WORLD` | Selects an explicit draft when more than one exists; path must remain within the configured World roots |
+| `DEVICE_OS_WORLD_PLAN` | Installer working path for a resolved World plan; generated, not committed |
+| `USB_MEDIA_CATALOG` | Installer working path for the resolved media plan; generated, not committed |
+| `USB_MEDIA_CACHE_DIR` | Ignored cache for verified bootloader and public OS downloads; changing it does not bypass digest checks |
+| `DNS_APPLIANCE_INVENTORY_DIR` | Ignored directory containing reviewed real-machine inventory used by the DNS image build |
+| `DNS_APPLIANCE_AUTHORIZED_KEYS` | File containing only the operator's public SSH key material for the image |
+| `DNS_APPLIANCE_AGE_RECIPIENT` | File containing only the public age recipient used to encrypt enrollment output |
+| `DNS_APPLIANCE_CACHE_DIR` | Ignored cache for digest-pinned DNS runtime inputs |
+| `DNS_APPLIANCE_ARTIFACT_DIR` | Ignored destination for build manifests, checksums, package closure, and SBOM |
+| `DNS_CLUSTER_CREDENTIALS_DIR` | Protected management-host directory containing imported node credentials |
+| `DNS_CLUSTER_ACCESS_OUTPUT` | Protected destination for the encrypted cluster access bundle |
+| `DNS_CLUSTER_AGE_RECIPIENT` | Public age-recipient file used for the encrypted cluster access bundle |
+| `DNS_CLUSTER_DOMAIN` | Cluster domain override; defaults to `dns-cluster.home.arpa` and must match reviewed DNS intent |
+| `DNS_CLUSTER_ZONE_FILE` | Reviewed zone-file override; defaults to the tracked `home.arpa` desired state |
+| `DNSCTL_AUDIT_LOG` | Protected append-only destination for redacted DNS plan/apply events |
+| `TECHNITIUM_URL` | Direct management-command target URL; callers use reviewed fixed node endpoints, not arbitrary agent input |
+| `TECHNITIUM_TOKEN_FILE` | Protected role-specific token file for direct management commands |
+| `TAILSCALE_OAUTH_CLIENT_ID_FILE` | Protected file containing the OAuth client ID; value must not be passed directly |
+| `TAILSCALE_OAUTH_CLIENT_SECRET_FILE` | Protected file containing the OAuth secret; value must not be passed directly |
+| `TECHNITIUM_CA_FILE` | Trusted CA bundle required for DNS apply through the agent path |
+| `DEVICE_OS_AGENT_STATE_DIR` | Protected management-host runtime state directory for the gateway |
+| `DEVICE_OS_AGENT_DNS_READER_TOKEN_FILE`, `DEVICE_OS_AGENT_DNS_PLANNER_TOKEN_FILE`, `DEVICE_OS_AGENT_DNS_APPLIER_TOKEN_FILE` | Fixed protected files for separate DNS authorities; token values are never environment variables |
+| `DEVICE_OS_AGENT_DNS01_URL`, `DEVICE_OS_AGENT_DNS02_URL`, `DEVICE_OS_AGENT_DNS03_URL` | Administrator-fixed appliance URLs; callers cannot supply URLs through tools |
+| `DEVICE_OS_AGENT_TECHNITIUM_CA_FILE` | Administrator-fixed trusted CA path forwarded as `TECHNITIUM_CA_FILE` for apply |
+| `DEVICE_OS_AGENT_ALLOW_APPLY` | Management-host policy switch; the tool remains discoverable, but only literal `1` permits execution and all delegated gates still run |
+| `DEVICE_OS_AGENT_TAILSCALE_COMMAND` | Administrator-fixed absolute executable path for read-only tunnel status; never a tool argument |
+
+The principal secret store remains intentionally implementation-neutral. All concrete paths in examples are operator-selected protected locations outside the checkout.

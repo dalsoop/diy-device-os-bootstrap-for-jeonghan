@@ -27,6 +27,13 @@ DNS writes are disabled by default. Enabling them requires management-host
 policy, a separate applier-token file, a target-specific phrase, the exact
 checked-out commit, a clean tracked zone, and the existing `dnsctl` apply gate.
 
+## Alternatives
+
+- A public HTTP management service was rejected because it would add a listener, router exposure, authentication surface, and another execution policy.
+- Unrestricted SSH was rejected because an agent could bypass command, path, credential, and destructive-operation boundaries.
+- Running the gateway on each appliance was rejected because orchestration and long-lived credentials belong to the management host, not the DNS runtime.
+- Implementing policy again inside the gateway was rejected because it could drift from the reviewed CLI gates.
+
 ## Consequences
 
 - No new public listener or router port is required.

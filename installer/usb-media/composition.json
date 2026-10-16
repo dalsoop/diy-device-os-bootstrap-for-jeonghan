@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "product": {
-    "name": "DIY Device OS USB",
-    "repository": "https://github.com/dalsoop/diy-device-os-bootstrap"
+    "name": "Device OS USB for Jeonghan",
+    "repository": "https://github.com/dalsoop/device-os-bootstrap-for-jeonghan"
   },
   "catalog": {
     "kind": "workspace",
@@ -15,18 +15,13 @@
     "usb-media/local-entries/dns-appliance.json"
   ],
   "usb": {
-    "data_label": "DEVICE-INST",
+    "data_label": "DEVICE-OS",
     "enrollment_label": "DNS-ENROLL",
     "enrollment_reserve_mib": 2048,
     "capacity_overhead_mib": 768,
     "default_language": "ko_KR"
   },
   "bundles": [
-    {
-      "id": "pop-os-korean-guide",
-      "destination": "guides/POP_OS_KO.md",
-      "source": { "kind": "repository-file", "path": "usb-media/guides/pop-os-ko.md" }
-    },
     {
       "id": "dns-appliance-status-monitor",
       "destination": "tools/dns-appliance-status-monitor",

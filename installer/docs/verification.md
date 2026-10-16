@@ -62,23 +62,27 @@ evidence.
   routes/exit-node/Serve/Funnel/SSH, management-port ACLs, `tailscale ping`, and
   keyless reconnection after reboot.
 
-## DIY Device OS USB gates
+## Selected Device OS USB gates
 
-- Verify Ventoy, Debian Live, Proxmox VE, Proxmox Backup Server, TrueNAS SCALE,
-  and Pop!_OS against committed SHA-256 locks before copying.
+- Verify Ventoy and every entry selected by the resolved World against the
+  recorded SHA-256 before copying. Catalog availability alone does not place an
+  entry on the USB.
 - Verify `manifests/MEDIA-CATALOG.SHA256` and retain the exact catalog copied to
   the USB with release evidence.
 - Verify every copied ISO using the USB's generated `manifests/SHA256SUMS`.
-- Test legacy BIOS and UEFI menus; treat Secure Boot as failed until the exact
-  HP firmware and every selected image boot successfully.
-- Prove all menu entries require deliberate selection and that Proxmox VE,
-  Proxmox Backup Server, TrueNAS, and Pop!_OS remain interactive.
-- Verify the Korean menu and `L` language selector, then complete one Korean
-  Pop!_OS installation on a disposable disk.
+- Test BIOS (non-UEFI) and UEFI menus; treat Secure Boot as failed until the
+  exact HP firmware and every selected image boot successfully.
+- Prove all menu entries require deliberate selection. The current
+  `inventory-capture` pass contains only Debian Live; the current `dns-install`
+  pass contains only the guarded DNS image.
+- If Proxmox VE, Proxmox Backup Server, TrueNAS SCALE, or Pop!_OS is selected in
+  a future generation, qualify that exact release on disposable media and prove
+  it remains interactive before production use.
 - Run the bundled DNS appliance status monitor and confirm it reports DNS UDP,
   DNS TCP, Cockpit, Technitium, and metrics for all three nodes.
-- Verify `DNS-ENROLL` survives boots of every menu entry and accepts only the
-  DNS appliance's encrypted enrollment output.
+- On `dns-install`, verify `DNS-ENROLL` survives boot and accepts only the DNS
+  appliance's encrypted enrollment output. `inventory-capture` reserves no DNS
+  enrollment partition.
 
 Only after dns01 passes should dns02 and dns03 be enabled one at a time. Cluster
 and router DHCP cutover are separate final gates. Publishing or writing a new

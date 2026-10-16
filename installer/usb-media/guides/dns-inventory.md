@@ -14,21 +14,21 @@ been built from inventory captured on each target HP computer.
    lsblk -d -o NAME,MODEL,SERIAL,SIZE,TRAN,RM
    ```
 
-3. Locate and mount the `DEVICE-INST` partition:
+3. Locate and mount the `DEVICE-OS` partition:
 
    ```sh
    lsblk -o NAME,LABEL,FSTYPE,MOUNTPOINTS
-   sudo mkdir -p /mnt/device-inst
-   sudo mount -L DEVICE-INST /mnt/device-inst
+   sudo mkdir -p /mnt/device-os
+   sudo mount -L DEVICE-OS /mnt/device-os
    ```
 
 4. Run the bundled capture command, substituting the role, address, interface,
    disk, and actual mounted path:
 
    ```sh
-   sudo sh /mnt/device-inst/tools/capture-inventory \
+   sudo sh /mnt/device-os/tools/capture-inventory \
      dns01 10.0.5.1 enp1s0 /dev/sda | \
-     sudo tee /mnt/device-inst/inventory-dns01.conf >/dev/null
+     sudo tee /mnt/device-os/inventory-dns01.conf >/dev/null
    sync
    ```
 

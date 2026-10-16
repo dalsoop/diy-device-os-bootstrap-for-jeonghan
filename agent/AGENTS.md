@@ -24,11 +24,12 @@ policy.
 - Accept a management-host Tailscale executable override only as an absolute,
   executable path fixed by the host administrator; never as a tool argument.
 - Keep DNS reader, planner, and applier credentials separate.
-- Require a readable trusted Technitium CA file before exposing an apply call;
-  insecure bootstrap TLS is limited to read and plan compatibility.
-- Redact or reject output that could expose credentials. Tokens must never
-  appear in command arguments, URLs, logs, or MCP results.
-- The apply tool is disabled unless the management-host administrator sets
+- Require a readable trusted Technitium CA file before permitting an apply call;
+  the discoverable tool rejects execution without it.
+- Delegated commands must keep tokens out of stdout and stderr. The gateway
+  truncates at 64 KiB but does not content-redact, so tokens must never appear
+  in command arguments, URLs, logs, or MCP results.
+- The discoverable apply tool rejects execution unless the management-host administrator sets
   `DEVICE_OS_AGENT_ALLOW_APPLY=1`. It still requires a target-specific phrase,
   the exact checked-out commit, a clean tracked zone file, and `dnsctl`'s own
   confirmation gate.

@@ -21,7 +21,7 @@ restore a node, mint enrollment credentials, execute arbitrary commands, read
 arbitrary paths, or call arbitrary URLs.
 
 The World tools accept an optional `media` value of `inventory-capture` or
-`dns-bootstrap`. This lets an agent inspect both passes while keeping download,
+`dns-install`. This lets an agent inspect both passes while keeping download,
 USB burn, and internal-disk installation outside the gateway.
 
 ## Install on the management host
@@ -32,7 +32,7 @@ repository:
 ```sh
 python3 -m venv /opt/device-os-agent/venv
 /opt/device-os-agent/venv/bin/python -m pip install \
-  --requirement /srv/diy-device-os-bootstrap/agent/requirements.lock
+  --requirement /srv/device-os-bootstrap-for-jeonghan/agent/requirements.lock
 ```
 
 Configure only credential file paths. Keep the files readable by the dedicated
@@ -86,7 +86,7 @@ confirmation, matching `HEAD`, and a clean tracked zone file.
 Point an MCP host at the following stdio command:
 
 ```text
-/srv/diy-device-os-bootstrap/agent/run
+/srv/device-os-bootstrap-for-jeonghan/agent/run
 ```
 
 The wrapper uses `DEVICE_OS_AGENT_PYTHON` when set and otherwise uses
@@ -106,7 +106,7 @@ For a dedicated `device-agent` account, constrain its SSH public key to the
 gateway command in `authorized_keys`:
 
 ```text
-restrict,command="/srv/diy-device-os-bootstrap/agent/run" ssh-ed25519 AAAA... operator-agent
+restrict,command="/srv/device-os-bootstrap-for-jeonghan/agent/run" ssh-ed25519 AAAA... operator-agent
 ```
 
 Then configure the remote MCP host to launch:

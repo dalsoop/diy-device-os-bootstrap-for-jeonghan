@@ -11,7 +11,7 @@ includes and how they are grouped on the USB.
 - Selection does not change an entry's boot behavior or grant unattended
   installation.
 - Keep contributor reference choices here instead of editing shared resolver
-  code. Ordinary user selection belongs in `../world/`.
+  code. Ordinary user selection belongs in the repository-root `world/` module.
 - Verify every selection change with a resolved plan and confirm that omitted
   entries, menu groups, DNS reserve, and capacity still match intent.
 

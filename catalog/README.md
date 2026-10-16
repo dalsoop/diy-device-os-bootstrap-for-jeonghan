@@ -5,7 +5,7 @@ metadata used by the sibling Installer. It publishes official HTTPS locations,
 reviewed SHA-256 values, stable IDs, menu labels, and boot behavior. It never
 downloads, executes, or writes the media it describes.
 
-The Catalog shares the DIY Device OS Bootstrap repository so metadata, its Installer
+The Catalog shares the Device OS Bootstrap for Jeonghan repository so metadata, its Installer
 consumer, fixtures, and World selection can change atomically. It remains an
 untrusted runtime input: the Installer validates the JSON again and records the
 Catalog Git tree identity in every resolved plan.
@@ -34,6 +34,7 @@ index contracts together and rely on the root CI for validation. A passing
 Catalog test proves metadata consistency only, not download provenance, boot,
 firmware, or installation behavior.
 
-See [contracts](docs/contracts.md), [security](docs/security.md), and
-[engineering standards](docs/standards.md).
+See the repository [contracts](../docs/contracts.md),
+[security policy](../docs/security.md), and
+[engineering standards](../docs/standards.md).
 

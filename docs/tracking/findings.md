@@ -14,8 +14,13 @@ The repository now builds an exact-size MBR image through a privileged Debian
 13 container whose loop device is isolated inside the Linux VM. It rejects
 repository-bundle symlinks before assembly, and the macOS writer binds its exact
 confirmation to device path, media name, USB serial, and byte size. The revised
-sequence has not yet been run on disposable hardware, so filesystem checks,
-payload checks, and BIOS/UEFI boot remain required before qualification.
+writer completed an exact-size write and full raw readback on a disposable
+15,833,497,600-byte ProductCode USB. That attempt's generation was rejected
+because the command resolved `dns-install` while the raw image contained
+`inventory-capture`; the mismatch exposed a missing provenance binding. The
+builder and writer now bind image bytes to Catalog and World media through an
+adjacent manifest. A repeated bound write, filesystem checks, payload checks,
+and BIOS/UEFI boot remain required before qualification.
 
 ## DNS apply is not bound to the reviewed plan
 

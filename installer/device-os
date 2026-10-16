@@ -225,7 +225,8 @@ case "$command" in
         ;;
     burn-image-macos)
         shift
-        exec "$repo_root/usb-media/write-image-macos" "$@"
+        resolve
+        USB_MEDIA_CATALOG=$resolved exec "$repo_root/usb-media/write-image-macos" "$@"
         ;;
     world)
         shift

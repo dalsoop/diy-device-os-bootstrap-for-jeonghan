@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "event_id": "20261017041011-jeonghan-home-b3f14937",
+  "generation_candidate": "20261017041011-jeonghan-home",
+  "generation_id": null,
+  "world_slug": "jeonghan-home",
+  "media_id": "inventory-capture",
+  "writer": "macos-mbr-last",
+  "device_path": "/dev/disk4",
+  "repository_revision": "5ff232a1a739b6d463830b346762ca8cee884352",
+  "catalog_tree": "b2f8699f01dd6dd391c6b9b2d8ce13498f8c9911",
+  "status": "failed",
+  "started_at": "2026-10-17T04:10:11+09:00",
+  "finished_at": "2026-10-17T05:04:03+09:00",
+  "exit_code": 0,
+  "failure_code": "media-provenance-mismatch",
+  "target": {
+    "display_name": "ProductCode",
+    "bytes": 15833497600
+  },
+  "readback": {
+    "method": "mbr-last-raw-compare",
+    "status": "passed"
+  }
+}

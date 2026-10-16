@@ -11,11 +11,41 @@ trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 mock_bin=$temporary/bin
 log=$temporary/commands.log
 image=$temporary/device-os.raw
+catalog=$temporary/catalog.json
 jq_bin=$(command -v jq)
 jq_dir=$(dirname -- "$jq_bin")
 test_path=$mock_bin:$jq_dir:/usr/bin:/bin
 mkdir -p "$mock_bin"
 truncate -s 2097152 "$image"
+cat > "$catalog" <<EOF
+{
+  "catalog": {
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "world": {
+    "world": {"slug": "test-home"},
+    "media": {"id": "inventory-capture"}
+  }
+}
+EOF
+cat > "$image.manifest.json" <<EOF
+{
+  "schema_version": 1,
+  "kind": "device-os-raw-image",
+  "image": {
+    "filename": "device-os.raw",
+    "bytes": 2097152,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "catalog": {
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "world": {"slug": "test-home", "media_id": "inventory-capture"}
+}
+EOF
 
 make_mock() {
     name=$1
@@ -27,6 +57,8 @@ make_mock() {
 make_mock uname 'echo Darwin'
 make_mock id 'echo 0'
 make_mock stat 'echo 2097152'
+# shellcheck disable=SC2016
+make_mock shasum 'echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  $3"'
 # shellcheck disable=SC2016
 make_mock plutil '
 case "$2" in
@@ -76,6 +108,7 @@ fi'
 
 run_writer() {
     PATH="$test_path" TEST_LOG="$log" \
+    USB_MEDIA_CATALOG="$catalog" \
     DEVICE_OS_WRITE_EVIDENCE="$temporary/evidence.json" "$writer" \
         --image "$image" \
         --device /dev/disk9 \
@@ -110,7 +143,25 @@ EOF
 diff -u "$temporary/expected.log" "$log"
 
 : > "$log"
+cp "$image.manifest.json" "$temporary/valid-image-manifest.json"
+"$jq_bin" '.world.media_id = "dns-install"' \
+    "$temporary/valid-image-manifest.json" > "$image.manifest.json"
+if PATH="$test_path" TEST_LOG="$log" USB_MEDIA_CATALOG="$catalog" \
+    DEVICE_OS_WRITE_EVIDENCE="$temporary/mismatched-manifest-evidence.json" \
+    "$writer" --image "$image" --device /dev/disk9 \
+        --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then
+    echo "macos-writer-simulation: mismatched World media was accepted" >&2
+    exit 1
+fi
+if grep -qE '^(dd |diskutil unmountDisk |diskutil eject )' "$log"; then
+    echo "macos-writer-simulation: manifest rejection reached a destructive command" >&2
+    exit 1
+fi
+cp "$temporary/valid-image-manifest.json" "$image.manifest.json"
+
+: > "$log"
 if PATH="$test_path" TEST_LOG="$log" TEST_FAIL_BODY_COMPARE=1 \
+    USB_MEDIA_CATALOG="$catalog" \
     DEVICE_OS_WRITE_EVIDENCE="$temporary/body-failure-evidence.json" \
     "$writer" --image "$image" --device /dev/disk9 \
         --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then
@@ -129,6 +180,7 @@ fi
 
 : > "$log"
 if PATH="$test_path" TEST_LOG="$log" TEST_MBR_TYPE=238 \
+    USB_MEDIA_CATALOG="$catalog" \
     DEVICE_OS_WRITE_EVIDENCE="$temporary/gpt-evidence.json" \
     "$writer" --image "$image" --device /dev/disk9 \
         --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then

@@ -44,7 +44,7 @@ done
 
 [ "$(uname -s)" = Linux ] || fail "Linux is required"
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-for command in losetup truncate sha256sum blockdev; do
+for command in losetup truncate sha256sum blockdev jq; do
     command -v "$command" >/dev/null 2>&1 || fail "$command is required"
 done
 [[ "$output" = /* ]] || fail "--output must be an absolute path"
@@ -55,6 +55,7 @@ esac
 [ -d "$(dirname -- "$output")" ] || fail "output directory does not exist"
 [ ! -e "$output" ] || fail "output already exists: $output"
 [ ! -e "$output.sha256" ] || fail "checksum already exists: $output.sha256"
+[ ! -e "$output.manifest.json" ] || fail "image manifest already exists: $output.manifest.json"
 [ -r "$catalog" ] || fail "resolved catalog is missing: $catalog"
 
 if [ "${DEVICE_OS_SKIP_LOOP_NODE_SETUP:-0}" != 1 ] &&
@@ -70,6 +71,7 @@ output_dir=$(CDPATH='' cd -- "$(dirname -- "$output")" && pwd)
 output_name=$(basename -- "$output")
 temporary=$output_dir/.$output_name.partial.$$
 checksum_temporary=$output_dir/.$output_name.sha256.partial.$$
+manifest_temporary=$output_dir/.$output_name.manifest.json.partial.$$
 loop_device=
 
 cleanup() {
@@ -78,6 +80,7 @@ cleanup() {
     fi
     rm -f "$temporary"
     rm -f "$checksum_temporary"
+    rm -f "$manifest_temporary"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -112,10 +115,38 @@ actual_size=$(stat -c %s "$temporary")
 [ "$actual_size" = "$size" ] || fail "generated image size changed unexpectedly"
 image_digest=$(sha256sum "$temporary" | awk 'NR == 1 { print $1 }')
 [[ "$image_digest" =~ ^[a-f0-9]{64}$ ]] || fail "generated image checksum is invalid"
+catalog_digest=$(sha256sum "$catalog" | awk 'NR == 1 { print $1 }')
+[[ "$catalog_digest" =~ ^[a-f0-9]{64}$ ]] || fail "resolved catalog checksum is invalid"
+catalog_revision=$(jq -er '.catalog.revision | select(test("^[a-f0-9]{40}$"))' "$catalog")
+catalog_tree=$(jq -er '.catalog.tree | select(test("^[a-f0-9]{40}$"))' "$catalog")
+world_binding=$(jq -c '
+  if has("world") then
+    {slug: .world.world.slug, media_id: .world.media.id}
+  else
+    null
+  end
+' "$catalog")
 printf '%s  %s\n' "$image_digest" "$output_name" > "$checksum_temporary"
+jq -n \
+    --arg filename "$output_name" \
+    --argjson bytes "$size" \
+    --arg image_sha256 "$image_digest" \
+    --arg catalog_sha256 "$catalog_digest" \
+    --arg revision "$catalog_revision" \
+    --arg tree "$catalog_tree" \
+    --argjson world "$world_binding" \
+    '{
+      schema_version: 1,
+      kind: "device-os-raw-image",
+      image: {filename: $filename, bytes: $bytes, sha256: $image_sha256},
+      catalog: {sha256: $catalog_sha256, revision: $revision, tree: $tree},
+      world: $world
+    }' > "$manifest_temporary"
 mv "$temporary" "$output"
 mv "$checksum_temporary" "$output.sha256"
+mv "$manifest_temporary" "$output.manifest.json"
 trap - EXIT HUP INT TERM
 
 echo "usb-media build-image-linux: created $output"
 echo "usb-media build-image-linux: checksum $output.sha256"
+echo "usb-media build-image-linux: manifest $output.manifest.json"

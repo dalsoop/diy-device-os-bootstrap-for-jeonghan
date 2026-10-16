@@ -320,15 +320,17 @@ DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
 DEVICE_OS_MEDIA=inventory-capture ./device-os world build-image \
   --output "$PWD/installer/artifacts/inventory-capture.raw" \
   --size EXACT_BYTES
-sudo ./device-os world burn-image-macos \
+sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn-image-macos \
   --image "$PWD/installer/artifacts/inventory-capture.raw" \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
 ```
 
 Image creation is non-destructive to physical media. The later writer resolves
-the live USB serial again and refuses a stale phrase, a size mismatch, a GPT
-image, an internal or virtual device, or failed raw readback.
+the live USB serial again and refuses a stale phrase, an image-manifest mismatch,
+a size mismatch, a GPT image, an internal or virtual device, or failed raw
+readback. Keep the generated `.raw`, `.raw.sha256`, and `.raw.manifest.json`
+together.
 
 ## World generation boundary
 

@@ -121,6 +121,11 @@ sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn-image-macos \
   --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_TARGET_BYTES'
 ```
 
+Keep the generated `.raw`, `.raw.sha256`, and `.raw.manifest.json` together.
+The manifest binds the image hash to the exact Catalog revision, tree, World
+slug, and media ID. The writer rehashes and compares that binding before it
+inspects or writes the live target.
+
 The resulting media contains Debian Live only. Boot each HP computer deliberately and follow the inventory guide on the USB. Capture one role at a time from the trusted live environment:
 
 ```sh

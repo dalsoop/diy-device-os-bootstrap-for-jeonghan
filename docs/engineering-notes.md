@@ -16,6 +16,21 @@
 
 **Response:** use the MBR-last writer. It hides the first MiB, writes and verifies the image body, then writes and verifies the first MiB so filesystems cannot mount before their source bytes are checked. Afterward verify filesystem health and staged image checksums separately; a post-mount raw difference is neither proof of corruption nor proof of success.
 
+## A valid raw image can be recorded under the wrong World media
+
+**Symptom:** raw readback succeeds, but the generated World record names
+`dns-install` while the physical USB contains the `inventory-capture` image.
+
+**Cause:** the destructive command resolved the World's default media again and
+did not bind that selection to the previously built raw image. Omitting
+`DEVICE_OS_MEDIA=inventory-capture` therefore changed only the evidence inputs,
+not the image bytes passed to the writer.
+
+**Response:** reject the generation and retain a redacted failed event. Every
+raw-image build emits an adjacent manifest containing the image hash, resolved
+Catalog digest and identity, World slug, and media ID. The macOS writer rehashes
+and compares all of them before live target inspection or any write.
+
 ## Capacity can remain indeterminate
 
 **Symptom:** `world capacity` reports `PENDING` or null `fits` for a 16 GB target.

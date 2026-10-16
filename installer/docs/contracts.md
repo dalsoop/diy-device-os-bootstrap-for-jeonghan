@@ -148,7 +148,7 @@ The DNS build manifest records the exact source commit, repository, and source
 archive. The installer carries the same source notice, project notices, the
 Tailscale BSD-3-Clause text, and the dependency-license report pinned to the
 Tailscale binary version. The installed appliance preserves them under
-`/usr/share/doc/gujo-dns-device-os-bootstrap/`. SPDX SBOM fields use `NOASSERTION`
+`/usr/share/doc/gujo-dns-device-os-bootstrap-for-jeonghan/`. SPDX SBOM fields use `NOASSERTION`
 when the build cannot establish a single license conclusion for a package or
 container; that value is a review requirement, not a grant of permission.
 

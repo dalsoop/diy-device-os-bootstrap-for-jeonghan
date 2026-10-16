@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "Gujo DNS Device OS Catalog",
-  "repository": "https://github.com/dalsoop/gujo-dns-device-os-bootstrap",
+  "repository": "https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan",
   "bootloaders": [
     { "id": "ventoy", "path": "catalog/bootloaders/ventoy.json" }
   ],

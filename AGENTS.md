@@ -1,4 +1,4 @@
-# Gujo DNS Device OS Bootstrap
+# Gujo DNS Device OS Bootstrap for Jeonghan
 
 This user-owned DNS device-OS bootstrap monorepo is the single source of truth
 for the Gujo Home DNS World, public OS metadata, guarded installation-media

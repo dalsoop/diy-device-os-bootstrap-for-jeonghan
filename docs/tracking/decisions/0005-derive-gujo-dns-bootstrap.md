@@ -18,10 +18,10 @@ remote.
 
 ## Decision
 
-`dalsoop/gujo-dns-device-os-bootstrap` is the operator repository for this DNS
+`dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan` is the operator repository for this DNS
 cluster.
 
-- The product name is **Gujo DNS Device OS Bootstrap**.
+- The product name is **Gujo DNS Device OS Bootstrap for Jeonghan**.
 - The generated production media is **Gujo DNS Install USB**.
 - The operator command remains `device-os`.
 - The single mutable World is `gujo-home-dns`.

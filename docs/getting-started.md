@@ -26,8 +26,8 @@ Clone the operator repository. Its `upstream` remote tracks the generic source
 repository so safety updates can be reviewed and adopted selectively:
 
 ```sh
-git clone https://github.com/dalsoop/gujo-dns-device-os-bootstrap.git
-cd gujo-dns-device-os-bootstrap
+git clone https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan.git
+cd gujo-dns-device-os-bootstrap-for-jeonghan
 git remote add upstream https://github.com/dalsoop/diy-device-os-bootstrap.git
 ```
 

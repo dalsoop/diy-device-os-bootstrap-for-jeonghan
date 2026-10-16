@@ -2,7 +2,7 @@
   "schema_version": 1,
   "product": {
     "name": "Gujo DNS Install USB",
-    "repository": "https://github.com/dalsoop/gujo-dns-device-os-bootstrap"
+    "repository": "https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan"
   },
   "catalog": {
     "kind": "workspace",

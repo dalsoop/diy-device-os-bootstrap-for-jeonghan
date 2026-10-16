@@ -3,7 +3,7 @@
 ## Module role
 
 The World module is the user-owned source of desired homelab state inside the
-single Gujo DNS Device OS Bootstrap repository.
+single Gujo DNS Device OS Bootstrap for Jeonghan repository.
 
 ```text
 catalog/

@@ -13,7 +13,7 @@ world_plan=${DEVICE_OS_WORLD_PLAN:-$repo_root/work/device-os/world.json}
 
 usage() {
     cat <<'EOF'
-Gujo DNS Device OS Bootstrap
+Gujo DNS Device OS Bootstrap for Jeonghan
 
 Usage:
   ./device-os world validate             Validate the selected World and media
@@ -58,7 +58,7 @@ EOF
 }
 
 fail() {
-    echo "Gujo DNS Device OS Bootstrap: $*" >&2
+    echo "Gujo DNS Device OS Bootstrap for Jeonghan: $*" >&2
     exit 1
 }
 

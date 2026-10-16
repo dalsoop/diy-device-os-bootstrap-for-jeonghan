@@ -239,7 +239,7 @@ install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt"
 {
     echo "# Corresponding Source"
     echo
-    echo "Project: Gujo DNS Device OS Bootstrap"
+    echo "Project: Gujo DNS Device OS Bootstrap for Jeonghan"
     echo "License: GPL-3.0-only"
     echo "Source revision: $repository_revision"
     echo "Repository: $repository_url"

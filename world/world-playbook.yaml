@@ -2,7 +2,7 @@ apiVersion: homelab.gujo.dev/v1alpha1
 kind: WorldPlaybook
 
 metadata:
-  name: Gujo DNS Device OS Bootstrap
+  name: Gujo DNS Device OS Bootstrap for Jeonghan
 
 spec:
   timezone: Asia/Seoul

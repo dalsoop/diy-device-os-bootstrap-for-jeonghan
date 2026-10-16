@@ -1,6 +1,6 @@
-# Gujo DNS Device OS Bootstrap
+# Gujo DNS Device OS Bootstrap for Jeonghan
 
-[![CI](https://github.com/dalsoop/gujo-dns-device-os-bootstrap/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/gujo-dns-device-os-bootstrap/actions/workflows/ci.yml)
+[![CI](https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 This repository builds and operates the installation media for the three-node
@@ -21,8 +21,8 @@ compatibility, but this World never downloads or stages them.
 ## Start here
 
 ```sh
-git clone https://github.com/dalsoop/gujo-dns-device-os-bootstrap.git
-cd gujo-dns-device-os-bootstrap
+git clone https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan.git
+cd gujo-dns-device-os-bootstrap-for-jeonghan
 ./device-os world validate
 ./device-os world plan
 ./device-os world capacity --capacity 16GB
@@ -68,7 +68,7 @@ image.
 ## Repository map
 
 ```text
-gujo-dns-device-os-bootstrap/
+gujo-dns-device-os-bootstrap-for-jeonghan/
 ├── device-os              operator command
 ├── world/                 DNS intent and append-only USB generations
 ├── catalog/               data-only public OS and bootloader metadata

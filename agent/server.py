@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 dalsoop
 # SPDX-License-Identifier: GPL-3.0-only
-"""Constrained MCP gateway for Gujo DNS Device OS Bootstrap."""
+"""Constrained MCP gateway for Gujo DNS Device OS Bootstrap for Jeonghan."""
 
 from __future__ import annotations
 
@@ -386,8 +386,8 @@ class Gateway:
 
 gateway = Gateway()
 mcp = MCPServer(
-    "gujo-dns-device-os-bootstrap",
-    title="Gujo DNS Device OS Bootstrap",
+    "gujo-dns-device-os-bootstrap-for-jeonghan",
+    title="Gujo DNS Device OS Bootstrap for Jeonghan",
     version="0.1.0",
     instructions=(
         "Operate only through these constrained tools. Planning and simulation do not "

@@ -18,7 +18,7 @@ artifact_dir=${DNS_APPLIANCE_ARTIFACT_DIR:-$repo_root/artifacts}
 technitium_archive=$cache_dir/technitium-dns-$TECHNITIUM_VERSION-amd64.oci.tar
 tailscale_archive=$cache_dir/tailscale-$TAILSCALE_VERSION-amd64.tgz
 tailscale_licenses=$cache_dir/tailscale-$TAILSCALE_VERSION-dependency-licenses.md
-source_repository=${DNS_APPLIANCE_SOURCE_REPOSITORY:-https://github.com/dalsoop/gujo-dns-device-os-bootstrap}
+source_repository=${DNS_APPLIANCE_SOURCE_REPOSITORY:-https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan}
 
 fail() {
     echo "build-image: $*" >&2
@@ -94,7 +94,7 @@ printf '%s  %s\n' "$TAILSCALE_LICENSES_SHA256" "$tailscale_licenses" |
 mkdir -p "$generated_dir"
 for old in dns01.conf dns02.conf dns03.conf operator-authorized-keys age-recipient \
     technitium.oci.tar tailscale.tgz sources.env enrollment-record.schema.json \
-    gujo-dns-device-os-bootstrap-license.txt license-history.md third-party-notices.md \
+    gujo-dns-device-os-bootstrap-for-jeonghan-license.txt license-history.md third-party-notices.md \
     tailscale-license.txt tailscale-dependency-licenses.md source.md; do
     rm -f "$generated_dir/$old"
 done
@@ -142,7 +142,7 @@ install -m 0644 "$repo_root/build/locks/sources.env" "$generated_dir/sources.env
 install -m 0644 "$repo_root/schemas/enrollment-record.schema.json" \
     "$generated_dir/enrollment-record.schema.json"
 install -m 0644 "$monorepo_root/LICENSE" \
-    "$generated_dir/gujo-dns-device-os-bootstrap-license.txt"
+    "$generated_dir/gujo-dns-device-os-bootstrap-for-jeonghan-license.txt"
 install -m 0644 "$monorepo_root/LICENSE_HISTORY.md" \
     "$generated_dir/license-history.md"
 install -m 0644 "$monorepo_root/THIRD_PARTY_NOTICES.md" \
@@ -154,7 +154,7 @@ install -m 0644 "$tailscale_licenses" \
 {
     echo "# Corresponding Source"
     echo
-    echo "Project: Gujo DNS Device OS Bootstrap"
+    echo "Project: Gujo DNS Device OS Bootstrap for Jeonghan"
     echo "License: GPL-3.0-only"
     echo "Source revision: $source_revision"
     echo "Repository: $source_repository"
@@ -248,7 +248,7 @@ jq -n \
     --arg source_archive "$source_archive" \
     --arg created "$created" \
     --rawfile packages "$packages_file" \
-    '{spdxVersion:"SPDX-2.3",dataLicense:"CC0-1.0",SPDXID:"SPDXRef-DOCUMENT",name:$name,documentNamespace:($source_repository+"/sbom/"+$revision+"/"+$name),creationInfo:{created:$created,creators:["Tool: gujo-dns-device-os-bootstrap/installer/installer/build-image"]},documentDescribes:["SPDXRef-GujoDNSDeviceOSBootstrap","SPDXRef-Technitium","SPDXRef-Tailscale"],packages:([($packages|split("\n")[]|select(length>0))|{name:(split("=")[0]),versionInfo:(split("=")[1]),SPDXID:("SPDXRef-Package-"+(gsub("[^A-Za-z0-9.-]";"-"))),downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION"}]+[{name:"gujo-dns-device-os-bootstrap",versionInfo:$revision,SPDXID:"SPDXRef-GujoDNSDeviceOSBootstrap",downloadLocation:$source_archive,filesAnalyzed:false,licenseDeclared:"GPL-3.0-only",licenseConcluded:"GPL-3.0-only",copyrightText:"Copyright (c) 2026 dalsoop"},{name:"technitium-dns-server-container",versionInfo:$technitium,SPDXID:"SPDXRef-Technitium",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION",comment:"The container combines the GPL-3.0 Technitium DNS Server with separately licensed runtime content; inspect its embedded notices."},{name:"tailscale-linux-static",versionInfo:$tailscale,SPDXID:"SPDXRef-Tailscale",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"BSD-3-Clause",licenseConcluded:"NOASSERTION",copyrightText:"Copyright (c) 2020 Tailscale Inc & contributors",comment:"The upstream project is BSD-3-Clause; the static binaries include dependencies listed in the pinned Tailscale dependency-license report."}])}' \
+    '{spdxVersion:"SPDX-2.3",dataLicense:"CC0-1.0",SPDXID:"SPDXRef-DOCUMENT",name:$name,documentNamespace:($source_repository+"/sbom/"+$revision+"/"+$name),creationInfo:{created:$created,creators:["Tool: gujo-dns-device-os-bootstrap-for-jeonghan/installer/installer/build-image"]},documentDescribes:["SPDXRef-GujoDNSDeviceOSBootstrapForJeonghan","SPDXRef-Technitium","SPDXRef-Tailscale"],packages:([($packages|split("\n")[]|select(length>0))|{name:(split("=")[0]),versionInfo:(split("=")[1]),SPDXID:("SPDXRef-Package-"+(gsub("[^A-Za-z0-9.-]";"-"))),downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION"}]+[{name:"gujo-dns-device-os-bootstrap-for-jeonghan",versionInfo:$revision,SPDXID:"SPDXRef-GujoDNSDeviceOSBootstrapForJeonghan",downloadLocation:$source_archive,filesAnalyzed:false,licenseDeclared:"GPL-3.0-only",licenseConcluded:"GPL-3.0-only",copyrightText:"Copyright (c) 2026 dalsoop"},{name:"technitium-dns-server-container",versionInfo:$technitium,SPDXID:"SPDXRef-Technitium",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION",comment:"The container combines the GPL-3.0 Technitium DNS Server with separately licensed runtime content; inspect its embedded notices."},{name:"tailscale-linux-static",versionInfo:$tailscale,SPDXID:"SPDXRef-Tailscale",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"BSD-3-Clause",licenseConcluded:"NOASSERTION",copyrightText:"Copyright (c) 2020 Tailscale Inc & contributors",comment:"The upstream project is BSD-3-Clause; the static binaries include dependencies listed in the pinned Tailscale dependency-license report."}])}' \
     > "$artifact_dir/sbom.spdx.json"
 
 echo "build manifest: $artifact_dir/build-manifest.json"

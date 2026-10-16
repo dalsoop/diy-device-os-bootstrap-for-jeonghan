@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "product": {
-    "name": "Device OS USB for Jeonghan",
-    "repository": "https://github.com/dalsoop/device-os-bootstrap-for-jeonghan"
+    "name": "DIY Device OS USB for Jeonghan",
+    "repository": "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan"
   },
   "catalog": {
     "kind": "workspace",

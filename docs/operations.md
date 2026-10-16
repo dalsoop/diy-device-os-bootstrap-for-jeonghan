@@ -7,8 +7,8 @@ Run repository commands from the checkout root unless a procedure explicitly cha
 Planning and simulation require Git, `jq`, and Ruby. Capacity probes and downloads also require `curl` and a SHA-256 implementation. Clone the personal repository and keep the generic source as a review-only upstream:
 
 ```sh
-git clone https://github.com/dalsoop/device-os-bootstrap-for-jeonghan.git
-cd device-os-bootstrap-for-jeonghan
+git clone https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan.git
+cd diy-device-os-bootstrap-for-jeonghan
 git remote add upstream https://github.com/dalsoop/diy-device-os-bootstrap.git
 ```
 
@@ -261,14 +261,14 @@ installer/management/authorize-reinstall \
 
 ## Deploy the Agent Gateway
 
-Use a dedicated non-sudo management-host account and a checkout at `/srv/device-os-bootstrap-for-jeonghan`. Create a Python 3.10-or-newer environment outside the checkout and install only the locked dependencies:
+Use a dedicated non-sudo management-host account and a checkout at `/srv/diy-device-os-bootstrap-for-jeonghan`. Create a Python 3.10-or-newer environment outside the checkout and install only the locked dependencies:
 
 ```sh
 sudo useradd --create-home --shell /bin/sh device-agent
 sudo install -d -o device-agent -g device-agent /opt/device-os-agent
 sudo -u device-agent python3 -m venv /opt/device-os-agent/venv
 sudo -u device-agent /opt/device-os-agent/venv/bin/python -m pip install \
-  --requirement /srv/device-os-bootstrap-for-jeonghan/agent/requirements.lock
+  --requirement /srv/diy-device-os-bootstrap-for-jeonghan/agent/requirements.lock
 ```
 
 Provision mode-0600 reader, planner, and optional applier token files readable by only `device-agent`; provision the trusted Technitium CA separately. Set the fixed gateway variables in the account's reviewed host-side environment and never accept them from the SSH client:
@@ -287,7 +287,7 @@ DEVICE_OS_AGENT_DNS03_URL=https://dns03:53443
 Omit the applier token and `DEVICE_OS_AGENT_ALLOW_APPLY` for the initial read-only deployment. Add the client's public key to the dedicated account with a forced command:
 
 ```text
-restrict,command="/srv/device-os-bootstrap-for-jeonghan/agent/run" ssh-ed25519 AAAA... operator-agent
+restrict,command="/srv/diy-device-os-bootstrap-for-jeonghan/agent/run" ssh-ed25519 AAAA... operator-agent
 ```
 
 The SSH server must not use `AcceptEnv` for gateway variables. Tailnet ACL and the host firewall permit only the reviewed client identity to reach this account's SSH port; no router port is forwarded. Configure the remote MCP client to invoke ordinary SSH:
@@ -307,7 +307,7 @@ Verify the isolated tool boundary and then the live forced-command path:
 
 ```sh
 /opt/device-os-agent/venv/bin/python \
-  /srv/device-os-bootstrap-for-jeonghan/agent/tests/gateway_simulation.py
+  /srv/diy-device-os-bootstrap-for-jeonghan/agent/tests/gateway_simulation.py
 ssh -T device-agent@management-host
 ```
 

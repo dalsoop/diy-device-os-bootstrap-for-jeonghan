@@ -6,7 +6,7 @@
 | [0002](0002-world-drives-operator-media-selection.md) | World drives operator media selection | Accepted |
 | [0003](0003-adopt-diy-device-os-bootstrap-name.md) | Adopt the DIY Device OS Bootstrap name | Superseded by 0005 |
 | [0004](0004-add-constrained-agent-gateway.md) | Add a constrained management-host agent gateway | Accepted |
-| [0005](0005-derive-jeonghan-device-os-bootstrap.md) | Derive Jeonghan's personal Device OS Bootstrap | Accepted |
+| [0005](0005-derive-diy-device-os-bootstrap-for-jeonghan.md) | Derive DIY Device OS Bootstrap for Jeonghan | Accepted |
 | [0006](0006-keep-catalog-data-only.md) | Keep the Catalog public and data-only | Accepted |
 | [0007](0007-use-physical-usb-creation-as-generation-axis.md) | Use verified physical USB creation as the generation axis | Accepted |
 | [0008](0008-verify-macos-image-before-exposing-mbr.md) | Verify macOS raw images before exposing their MBR | Accepted |

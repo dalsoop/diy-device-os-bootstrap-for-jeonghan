@@ -95,7 +95,7 @@ grep -q 'TAILSCALE_LICENSES_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'tailscale-dependency-licenses.md' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/installer/build-image"
-grep -q '/usr/share/doc/device-os-bootstrap-for-jeonghan/SOURCE.md' \
+grep -q '/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md' \
     "$repo_root/installer/simple-cdd/profiles/dns.postinst"
 grep -q 'debian-installer/locale string ko_KR.UTF-8' \
     "$repo_root/installer/simple-cdd/profiles/default.preseed"
@@ -131,7 +131,7 @@ grep -q 'runtime-artifact' "$repo_root/README.md"
 grep -q 'locked-download' "$repo_root/usb-media/README.md"
 grep -q '"kind": "workspace"' "$repo_root/usb-media/composition.json"
 grep -q '"path": "catalog"' "$repo_root/usb-media/composition.json"
-grep -q 'https://github.com/dalsoop/device-os-bootstrap-for-jeonghan' \
+grep -q 'https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan' \
     "$repo_root/usb-media/composition.json"
 grep -q '^    burn)$' "$repo_root/device-os"
 grep -q '^    burn-image-macos)$' "$repo_root/device-os"
@@ -146,7 +146,7 @@ if grep -q -E 'legacy_dns|--dns-iso|--dns-manifest|burn\|write|burn-image-macos\
 fi
 
 if git -C "$repo_root" grep -I -n -i -E \
-    'dns-appliance-provisioning|device-install-media|device-os-flasher|device-os-catalog|superusb|homelab-usb|homelab-bootstrap-media|Homelab Bootstrap|homelab-provisioning|Homelab Install & Recovery' \
+    '(^|[^a-z-])device-os-bootstrap-for-jeonghan|dns-appliance-provisioning|device-install-media|device-os-flasher|device-os-catalog|superusb|homelab-usb|homelab-bootstrap-media|Homelab Bootstrap|homelab-provisioning|Homelab Install & Recovery' \
     -- . ':!tests/repository-contract.sh'; then
     echo "repository-contract: obsolete project name remains" >&2
     exit 1

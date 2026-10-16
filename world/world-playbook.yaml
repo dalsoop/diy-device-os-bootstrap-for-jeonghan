@@ -2,7 +2,7 @@ apiVersion: device-os.bootstrap/v1alpha1
 kind: WorldPlaybook
 
 metadata:
-  name: Device OS Bootstrap for Jeonghan
+  name: DIY Device OS Bootstrap for Jeonghan
 
 spec:
   timezone: Asia/Seoul

@@ -14,7 +14,7 @@ event_recorder=$monorepo_root/world/bin/record-usb-event
 
 usage() {
     cat <<'EOF'
-Device OS Bootstrap for Jeonghan
+DIY Device OS Bootstrap for Jeonghan
 
 Usage:
   ./device-os world validate             Validate the selected World and media
@@ -61,7 +61,7 @@ EOF
 }
 
 fail() {
-    echo "Device OS Bootstrap for Jeonghan: $*" >&2
+    echo "DIY Device OS Bootstrap for Jeonghan: $*" >&2
     exit 1
 }
 
@@ -103,7 +103,7 @@ resolve_world() {
 }
 
 print_plan() {
-    echo "Device OS USB for Jeonghan contents"
+    echo "DIY Device OS USB for Jeonghan contents"
     echo
     jq -r '.entries[] |
       "- [" +

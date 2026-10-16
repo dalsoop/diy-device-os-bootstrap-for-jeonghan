@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "product": {
-    "name": "Gujo DNS Install USB",
-    "repository": "https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan"
+    "name": "DNS Install USB for Jeonghan",
+    "repository": "https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan"
   },
   "catalog": {
     "kind": "workspace",
@@ -15,7 +15,7 @@
     "usb-media/local-entries/dns-appliance.json"
   ],
   "usb": {
-    "data_label": "GUJO-DNS",
+    "data_label": "DNS-INSTALL",
     "enrollment_label": "DNS-ENROLL",
     "enrollment_reserve_mib": 2048,
     "capacity_overhead_mib": 768,

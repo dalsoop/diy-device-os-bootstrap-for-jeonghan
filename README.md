@@ -1,10 +1,10 @@
-# Gujo DNS Device OS Bootstrap for Jeonghan
+# DNS Device OS Bootstrap for Jeonghan
 
-[![CI](https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml)
+[![CI](https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml/badge.svg)](https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 This repository builds and operates the installation media for the three-node
-Gujo Home DNS cluster. It is a history-preserving derivative of
+Jeonghan's home DNS cluster. It is a history-preserving derivative of
 [`dalsoop/diy-device-os-bootstrap`](https://github.com/dalsoop/diy-device-os-bootstrap),
 trimmed to one operator-owned DNS World.
 
@@ -21,8 +21,8 @@ compatibility, but this World never downloads or stages them.
 ## Start here
 
 ```sh
-git clone https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan.git
-cd gujo-dns-device-os-bootstrap-for-jeonghan
+git clone https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan.git
+cd dns-device-os-bootstrap-for-jeonghan
 ./device-os world validate
 ./device-os world plan
 ./device-os world capacity --capacity 16GB
@@ -30,7 +30,7 @@ cd gujo-dns-device-os-bootstrap-for-jeonghan
 ```
 
 The operator normally changes only
-[`world/drafts/gujo-home-dns/world.yaml`](world/drafts/gujo-home-dns/world.yaml).
+[`world/drafts/jeonghan-home-dns/world.yaml`](world/drafts/jeonghan-home-dns/world.yaml).
 It defines `dns01`, `dns02`, and `dns03` at `10.0.5.1` through `10.0.5.3`, with
 the router at `10.0.0.1`. Hardware observations, keys, generated media,
 credentials, and recovery material stay outside Git in the documented ignored
@@ -68,7 +68,7 @@ image.
 ## Repository map
 
 ```text
-gujo-dns-device-os-bootstrap-for-jeonghan/
+dns-device-os-bootstrap-for-jeonghan/
 ├── device-os              operator command
 ├── world/                 DNS intent and append-only USB generations
 ├── catalog/               data-only public OS and bootloader metadata

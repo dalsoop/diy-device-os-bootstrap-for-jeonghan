@@ -48,7 +48,7 @@ DEVICE_MEDIA_WORLD_PLAN=$temporary/world.json USB_MEDIA_CATALOG=$temporary/world
 "$verify" "$temporary/world-catalog.json" >/dev/null
 jq -e '
   [.entries[].id] == ["dns-appliance"] and
-  .world.world.slug == "gujo-home-dns" and
+  .world.world.slug == "jeonghan-home-dns" and
   .world.media.id == "dns-install" and
   .usb.default_language == "ko_KR" and
   .usb.enrollment_reserve_mib == 2048

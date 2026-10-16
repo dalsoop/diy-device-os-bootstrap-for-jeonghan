@@ -1,4 +1,4 @@
-# 0005: Derive the Gujo DNS Bootstrap
+# 0005: Derive Jeonghan's DNS Bootstrap
 
 - Status: Accepted
 - Date: 2026-10-16
@@ -6,7 +6,7 @@
 ## Context
 
 The generic DIY Device OS Bootstrap repository supports a broad Catalog and a
-multi-purpose World. The Gujo Home deployment currently needs one repeatable
+multi-purpose World. Jeonghan's home deployment currently needs one repeatable
 job: inventory and install three HP DNS appliances. Presenting unrelated
 TrueNAS, Proxmox, and desktop media in the production path increases operator
 choice without helping that job.
@@ -18,16 +18,16 @@ remote.
 
 ## Decision
 
-`dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan` is the operator repository for this DNS
+`dalsoop/dns-device-os-bootstrap-for-jeonghan` is the operator repository for this DNS
 cluster.
 
-- The product name is **Gujo DNS Device OS Bootstrap for Jeonghan**.
-- The generated production media is **Gujo DNS Install USB**.
+- The product name is **DNS Device OS Bootstrap for Jeonghan**.
+- The generated production media is **DNS Install USB for Jeonghan**.
 - The operator command remains `device-os`.
-- The single mutable World is `gujo-home-dns`.
+- The single mutable World is `jeonghan-home-dns`.
 - `dns-install` selects only `dns-appliance`.
 - `inventory-capture` selects only `debian-live`.
-- The USB data label is `GUJO-DNS`.
+- The USB data label is `DNS-INSTALL`.
 - The Debian installer defaults to Korean while retaining a US keyboard map.
 - Removed `write` command aliases and DNS-specific argument aliases are not
   supported in this derivative; only the documented `burn` surface remains.

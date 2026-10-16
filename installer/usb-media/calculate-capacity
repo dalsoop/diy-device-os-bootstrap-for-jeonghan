@@ -410,7 +410,7 @@ if [ "$json_output" -eq 1 ]; then
     exit 0
 fi
 
-echo "Gujo DNS Install USB capacity plan"
+echo "DNS Install USB for Jeonghan capacity plan"
 echo
 jq -r '.entries[] |
   if .bytes == null then

@@ -1,6 +1,6 @@
-# Gujo DNS Device OS Installer
+# DNS Device OS Installer for Jeonghan
 
-This engine module assembles the Gujo DNS installation and inventory media.
+This engine module assembles Jeonghan's DNS installation and inventory media.
 Users manage the repository as one source of truth while this directory remains
 the execution boundary. The guarded offline installer for three HP DNS
 appliances is the primary product; public Catalog entries remain reusable data

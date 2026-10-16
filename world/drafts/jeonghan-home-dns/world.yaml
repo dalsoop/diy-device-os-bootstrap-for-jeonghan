@@ -1,9 +1,9 @@
-apiVersion: homelab.gujo.dev/v1alpha1
+apiVersion: device-os.bootstrap/v1alpha1
 kind: World
 
 metadata:
-  name: Gujo Home DNS
-  slug: gujo-home-dns
+  name: Jeonghan Home DNS
+  slug: jeonghan-home-dns
   lifecycle: draft
 
 spec:

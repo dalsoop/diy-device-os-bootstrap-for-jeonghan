@@ -14,12 +14,12 @@ been built from inventory captured on each target HP computer.
    lsblk -d -o NAME,MODEL,SERIAL,SIZE,TRAN,RM
    ```
 
-3. Locate and mount the `GUJO-DNS` partition:
+3. Locate and mount the `DNS-INSTALL` partition:
 
    ```sh
    lsblk -o NAME,LABEL,FSTYPE,MOUNTPOINTS
    sudo mkdir -p /mnt/device-inst
-   sudo mount -L GUJO-DNS /mnt/gujo-dns
+   sudo mount -L DNS-INSTALL /mnt/dns-install
    ```
 
 4. Run the bundled capture command, substituting the role, address, interface,

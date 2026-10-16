@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Gujo DNS Device OS Bootstrap for Jeonghan describes, downloads, assembles, or installs software
+DNS Device OS Bootstrap for Jeonghan describes, downloads, assembles, or installs software
 owned by other projects. The repository's `GPL-3.0-only` license applies only
 to original project content; it does not replace any upstream license,
 copyright, trademark, source-availability requirement, or end-user agreement.
@@ -33,7 +33,7 @@ upstream components is stored at `LICENSE`.
 The USB writer copies this file, the project license, the licensing history,
 and an exact source-revision pointer into `licenses/`. The DNS image builder
 also places them in the installer and installs them under
-`/usr/share/doc/gujo-dns-device-os-bootstrap-for-jeonghan/`.
+`/usr/share/doc/dns-device-os-bootstrap-for-jeonghan/`.
 
 Opaque upstream ISOs remain unmodified and retain their embedded notices. This
 project does not extract enough information from every ISO to prove that a

@@ -1,7 +1,7 @@
 # World Module
 
-This module is the user-owned source of DNS-cluster intent inside Gujo DNS
-Device OS Bootstrap. Installer implementation and public Catalog data remain in
+This module is the user-owned source of DNS-cluster intent inside DNS Device OS
+Bootstrap for Jeonghan. Installer implementation and public Catalog data remain in
 sibling modules and are not duplicated here.
 
 ## Source-of-truth boundaries

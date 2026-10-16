@@ -2,7 +2,7 @@
 
 ## Playbook root
 
-`world-playbook.yaml` declares schema version `homelab.gujo.dev/v1alpha1`, the
+`world-playbook.yaml` declares schema version `device-os.bootstrap/v1alpha1`, the
 `WorldPlaybook` kind, the canonical timezone, explicit draft paths, the
 generation root, and the generation ID format. Draft and generation paths must
 be safe relative paths contained within this checkout.

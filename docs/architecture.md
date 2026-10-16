@@ -2,7 +2,7 @@
 
 ## One repository, three source domains and one access plane
 
-Gujo DNS Device OS Bootstrap for Jeonghan is intentionally one repository so a World change, Catalog change,
+DNS Device OS Bootstrap for Jeonghan is intentionally one repository so a World change, Catalog change,
 Installer consumer change, fixtures, and documentation can land atomically.
 The former repository boundaries remain explicit module and runtime trust
 boundaries.

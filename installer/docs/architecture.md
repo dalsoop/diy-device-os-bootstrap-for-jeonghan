@@ -21,7 +21,7 @@ verification tools, and explicit management commands.
 ## World boundary
 
 The user-owned
-[World module](https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan/tree/main/world)
+[World module](https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan/tree/main/world)
 is the source of environment intent. It selects Catalog entries, binds intent to the user's
 devices, and provide policy to this Installer without moving Installer behavior
 or long-lived secrets into the World module.
@@ -53,7 +53,7 @@ usb-media/resolve-catalog <--- World selection + collections/ groups + local-ent
         fetch    Ventoy    USB writer
                              |
                              v
-                    Gujo DNS Install USB
+                    DNS Install USB for Jeonghan
 
 DNS runtime artifact
 installer/ --> guarded ISO --> USB local entry

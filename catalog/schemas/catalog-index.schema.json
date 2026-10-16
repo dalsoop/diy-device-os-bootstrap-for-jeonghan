@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan/blob/main/catalog/schemas/catalog-index.schema.json",
-  "title": "Gujo DNS Device OS Catalog Index",
+  "$id": "https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan/blob/main/catalog/schemas/catalog-index.schema.json",
+  "title": "DNS Device OS Catalog Index for Jeonghan",
   "type": "object",
   "required": ["schema_version", "name", "repository", "bootloaders", "entries"],
   "properties": {

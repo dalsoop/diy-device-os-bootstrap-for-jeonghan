@@ -26,8 +26,8 @@ Clone the operator repository. Its `upstream` remote tracks the generic source
 repository so safety updates can be reviewed and adopted selectively:
 
 ```sh
-git clone https://github.com/dalsoop/gujo-dns-device-os-bootstrap-for-jeonghan.git
-cd gujo-dns-device-os-bootstrap-for-jeonghan
+git clone https://github.com/dalsoop/dns-device-os-bootstrap-for-jeonghan.git
+cd dns-device-os-bootstrap-for-jeonghan
 git remote add upstream https://github.com/dalsoop/diy-device-os-bootstrap.git
 ```
 
@@ -90,7 +90,7 @@ spec:
 The full file is:
 
 ```text
-world/drafts/gujo-home-dns/world.yaml
+world/drafts/jeonghan-home-dns/world.yaml
 ```
 
 Entry IDs may name public Catalog entries or reviewed Installer-local profiles.
@@ -250,7 +250,7 @@ unverified artifacts, and an inexact confirmation phrase.
 
 After burning:
 
-1. From the mounted `GUJO-DNS` root, verify the resolved Catalog and every
+1. From the mounted `DNS-INSTALL` root, verify the resolved Catalog and every
    staged image:
 
    ```sh

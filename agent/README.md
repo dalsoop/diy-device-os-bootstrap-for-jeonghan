@@ -32,7 +32,7 @@ repository:
 ```sh
 python3 -m venv /opt/device-os-agent/venv
 /opt/device-os-agent/venv/bin/python -m pip install \
-  --requirement /srv/gujo-dns-device-os-bootstrap-for-jeonghan/agent/requirements.lock
+  --requirement /srv/dns-device-os-bootstrap-for-jeonghan/agent/requirements.lock
 ```
 
 Configure only credential file paths. Keep the files readable by the dedicated
@@ -86,7 +86,7 @@ confirmation, matching `HEAD`, and a clean tracked zone file.
 Point an MCP host at the following stdio command:
 
 ```text
-/srv/gujo-dns-device-os-bootstrap-for-jeonghan/agent/run
+/srv/dns-device-os-bootstrap-for-jeonghan/agent/run
 ```
 
 The wrapper uses `DEVICE_OS_AGENT_PYTHON` when set and otherwise uses
@@ -106,7 +106,7 @@ For a dedicated `device-agent` account, constrain its SSH public key to the
 gateway command in `authorized_keys`:
 
 ```text
-restrict,command="/srv/gujo-dns-device-os-bootstrap-for-jeonghan/agent/run" ssh-ed25519 AAAA... operator-agent
+restrict,command="/srv/dns-device-os-bootstrap-for-jeonghan/agent/run" ssh-ed25519 AAAA... operator-agent
 ```
 
 Then configure the remote MCP host to launch:

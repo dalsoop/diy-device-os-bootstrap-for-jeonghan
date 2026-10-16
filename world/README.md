@@ -1,8 +1,8 @@
 # DNS World
 
-This module is the operator-owned intent for the Gujo Home DNS cluster. The
+This module is the operator-owned intent for Jeonghan's home DNS cluster. The
 mutable draft is
-[`drafts/gujo-home-dns/world.yaml`](drafts/gujo-home-dns/world.yaml). Editing it
+[`drafts/jeonghan-home-dns/world.yaml`](drafts/jeonghan-home-dns/world.yaml). Editing it
 does not create a USB and never authorizes a destructive operation.
 
 ```sh
@@ -33,7 +33,7 @@ overwritten.
 ```text
 world/
 ├── world-playbook.yaml
-├── drafts/gujo-home-dns/world.yaml
+├── drafts/jeonghan-home-dns/world.yaml
 ├── worlds/README.md
 ├── local/README.md
 └── docs/

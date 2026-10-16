@@ -1,4 +1,4 @@
-# Gujo DNS Install USB
+# DNS Install USB for Jeonghan
 
 This module combines public Catalog entries with Installer-local entries into a
 verified Korean-first Ventoy USB.
@@ -85,7 +85,7 @@ tests in the Installer.
 ## Resulting layout
 
 ```text
-GUJO-DNS/                      exFAT label used by Ventoy's bundled formatter
+DNS-INSTALL/                   exFAT label used by Ventoy's bundled formatter
 ├── images/
 ├── tools/dns-appliance-status-monitor/
 ├── manifests/
@@ -95,7 +95,7 @@ GUJO-DNS/                      exFAT label used by Ventoy's bundled formatter
 │   ├── dns-build-manifest.json
 │   └── SHA256SUMS
 ├── licenses/
-│   ├── GUJO-DNS-DEVICE-OS-BOOTSTRAP-GPL-3.0.txt
+│   ├── DNS-DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt
 │   ├── LICENSE_HISTORY.md
 │   ├── THIRD_PARTY_NOTICES.md
 │   ├── Tailscale-BSD-3-Clause.txt

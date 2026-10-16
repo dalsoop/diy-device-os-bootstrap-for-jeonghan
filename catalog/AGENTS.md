@@ -1,4 +1,4 @@
-# Gujo DNS Device OS Catalog
+# DNS Device OS Catalog for Jeonghan
 
 This module is the public, data-only source of bootloader and operating-system
 metadata consumed by the sibling Installer. It publishes

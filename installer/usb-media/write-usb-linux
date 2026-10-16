@@ -102,7 +102,7 @@ done
 
 [ "$(uname -s)" = Linux ] || fail "Linux is required"
 [ "$(id -u)" -eq 0 ] || fail "run as root"
-for command in lsblk findmnt jq sha256sum python3 sfdisk blockdev udevadm mkfs.exfat git; do
+for command in lsblk findmnt jq sha256sum python3 sfdisk blockdev udevadm mkfs.exfat mkfs.vfat blkid git; do
     command -v "$command" >/dev/null 2>&1 || fail "$command is required"
 done
 [ -r "$catalog" ] || fail "resolved catalog is missing; run ./device-os plan"
@@ -262,6 +262,15 @@ udevadm settle
 
 main_partition=$(lsblk -nrpo NAME,LABEL "$device" |
     awk -v label="$data_label" '$2 == label { print $1; exit }')
+if [ -z "$main_partition" ]; then
+    while IFS= read -r candidate; do
+        candidate_label=$(blkid -s LABEL -o value "$candidate" 2>/dev/null || true)
+        if [ "$candidate_label" = "$data_label" ]; then
+            main_partition=$candidate
+            break
+        fi
+    done < <(lsblk -nrpo NAME,TYPE "$device" | awk '$2 == "part" { print $1 }')
+fi
 [ -b "$main_partition" ] || fail "Ventoy data partition was not found"
 
 enroll_partition=

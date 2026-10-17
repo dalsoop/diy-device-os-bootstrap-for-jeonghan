@@ -6,21 +6,55 @@ Under the original Ventoy boot path, the installer resolved `/dev/mapper/Ventoy`
 
 The source now resolves the physical parent, rejects unresolved ancestry, USB-backed and mounted candidates, and delays signature clearing until all checks pass. The finding remains open because source simulation cannot prove the repaired path on firmware and hardware. Rebuild the ISO and USB, pass VM BIOS/UEFI, and run one disposable physical `dns01` pilot before enabling another role.
 
-## Revised macOS image path lacks physical qualification
+## Revised macOS image path still lacks filesystem and firmware qualification
 
 Two earlier physical writes copied selected ISO payloads correctly, but whole-device comparison differed after macOS mounted exFAT and changed filesystem metadata. The MBR-last writer now prevents mounting before body readback and passes isolated simulations.
 
 The repository now builds an exact-size MBR image through a privileged Debian
 13 container whose loop device is isolated inside the Linux VM. It rejects
 repository-bundle symlinks before assembly, and the macOS writer binds its exact
-confirmation to device path, media name, USB serial, and byte size. The revised
-writer completed an exact-size write and full raw readback on a disposable
-15,833,497,600-byte ProductCode USB. That attempt's generation was rejected
+confirmation to device path, media name, USB serial, and byte size. An earlier
+physical write completed full raw readback but its generation was rejected
 because the command resolved `dns-install` while the raw image contained
-`inventory-capture`; the mismatch exposed a missing provenance binding. The
-builder and writer now bind image bytes to Catalog and World media through an
-adjacent manifest. A repeated bound write, filesystem checks, payload checks,
-and BIOS/UEFI boot remain required before qualification.
+`inventory-capture`; that mismatch exposed a missing provenance binding.
+
+The builder and writer now bind image bytes to Catalog and World media through
+an adjacent manifest. On 2026-10-17 the bound path wrote the
+15,833,497,600-byte `inventory-capture` image, passed full MBR-last raw readback,
+ejected the target, and emitted inspected generation
+`20261017093655-jeonghan-home` with the correct media identity and no raw USB
+serial. Mount-time filesystem checks, payload checks, and BIOS/UEFI boot remain
+required before qualification.
+
+## Inventory capture still requires manual terminal input
+
+The current `inventory-capture` media boots a stock Debian Live image and
+stages a capture script plus an English guide on the `DEVICE-OS` partition. The
+operator must mount that partition and manually supply the role, address,
+interface, and disk. This is non-destructive, but it invites transcription and
+wrong-device mistakes and does not match the Korean-first World presentation.
+
+The current USB remains usable as the conservative capture path. Closing the
+usability gap requires an offline Korean capture UI that reads the roles and
+addresses from the resolved World, detects candidate NICs and internal disks,
+asks the operator only to choose the node and resolve genuine ambiguity, then
+writes a schema-validated machine record and human-readable summary. The
+capture image must remain incapable of erasing an internal disk.
+
+## Destructive approval is exposed as a shell-looking token
+
+The writer correctly binds authorization to the currently inspected device
+path, media name, serial, and exact byte size, but `inspect-targets` displays the
+binding as an `ERASE ...` line. An operator can reasonably paste that line into
+a shell, where it fails as an unknown command, or mistake the internal token for
+the whole burn command.
+
+The exact target binding must remain. The operator-facing coordinator should
+instead present a natural-language target summary and request natural-language
+approval; after a fresh identity check it should construct and pass the exact
+token internally. Direct low-level writer use may retain `--confirm` for tests
+and expert recovery, but ordinary documentation and agent interaction should
+not instruct the operator to execute the token.
 
 ## DNS apply is not bound to the reviewed plan
 

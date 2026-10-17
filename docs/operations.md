@@ -39,23 +39,71 @@ Install the CI tools on Ubuntu, create an isolated Python environment, and run t
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y jq ruby shellcheck python3-venv
+sudo apt-get install -y jq python3-jsonschema ruby shellcheck python3-venv
 python3 -m venv /tmp/device-os-agent-check
 /tmp/device-os-agent-check/bin/python -m pip install --requirement agent/requirements.lock
 
 catalog/bin/verify-catalog
 catalog/tests/catalog-contract.sh
+for record in catalog/catalog/entries/*.json; do
+  /usr/bin/python3 -m jsonschema \
+    -i "$record" catalog/schemas/media-entry.schema.json
+done
+for record in catalog/catalog/bootloaders/*.json; do
+  /usr/bin/python3 -m jsonschema \
+    -i "$record" catalog/schemas/bootloader.schema.json
+done
 world/tests/world-contract-simulation.rb
 (cd installer && tests/install-gate-simulation.sh)
 (cd installer && tests/management-simulation.sh)
 (cd installer && tests/tailscale-enrollment-simulation.sh)
+(cd installer && tests/dns-license-simulation.sh)
+(cd installer && tests/license-policy-simulation.sh)
 (cd installer && tests/media-catalog-simulation.sh)
+(cd installer && tests/image-builder-simulation.sh)
 (cd installer && tests/macos-writer-simulation.sh)
 (cd installer && tests/repository-contract.sh)
 /tmp/device-os-agent-check/bin/python agent/tests/gateway_simulation.py
 ```
 
-ShellCheck, shell syntax, Python syntax, Ruby syntax, and SPDX checks remain part of CI even when an operator runs only the focused simulations above. A source pass proves no physical media or appliance state.
+The required CI job additionally validates the DNS component registry, component review, build manifest, final review, license decision, and raw-image manifest schemas with both accepted and rejected fixtures. ShellCheck, shell syntax, Python syntax, Ruby syntax, and SPDX checks remain part of CI even when an operator runs only the focused simulations above. A source pass proves no physical media or appliance state.
+
+## Check distribution mode
+
+Personal self-build is allowed for the operator's own devices, but it is not
+redistribution approval. Inspect the current decisions without downloading,
+building, writing, or uploading anything:
+
+```sh
+./device-os license check --mode personal-use --json | jq
+./device-os license check --mode source-release --json | jq
+```
+
+The first command currently allows the selected media with
+`artifact-unreviewed` warnings. The second allows only the clean tracked source
+snapshot. The release workflow may retain non-executable checksums, manifests,
+package closure, component status, SBOM, and decision evidence for review, but
+it never uploads an ISO, RAW, IMG, disk image, or complete USB content and does
+not publish a GitHub Release.
+
+Do not attempt prebuilt publication under the current policy. A future public
+prebuilt procedure must complete these independent gates:
+
+1. Review each selected bootloader and OS image against its exact version, URL,
+   and SHA-256, including license, notices, corresponding source, trademark,
+   and all required fulfillment files.
+2. Review every DNS component, eliminate `NOASSERTION`, and separately review
+   the final DNS ISO against the exact component registry, build manifest,
+   SBOM, and obligation-file digests.
+3. Enable generated-artifact distribution through a separately reviewed policy
+   change and obtain a successful `prebuilt-release` CLI decision.
+4. Run publication only behind the protected GitHub Environment
+   `prebuilt-distribution`, configured with a human-only required reviewer.
+
+No build, source release, CI result, physical write, or installation promotes
+an artifact into the next state automatically. The protected Environment and
+its human reviewer remain external configuration and must be verified by the
+repository owner before any prebuilt workflow is added.
 
 ## Inspect the current World
 

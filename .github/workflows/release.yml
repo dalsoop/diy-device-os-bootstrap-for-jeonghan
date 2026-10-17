@@ -1,4 +1,4 @@
-name: Build DNS installer release candidate
+name: Build source-only DNS verification evidence
 
 on:
   workflow_dispatch:
@@ -7,7 +7,8 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  source-only-evidence:
+    name: Source-only verification evidence
     runs-on: [self-hosted, linux, x64, dns-image-builder]
     steps:
       - uses: actions/checkout@v7
@@ -23,14 +24,41 @@ jobs:
         env:
           DNS_APPLIANCE_INVENTORY_DIR: /etc/dns-appliance-builder/inventory
         run: installer/build-image
+      - name: Stage non-executable source-release evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_dir="${RUNNER_TEMP}/dns-release-evidence"
+          install -d -m 0755 "$evidence_dir"
+          ./device-os license check --mode source-release --json \
+            > installer/artifacts/source-release-license-check.json
+          jq -e '.mode == "source-release" and .decision == "allow" and .blockers == []' \
+            installer/artifacts/source-release-license-check.json >/dev/null
+          for file in \
+            SHA256SUMS \
+            build-manifest.json \
+            component-redistribution-registry.json \
+            debian-packages.txt \
+            debian-package-sha256s.txt \
+            sbom.spdx.json \
+            source-release-license-check.json; do
+            install -m 0644 "installer/artifacts/$file" "$evidence_dir/$file"
+          done
+          if find "$evidence_dir" -type f \( \
+              -iname '*.iso' -o -iname '*.raw' -o -iname '*.img' -o \
+              -iname '*.dmg' -o -iname '*.qcow2' -o -iname '*.vhd' -o \
+              -iname '*.vhdx' \) -print -quit | grep -q .; then
+            echo "source-only evidence contains generated media" >&2
+            exit 1
+          fi
       - name: Upload verification artifacts only
         uses: actions/upload-artifact@v4
         with:
-          name: dns-appliance-release-evidence
-          path: |
-            installer/artifacts/SHA256SUMS
-            installer/artifacts/build-manifest.json
-            installer/artifacts/debian-packages.txt
-            installer/artifacts/debian-package-sha256s.txt
-            installer/artifacts/sbom.spdx.json
+          name: dns-appliance-source-only-evidence
+          path: ${{ runner.temp }}/dns-release-evidence/
           if-no-files-found: error
+
+# Generated ISO, RAW, IMG, disk images, and complete USB content are intentionally
+# never uploaded. Any future publishing job must first pass `prebuilt-release`
+# and use the protected `prebuilt-distribution` Environment with a human-only
+# required reviewer. This workflow does not publish a release.

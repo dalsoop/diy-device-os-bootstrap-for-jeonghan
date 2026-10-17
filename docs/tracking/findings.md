@@ -64,15 +64,31 @@ Operational plan comparison remains required. Closing this needs a product decis
 
 ## Catalog schemas and executable validation can drift
 
-The published JSON Schemas reject additional properties, while the jq verifier and Installer consumer independently implement their accepted subsets. A document can therefore pass one representation and fail another, weakening compatibility claims.
+CI now validates all tracked Catalog v2 records and explicit accepted and rejected fixtures against the published draft-2020-12 JSON Schemas. This closes the absence of executable schema checks for the exercised records and fixtures.
 
-The repository currently coordinates manual updates and fixtures. Closing this requires executable validation work: generate one representation from another or run schema validation plus cross-consumer fixtures in CI.
+The finding remains open in narrower form because the schemas, jq verifier, and Installer consumer are independently maintained. An unrepresented document can still expose different semantics. Closing the remaining gap requires generation from one representation or systematic cross-consumer equivalence testing beyond the current fixture set.
 
 ## Vendor checksum provenance is not retained consistently
 
 Catalog values are syntax-checked and downloads are verified against them, but the repository does not retain signed or independently captured authoritative checksum provenance for every release. If a URL and digest are changed together maliciously, successful download verification alone cannot establish authenticity.
 
 Reviewers must verify each update through an authoritative vendor channel and preserve that evidence in the pull request. A durable provenance format, retention policy, and repository integration remain undecided.
+
+The redistribution metadata and schema checks do not close this finding. They bind a human review to an exact digest after evidence exists; they do not prove that the digest itself came from an independent authoritative vendor channel.
+
+## Human-only prebuilt Environment is not verified
+
+Repository policy names the protected GitHub Environment
+`prebuilt-distribution` and requires a human-only required reviewer in addition
+to a successful prebuilt-release check. No publishing job exists, generated
+artifact distribution remains disabled, and repository source cannot prove the
+external Environment settings or reviewer identity.
+
+Before any prebuilt workflow is proposed, the repository owner must create or
+inspect that Environment, confirm that agents cannot approve it, capture the
+settings review outside generated media, and retain the independent
+prebuilt-release gate. Until then the repository is source-only and must not be
+described as ready to publish generated media.
 
 ## Management operations lack one complete audit trail
 

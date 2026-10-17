@@ -35,7 +35,7 @@ it owns neither desired state nor destructive authority.
 | `agent/` | Management-host MCP access plane | Fixed tool arguments, fixed credential-file paths, delegated command output | Structured results clipped at 64 KiB without content redaction | Arbitrary execution, URL/path selection, media writes, installation, restore, enrollment |
 | Principal secret store | External owner of long-lived credentials and private identities | Imported encrypted bootstrap output and rotated credentials | Protected files consumed by management operations | Repository source or removable-media history |
 | Router and switch | Existing LAN transport and DHCP authority | Explicit human configuration | Reachability and client DNS advertisement | Repository-controlled mutation under the current implementation |
-| GitHub and GitHub Actions | Source review, protected merge, and source-level CI | Commits and pull requests | Required `contracts` result and source history | Physical release, secret storage, or hardware qualification |
+| GitHub and GitHub Actions | Source review, protected merge, source-level CI, and evidence-only candidate builds | Commits and pull requests | Required `contracts` result, source history, and non-executable verification evidence | Automatic prebuilt publication, secret storage, or hardware qualification |
 | amd64 Debian 13 builder | Simple-CDD, Debian archive tooling, `xorriso`, `skopeo`, and Podman-compatible OCI inputs | Clean committed source, locks, public inputs, ignored real inventory | DNS ISO, manifest, package closure, checksums, and SBOM | Physical write authorization or long-lived credentials |
 | Ventoy boot chain | Presents selected ISO entries on removable media | Verified bootloader archive, resolved menu, staged images | BIOS/UEFI boot menu | World selection, artifact trust, or unattended target authorization |
 | Technitium and Tailscale | DNS runtime/cluster API and private management transport | Installed appliance state and management-host credentials | DNS service, cluster state, restricted overlay reachability | Repository policy or implicit agent authority |
@@ -54,6 +54,16 @@ The root `device-os` command is the operator entry point. Ruby resolves World YA
 6. The World event recorder serializes physical attempts, stores pending state under ignored local storage, and atomically publishes a completed World generation only after write and readback succeed. Failed and cancelled attempts publish redacted event records but never generation directories.
 
 No World field crosses the Installer boundary as erasure permission. No Catalog file crosses it as executable code. No successful plan or build crosses it as physical evidence.
+
+## Distribution decision flow
+
+1. The resolved media plan preserves the repository distribution policy and the exact redistribution status of the bootloader, public entries, local runtime artifact, DNS components, and final artifact.
+2. Personal-use evaluation enumerates the complete selection, permits the operator's self-build, and reports unreviewed artifacts as warnings. It grants no redistribution authority.
+3. Source-release evaluation permits only a clean tracked source snapshot. The candidate-build workflow stages a fixed list of non-executable manifests, checksums, package closure, component status, SBOM, and decision evidence; it never stages generated media or complete USB content.
+4. Prebuilt evaluation is read-only and fails while generated-artifact policy is disabled. If policy is enabled in a future reviewed change, it still requires exact public-artifact reviews, complete DNS component review, a separate final DNS review, digest-bound SBOM and obligation files, and no `NOASSERTION`.
+5. A future publishing job must receive both a successful prebuilt decision and approval from the protected GitHub Environment `prebuilt-distribution`, whose required reviewer is human-only. No source, build, CI, VM, USB, or installation state promotes itself into publication.
+
+The current repository has no prebuilt publishing job. The policy evaluator cannot download, build, write media, upload, create reviewed records, or represent GitHub Environment approval.
 
 ## DNS deployment flow
 

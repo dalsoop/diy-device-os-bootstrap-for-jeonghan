@@ -20,6 +20,36 @@ compatibility, but the current media selections do not download or stage them.
 > CI run does not prove a physical USB, firmware boot, internal-disk install, or
 > network cutover. Each remains a separate verification gate.
 
+## Distribution policy
+
+This public repository currently supports personal self-build and source-only
+releases. Personal use permits the operator to prepare, build, and write media
+for the operator's own devices; it is not approval to redistribute any ISO,
+RAW, IMG, complete USB content, or installed-system image. A matching checksum,
+successful build, SBOM, CI run, USB readback, or installation does not change
+that boundary.
+
+The release workflow uploads only non-executable verification evidence such as
+checksums, manifests, package closure, component status, and the SBOM. It does
+not publish a GitHub Release or upload generated media. Public prebuilt
+distribution remains disabled. Enabling it in the future requires all of the
+following, with no automatic promotion from an earlier evidence state:
+
+1. Exact-artifact review of every selected bootloader and OS image, bound to its
+   version, URL, and SHA-256, with license, notice, corresponding-source, and
+   trademark evidence and fulfilled obligations.
+2. For the composite DNS ISO, redistribution review of every build component
+   and a separate final review bound to the ISO, component registry, build
+   manifest, SBOM, and staged obligation files. Neither review replaces the
+   other.
+3. A successful `./device-os license check --mode prebuilt-release ...` after a
+   separately reviewed policy change enables generated-artifact distribution.
+4. Approval through the protected GitHub Environment
+   `prebuilt-distribution`, configured with a human-only required reviewer.
+
+The repository does not currently publish prebuilt media, and the protected
+Environment configuration has not been verified.
+
 ## Start here
 
 ```sh

@@ -326,8 +326,6 @@ sbom_sha256=$(sha256sum "$artifact_dir/sbom.spdx.json" | awk '{print $1}')
 
 component_registry=$artifact_dir/component-redistribution-registry.json
 jq -n \
-    --arg policy_id "$DISTRIBUTION_POLICY_ID" \
-    --arg policy_sha256 "$distribution_policy_sha256" \
     --arg debian_version "$DEBIAN_POINT_RELEASE@$DEBIAN_SNAPSHOT" \
     --arg closure_sha256 "$closure_sha256" \
     --arg technitium_version "$TECHNITIUM_VERSION" \
@@ -340,13 +338,13 @@ jq -n \
     --arg source_snapshot_sha256 "$source_snapshot_sha256" \
     '{
       schema_version: 1,
-      policy: {id:$policy_id,sha256:$policy_sha256},
+      artifact_id: "dns-appliance",
       components: [
-        {id:"debian-package-closure",version:$debian_version,digest:{algorithm:"sha256",value:$closure_sha256},status:"personal-use-only"},
-        {id:"technitium-oci",version:$technitium_version,digest:{algorithm:"sha256",value:$technitium_archive_sha256},source_identity:{kind:"oci-digest",value:$technitium_source_identity},status:"personal-use-only"},
-        {id:"tailscale-archive",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_sha256},status:"personal-use-only"},
-        {id:"tailscale-dependency-report",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_licenses_sha256},status:"personal-use-only"},
-        {id:"repository-source-snapshot",version:$source_revision,digest:{algorithm:"sha256",value:$source_snapshot_sha256},status:"personal-use-only"}
+        {id:"debian-package-closure",version:$debian_version,digest:{algorithm:"sha256",value:$closure_sha256},redistribution:{status:"personal-use-only"}},
+        {id:"technitium-oci",version:$technitium_version,digest:{algorithm:"sha256",value:$technitium_archive_sha256},source_identity:{kind:"oci-digest",value:$technitium_source_identity},redistribution:{status:"personal-use-only"}},
+        {id:"tailscale-archive",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_sha256},redistribution:{status:"personal-use-only"}},
+        {id:"tailscale-dependency-report",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_licenses_sha256},redistribution:{status:"personal-use-only"}},
+        {id:"repository-source-snapshot",version:$source_revision,digest:{algorithm:"sha256",value:$source_snapshot_sha256},redistribution:{status:"personal-use-only"}}
       ]
     }' > "$component_registry"
 "$distribution_validator" --registry "$component_registry" \
@@ -377,7 +375,7 @@ jq -n \
     --arg distribution_policy_sha256 "$distribution_policy_sha256" \
     --arg sbom_sha256 "$sbom_sha256" \
     --slurpfile registry "$component_registry" \
-    '{schema_version:1,artifact_id:"dns-appliance",build_id:$build_id,iso:$iso,iso_sha256:$iso_sha256,distribution_status:"personal-use-only",component_registry:"component-redistribution-registry.json",component_registry_sha256:$component_registry_sha256,distribution_policy_sha256:$distribution_policy_sha256,components:($registry[0].components|map({id,status})),sbom:"sbom.spdx.json",sbom_sha256:$sbom_sha256,debian_point_release:$debian,debian_snapshot:$snapshot,technitium_version:$technitium,technitium_image_digest:$technitium_digest,technitium_archive_sha256:$technitium_archive_sha256,tailscale_version:$tailscale,tailscale_archive_sha256:$tailscale_archive_sha256,source_revision:$source_revision,source_repository:$source_repository,source_archive:$source_archive}' \
+    '{schema_version:1,artifact_id:"dns-appliance",build_id:$build_id,iso:$iso,iso_sha256:$iso_sha256,distribution_status:"personal-use-only",component_registry:"component-redistribution-registry.json",component_registry_sha256:$component_registry_sha256,distribution_policy_sha256:$distribution_policy_sha256,components:($registry[0].components|map({id,status:.redistribution.status})),sbom:"sbom.spdx.json",sbom_sha256:$sbom_sha256,debian_point_release:$debian,debian_snapshot:$snapshot,technitium_version:$technitium,technitium_image_digest:$technitium_digest,technitium_archive_sha256:$technitium_archive_sha256,tailscale_version:$tailscale,tailscale_archive_sha256:$tailscale_archive_sha256,source_revision:$source_revision,source_repository:$source_repository,source_archive:$source_archive}' \
     > "$artifact_dir/build-manifest.json"
 
 echo "build manifest: $artifact_dir/build-manifest.json"

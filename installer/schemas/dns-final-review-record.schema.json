@@ -4,14 +4,27 @@
   "title": "Final DNS composite-image review record",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "status", "artifact_id", "artifact_sha256", "component_registry_sha256", "build_manifest_sha256", "reviewed_at", "reviewer", "evidence", "obligations"],
+  "required": ["schema_version", "artifact", "inputs", "reviewed_at", "reviewer", "evidence", "obligations"],
   "properties": {
     "schema_version": { "const": 1 },
-    "status": { "const": "redistribution-reviewed" },
-    "artifact_id": { "const": "dns-appliance" },
-    "artifact_sha256": { "$ref": "#/$defs/sha256" },
-    "component_registry_sha256": { "$ref": "#/$defs/sha256" },
-    "build_manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sha256"],
+      "properties": {
+        "id": { "const": "dns-appliance" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component_registry_sha256", "build_manifest_sha256"],
+      "properties": {
+        "component_registry_sha256": { "$ref": "#/$defs/sha256" },
+        "build_manifest_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
     "reviewed_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
     "reviewer": { "type": "string", "minLength": 1 },
     "evidence": { "$ref": "#/$defs/evidence" },

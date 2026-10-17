@@ -30,8 +30,8 @@
     "record_filename": "dns-final-review-record.json",
     "record_destination": "manifests/dns-final-review-record.json",
     "schema": "installer/schemas/dns-final-review-record.schema.json",
-    "artifact_digest_field": "artifact_sha256",
-    "component_registry_digest_field": "component_registry_sha256",
-    "build_manifest_digest_field": "build_manifest_sha256"
+    "artifact_digest_field": "artifact.sha256",
+    "component_registry_digest_field": "inputs.component_registry_sha256",
+    "build_manifest_digest_field": "inputs.build_manifest_sha256"
   }
 }

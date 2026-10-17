@@ -27,26 +27,34 @@ expect_failure() {
     fi
 }
 
+assert_exact_keys() {
+    fixture=$1
+    expected=$2
+    description=$3
+    jq -e --argjson expected "$expected" \
+        '(keys | sort) == ($expected | sort)' "$fixture" >/dev/null || {
+        echo "dns-license-simulation: wrong top-level keys for $description" >&2
+        exit 1
+    }
+}
+
 policy_sha256=$(sha256_file "$policy")
 registry=$temporary/component-registry.json
 
-jq -n \
-    --arg policy_sha256 "$policy_sha256" \
-    '{
+jq -n '{
       schema_version: 1,
-      policy: {
-        id: "dns-composite-image-redistribution-v1",
-        sha256: $policy_sha256
-      },
+      artifact_id: "dns-appliance",
       components: [
-        {id:"debian-package-closure",version:"13.7.0@20261011T000000Z",digest:{algorithm:"sha256",value:("a"*64)},status:"personal-use-only"},
-        {id:"technitium-oci",version:"15.6.1",digest:{algorithm:"sha256",value:("b"*64)},source_identity:{kind:"oci-digest",value:("sha256:"+("1"*64))},status:"personal-use-only"},
-        {id:"tailscale-archive",version:"1.104.1",digest:{algorithm:"sha256",value:("c"*64)},status:"personal-use-only"},
-        {id:"tailscale-dependency-report",version:"1.104.1",digest:{algorithm:"sha256",value:("d"*64)},status:"personal-use-only"},
-        {id:"repository-source-snapshot",version:("e"*40),digest:{algorithm:"sha256",value:("f"*64)},status:"personal-use-only"}
+        {id:"debian-package-closure",version:"13.7.0@20261011T000000Z",digest:{algorithm:"sha256",value:("a"*64)},redistribution:{status:"personal-use-only"}},
+        {id:"technitium-oci",version:"15.6.1",digest:{algorithm:"sha256",value:("b"*64)},source_identity:{kind:"oci-digest",value:("sha256:"+("1"*64))},redistribution:{status:"personal-use-only"}},
+        {id:"tailscale-archive",version:"1.104.1",digest:{algorithm:"sha256",value:("c"*64)},redistribution:{status:"personal-use-only"}},
+        {id:"tailscale-dependency-report",version:"1.104.1",digest:{algorithm:"sha256",value:("d"*64)},redistribution:{status:"personal-use-only"}},
+        {id:"repository-source-snapshot",version:("e"*40),digest:{algorithm:"sha256",value:("f"*64)},redistribution:{status:"personal-use-only"}}
       ]
     }' > "$registry"
 
+assert_exact_keys "$registry" '["schema_version","artifact_id","components"]' \
+    "the component registry regression fixture"
 "$validator" --registry "$registry" --policy "$policy" >/dev/null
 
 jq 'del(.components[0].version)' "$registry" > "$temporary/malformed.json"
@@ -61,9 +69,27 @@ jq '.components[4].id = .components[0].id' "$registry" > "$temporary/duplicate.j
 expect_failure "duplicate component IDs" \
     "$validator" --registry "$temporary/duplicate.json" --policy "$policy"
 
-jq '.policy.sha256 = ("0"*64)' "$registry" > "$temporary/digest-mismatch.json"
-expect_failure "a distribution-policy digest mismatch" \
-    "$validator" --registry "$temporary/digest-mismatch.json" --policy "$policy"
+jq '.policy = {id:"dns-composite-image-redistribution-v1",sha256:("0"*64)}' \
+    "$registry" > "$temporary/old-registry-top-level.json"
+expect_failure "the old registry top-level policy object" \
+    "$validator" --registry "$temporary/old-registry-top-level.json" --policy "$policy"
+
+jq '.components[0].status = "personal-use-only"' "$registry" \
+    > "$temporary/top-level-component-status.json"
+expect_failure "a top-level component status" \
+    "$validator" --registry "$temporary/top-level-component-status.json" --policy "$policy"
+
+jq 'del(.components[1].source_identity)' "$registry" \
+    > "$temporary/technitium-source-identity-missing.json"
+expect_failure "a Technitium component without source identity" \
+    "$validator" --registry "$temporary/technitium-source-identity-missing.json" \
+    --policy "$policy"
+
+jq '.components[0].source_identity = {kind:"oci-digest",value:("sha256:"+("2"*64))}' \
+    "$registry" > "$temporary/non-technitium-source-identity.json"
+expect_failure "source identity on a non-Technitium component" \
+    "$validator" --registry "$temporary/non-technitium-source-identity.json" \
+    --policy "$policy"
 
 review=$temporary/technitium-review.json
 jq -n \
@@ -124,7 +150,42 @@ expect_failure "a component review that drops OCI source identity" \
     --component-review "$review" --sbom "$temporary/sbom-complete.json" >/dev/null
 
 reviewed_registry=$temporary/reviewed-registry.json
-jq '.components |= map(.status="redistribution-reviewed")' "$registry" > "$reviewed_registry"
+jq --slurpfile policy "$policy" '
+  .components |= map(
+    . as $component |
+    .redistribution = ({
+      schema_version: 1,
+      status: "redistribution-reviewed",
+      component_id: $component.id,
+      component_version: $component.version,
+      artifact_sha256: $component.digest.value,
+      reviewed_at: "2026-10-17",
+      reviewer: "license-reviewer@example.invalid",
+      evidence: ($policy[0].evidence_kinds | map({kind:.,url:("https://evidence.example.invalid/"+.+".txt")})),
+      obligations: ($policy[0].obligation_kinds | map({kind:.,disposition:"embedded-artifact",location:{scope:"artifact",path:("licenses/"+.+".txt"),sha256:("3"*64)}}))
+    } + if $component | has("source_identity")
+         then {source_identity:$component.source_identity}
+         else {}
+         end)
+  )
+' "$registry" > "$reviewed_registry"
+"$validator" --registry "$reviewed_registry" --policy "$policy" >/dev/null
+
+jq 'del(.components[1].redistribution.source_identity)' "$reviewed_registry" \
+    > "$temporary/reviewed-technitium-source-identity-missing.json"
+expect_failure "reviewed Technitium redistribution without source identity" \
+    "$validator" \
+    --registry "$temporary/reviewed-technitium-source-identity-missing.json" \
+    --policy "$policy"
+
+jq '.components[1].redistribution.source_identity.value = ("sha256:"+("2"*64))' \
+    "$reviewed_registry" \
+    > "$temporary/reviewed-technitium-source-identity-mismatch.json"
+expect_failure "reviewed Technitium redistribution with mismatched source identity" \
+    "$validator" \
+    --registry "$temporary/reviewed-technitium-source-identity-mismatch.json" \
+    --policy "$policy"
+
 registry_sha256=$(sha256_file "$reviewed_registry")
 sbom_sha256=$(sha256_file "$temporary/sbom-complete.json")
 
@@ -144,7 +205,7 @@ jq -n \
       component_registry: "component-redistribution-registry.json",
       component_registry_sha256: $registry_sha256,
       distribution_policy_sha256: $policy_sha256,
-      components: ($registry[0].components | map({id,status})),
+      components: ($registry[0].components | map({id,status:.redistribution.status})),
       sbom: "sbom.spdx.json",
       sbom_sha256: $sbom_sha256,
       debian_point_release: "13.7.0",
@@ -167,25 +228,35 @@ jq -n \
     --slurpfile policy "$policy" \
     '{
       schema_version: 1,
-      status: "redistribution-reviewed",
-      artifact_id: "dns-appliance",
-      artifact_sha256: ("4"*64),
-      component_registry_sha256: $registry_sha256,
-      build_manifest_sha256: $manifest_sha256,
+      artifact: {id:"dns-appliance",sha256:("4"*64)},
+      inputs: {
+        component_registry_sha256: $registry_sha256,
+        build_manifest_sha256: $manifest_sha256
+      },
       reviewed_at: "2026-10-17",
       reviewer: "license-reviewer@example.invalid",
       evidence: ($policy[0].evidence_kinds | map({kind:.,url:("https://evidence.example.invalid/"+.+".txt")})),
       obligations: ($policy[0].obligation_kinds | map({kind:.,disposition:"bundle-file",location:{scope:"release-bundle",path:("licenses/"+.+".txt"),sha256:("6"*64)}}))
     }' > "$final_review"
 
+assert_exact_keys "$final_review" \
+    '["schema_version","artifact","inputs","reviewed_at","reviewer","evidence","obligations"]' \
+    "the final review regression fixture"
 "$validator" --registry "$reviewed_registry" --policy "$policy" \
     --final-review "$final_review" --build-manifest "$manifest" \
     --sbom "$temporary/sbom-complete.json" >/dev/null
 
+jq '.status = "redistribution-reviewed"' "$final_review" \
+    > "$temporary/final-review-with-status.json"
+expect_failure "a final review with the removed top-level status" \
+    "$validator" --registry "$reviewed_registry" --policy "$policy" \
+    --final-review "$temporary/final-review-with-status.json" \
+    --build-manifest "$manifest" --sbom "$temporary/sbom-complete.json"
+
 incomplete_manifest=$temporary/incomplete-build-manifest.json
 jq 'del(.debian_point_release)' "$manifest" > "$incomplete_manifest"
 incomplete_manifest_sha256=$(sha256_file "$incomplete_manifest")
-jq --arg sha256 "$incomplete_manifest_sha256" '.build_manifest_sha256=$sha256' \
+jq --arg sha256 "$incomplete_manifest_sha256" '.inputs.build_manifest_sha256=$sha256' \
     "$final_review" > "$temporary/incomplete-manifest-final-review.json"
 expect_failure "a schema-incomplete build manifest with a matching review hash" \
     "$validator" --registry "$reviewed_registry" --policy "$policy" \
@@ -194,7 +265,7 @@ expect_failure "a schema-incomplete build manifest with a matching review hash" 
 
 jq 'del(.sbom_sha256)' "$manifest" > "$temporary/unbound-sbom-build-manifest.json"
 unbound_manifest_sha256=$(sha256_file "$temporary/unbound-sbom-build-manifest.json")
-jq --arg sha256 "$unbound_manifest_sha256" '.build_manifest_sha256=$sha256' \
+jq --arg sha256 "$unbound_manifest_sha256" '.inputs.build_manifest_sha256=$sha256' \
     "$final_review" > "$temporary/unbound-sbom-final-review.json"
 expect_failure "a build manifest without an SBOM digest binding" \
     "$validator" --registry "$reviewed_registry" --policy "$policy" \
@@ -221,7 +292,7 @@ expect_failure "an incomplete final review record" \
     --final-review "$temporary/incomplete-final-review.json" \
     --build-manifest "$manifest" --sbom "$temporary/sbom-complete.json"
 
-jq '.component_registry_sha256 = ("7"*64)' "$final_review" \
+jq '.inputs.component_registry_sha256 = ("7"*64)' "$final_review" \
     > "$temporary/final-digest-mismatch.json"
 expect_failure "a final-review registry digest mismatch" \
     "$validator" --registry "$reviewed_registry" --policy "$policy" \

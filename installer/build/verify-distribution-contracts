@@ -33,7 +33,7 @@ sha256_file() {
 
 validate_sbom() {
     jq -e '
-      def exact_keys($keys): (keys | sort) == ($keys | sort);
+      def exact_keys($expected): (keys | sort) == ($expected | sort);
       def nonempty: type == "string" and length > 0;
       def package:
         (exact_keys(["name","versionInfo","SPDXID","downloadLocation","filesAnalyzed","licenseDeclared","licenseConcluded","copyrightText"]) or
@@ -64,7 +64,7 @@ validate_build_manifest() {
     [ -r "$build_manifest_schema" ] ||
         fail "DNS build-manifest schema is not readable: $build_manifest_schema"
     jq -e --slurpfile schema "$build_manifest_schema" '
-      def exact_keys($keys): (keys | sort) == ($keys | sort);
+      def exact_keys($expected): (keys | sort) == ($expected | sort);
       def digest: type == "string" and test("^[a-f0-9]{64}$");
       def status: . == "personal-use-only" or . == "redistribution-reviewed";
       def component_status($id):
@@ -125,7 +125,7 @@ command -v jq >/dev/null 2>&1 || fail "jq is required"
 [ -r "$policy" ] || fail "distribution policy is not readable: $policy"
 
 jq -e '
-  def exact_keys($keys): (keys | sort) == ($keys | sort);
+  def exact_keys($expected): (keys | sort) == ($expected | sort);
   .schema_version == 1 and
   (exact_keys(["schema_version","id","component_ids","statuses","evidence_kinds","obligation_kinds"])) and
   .id == "dns-composite-image-redistribution-v1" and
@@ -137,28 +137,70 @@ jq -e '
 
 policy_sha256=$(sha256_file "$policy")
 
-jq -e --arg policy_sha256 "$policy_sha256" --slurpfile policy "$policy" '
-  def exact_keys($keys): (keys | sort) == ($keys | sort);
+jq -e --slurpfile policy "$policy" '
+  def exact_keys($expected): (keys | sort) == ($expected | sort);
   def digest: type == "string" and test("^[a-f0-9]{64}$");
   def safe_id: type == "string" and test("^[a-z0-9][a-z0-9-]*$");
+  def safe_path:
+    type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._+/-]*$") and
+    (startswith("/") | not) and
+    (split("/") | all(. != "" and . != "." and . != ".."));
+  def source_identity:
+    exact_keys(["kind","value"]) and
+    .kind == "oci-digest" and
+    (.value | test("^sha256:[a-f0-9]{64}$"));
+  def evidence_entry:
+    exact_keys(["kind","url"]) and
+    (.kind as $kind | $policy[0].evidence_kinds | index($kind) != null) and
+    (.url | type == "string" and startswith("https://"));
+  def location($scope):
+    exact_keys(["scope","path","sha256"]) and .scope == $scope and
+    (.path | safe_path) and (.sha256 | digest);
+  def obligation_entry:
+    (.kind as $kind | $policy[0].obligation_kinds | index($kind) != null) and
+    if .disposition == "embedded-artifact" then
+      exact_keys(["kind","disposition","location"]) and (.location | location("artifact"))
+    elif .disposition == "bundle-file" then
+      exact_keys(["kind","disposition","location"]) and (.location | location("release-bundle"))
+    elif .disposition == "not-required" then
+      exact_keys(["kind","disposition"])
+    else false end;
+  def reviewed($parent):
+    .schema_version == 1 and .status == "redistribution-reviewed" and
+    (if $parent | has("source_identity") then
+       exact_keys(["schema_version","status","component_id","component_version","artifact_sha256","source_identity","reviewed_at","reviewer","evidence","obligations"]) and
+       (.source_identity | source_identity) and
+       .source_identity == $parent.source_identity
+     else
+       exact_keys(["schema_version","status","component_id","component_version","artifact_sha256","reviewed_at","reviewer","evidence","obligations"])
+     end) and
+    .component_id == $parent.id and
+    .component_version == $parent.version and
+    .artifact_sha256 == $parent.digest.value and
+    (.reviewed_at | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")) and
+    (.reviewer | type == "string" and length > 0) and
+    (.evidence | type == "array" and length >= 4 and all(.[]; evidence_entry)) and
+    ([.evidence[].kind] as $kinds | all($policy[0].evidence_kinds[]; . as $kind | $kinds | index($kind) != null)) and
+    (.obligations | type == "array" and length == 4 and all(.[]; obligation_entry)) and
+    ([.obligations[].kind] | sort) == ($policy[0].obligation_kinds | sort);
   def component:
     (.id | safe_id) and
     (.version | type == "string" and length > 0) and
     (.digest | exact_keys(["algorithm","value"])) and
     .digest.algorithm == "sha256" and (.digest.value | digest) and
-    (.status == "personal-use-only" or .status == "redistribution-reviewed") and
-    (if .id == "technitium-oci" and has("source_identity") then
-       exact_keys(["id","version","digest","source_identity","status"]) and
-       (.source_identity | exact_keys(["kind","value"])) and
-       .source_identity.kind == "oci-digest" and
-       (.source_identity.value | test("^sha256:[a-f0-9]{64}$"))
+    (if .id == "technitium-oci" then
+       exact_keys(["id","version","digest","source_identity","redistribution"]) and
+       (.source_identity | source_identity)
      else
-       exact_keys(["id","version","digest","status"])
-     end);
+       exact_keys(["id","version","digest","redistribution"])
+     end) and
+    (. as $parent |
+      .redistribution |
+      (exact_keys(["status"]) and .status == "personal-use-only") or
+      reviewed($parent));
   .schema_version == 1 and
-  exact_keys(["schema_version","policy","components"]) and
-  (.policy | exact_keys(["id","sha256"])) and
-  .policy.id == $policy[0].id and .policy.sha256 == $policy_sha256 and
+  exact_keys(["schema_version","artifact_id","components"]) and
+  .artifact_id == "dns-appliance" and
   (.components | type == "array" and length == 5 and all(.[]; component)) and
   ([.components[].id] == $policy[0].component_ids) and
   (([.components[].id] | length) == ([.components[].id] | unique | length))
@@ -176,7 +218,7 @@ if [ -n "$component_review" ]; then
     [ -n "$parent" ] || fail "component review names an unknown component: $component_id"
 
     jq -e --argjson parent "$parent" --slurpfile policy "$policy" '
-      def exact_keys($keys): (keys | sort) == ($keys | sort);
+      def exact_keys($expected): (keys | sort) == ($expected | sort);
       def digest: type == "string" and test("^[a-f0-9]{64}$");
       def safe_path:
         type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._+/-]*$") and
@@ -245,10 +287,11 @@ if [ -n "$final_review" ]; then
     jq -e \
         --arg registry_sha256 "$registry_sha256" \
         --arg manifest_sha256 "$manifest_sha256" \
+        --arg policy_sha256 "$policy_sha256" \
         --slurpfile policy "$policy" \
         --slurpfile registry "$registry" \
         --slurpfile manifest "$build_manifest" '
-      def exact_keys($keys): (keys | sort) == ($keys | sort);
+      def exact_keys($expected): (keys | sort) == ($expected | sort);
       def digest: type == "string" and test("^[a-f0-9]{64}$");
       def safe_path:
         type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._+/-]*$") and
@@ -270,18 +313,20 @@ if [ -n "$final_review" ]; then
         elif .disposition == "not-required" then
           exact_keys(["kind","disposition"])
         else false end;
-      .schema_version == 1 and .status == "redistribution-reviewed" and
-      exact_keys(["schema_version","status","artifact_id","artifact_sha256","component_registry_sha256","build_manifest_sha256","reviewed_at","reviewer","evidence","obligations"]) and
-      .artifact_id == "dns-appliance" and
-      .artifact_sha256 == $manifest[0].iso_sha256 and
-      .component_registry_sha256 == $registry_sha256 and
-      .component_registry_sha256 == $manifest[0].component_registry_sha256 and
-      .build_manifest_sha256 == $manifest_sha256 and
-      $manifest[0].artifact_id == .artifact_id and
+      .schema_version == 1 and
+      exact_keys(["schema_version","artifact","inputs","reviewed_at","reviewer","evidence","obligations"]) and
+      (.artifact | exact_keys(["id","sha256"])) and
+      .artifact.id == "dns-appliance" and
+      .artifact.sha256 == $manifest[0].iso_sha256 and
+      (.inputs | exact_keys(["component_registry_sha256","build_manifest_sha256"])) and
+      .inputs.component_registry_sha256 == $registry_sha256 and
+      .inputs.component_registry_sha256 == $manifest[0].component_registry_sha256 and
+      .inputs.build_manifest_sha256 == $manifest_sha256 and
+      $manifest[0].artifact_id == .artifact.id and
       $manifest[0].distribution_status == "redistribution-reviewed" and
-      $manifest[0].distribution_policy_sha256 == $registry[0].policy.sha256 and
-      ($registry[0].components | all(.status == "redistribution-reviewed")) and
-      ($manifest[0].components == ($registry[0].components | map({id,status}))) and
+      $manifest[0].distribution_policy_sha256 == $policy_sha256 and
+      ($registry[0].components | all(.redistribution.status == "redistribution-reviewed")) and
+      ($manifest[0].components == ($registry[0].components | map({id,status:.redistribution.status}))) and
       (.reviewed_at | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")) and
       (.reviewer | type == "string" and length > 0) and
       (.evidence | type == "array" and length >= 4 and all(.[]; evidence_entry)) and

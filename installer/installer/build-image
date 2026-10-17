@@ -18,7 +18,9 @@ artifact_dir=${DNS_APPLIANCE_ARTIFACT_DIR:-$repo_root/artifacts}
 technitium_archive=$cache_dir/technitium-dns-$TECHNITIUM_VERSION-amd64.oci.tar
 tailscale_archive=$cache_dir/tailscale-$TAILSCALE_VERSION-amd64.tgz
 tailscale_licenses=$cache_dir/tailscale-$TAILSCALE_VERSION-dependency-licenses.md
-source_repository=${DNS_APPLIANCE_SOURCE_REPOSITORY:-https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan}
+source_repository=${DNS_APPLIANCE_SOURCE_REPOSITORY:-$SOURCE_REPOSITORY}
+distribution_policy=$repo_root/build/distribution-policy.json
+distribution_validator=$repo_root/build/verify-distribution-contracts
 
 fail() {
     echo "build-image: $*" >&2
@@ -43,6 +45,8 @@ case "$source_repository" in
     https://*) ;;
     *) fail "source repository must use HTTPS" ;;
 esac
+[ "$source_repository" = "$SOURCE_REPOSITORY" ] ||
+    fail "source repository override does not match the immutable lock"
 git -C "$monorepo_root" diff --quiet -- ||
     fail "tracked source changes are not committed"
 git -C "$monorepo_root" diff --cached --quiet -- ||
@@ -55,6 +59,15 @@ source_archive=$source_repository/archive/$source_revision.tar.gz
 for legal_file in LICENSE LICENSE_HISTORY.md THIRD_PARTY_NOTICES.md \
     third_party/licenses/Tailscale-BSD-3-Clause.txt; do
     [ -r "$monorepo_root/$legal_file" ] || fail "missing legal file: $legal_file"
+done
+for contract_file in \
+    "$distribution_policy" \
+    "$distribution_validator" \
+    "$repo_root/schemas/component-redistribution-registry.schema.json" \
+    "$repo_root/schemas/component-review-record.schema.json" \
+    "$repo_root/schemas/dns-build-manifest.schema.json" \
+    "$repo_root/schemas/dns-final-review-record.schema.json"; do
+    [ -r "$contract_file" ] || fail "missing distribution contract: $contract_file"
 done
 
 "$repo_root/build/verify-locks"
@@ -88,6 +101,8 @@ printf '%s  %s\n' "$TAILSCALE_AMD64_SHA256" "$tailscale_archive" |
     sha256sum -c - >/dev/null || fail "Tailscale archive SHA-256 mismatch"
 [ -s "$tailscale_licenses" ] ||
     fail "missing pinned Tailscale license inventory; run installer/fetch-locked-sources"
+# Assigned by the reviewed sources.env lock file.
+# shellcheck disable=SC2153
 printf '%s  %s\n' "$TAILSCALE_LICENSES_SHA256" "$tailscale_licenses" |
     sha256sum -c - >/dev/null || fail "Tailscale license inventory SHA-256 mismatch"
 
@@ -95,7 +110,10 @@ mkdir -p "$generated_dir"
 for old in dns01.conf dns02.conf dns03.conf operator-authorized-keys age-recipient \
     technitium.oci.tar tailscale.tgz sources.env enrollment-record.schema.json \
     diy-device-os-bootstrap-for-jeonghan-license.txt license-history.md third-party-notices.md \
-    tailscale-license.txt tailscale-dependency-licenses.md source.md; do
+    tailscale-license.txt tailscale-dependency-licenses.md source.md source-snapshot.tar.gz \
+    distribution-policy.json distribution-status.md \
+    component-redistribution-registry.schema.json component-review-record.schema.json \
+    dns-build-manifest.schema.json dns-final-review-record.schema.json; do
     rm -f "$generated_dir/$old"
 done
 
@@ -152,6 +170,20 @@ install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt"
     "$generated_dir/tailscale-license.txt"
 install -m 0644 "$tailscale_licenses" \
     "$generated_dir/tailscale-dependency-licenses.md"
+install -m 0644 "$distribution_policy" "$generated_dir/distribution-policy.json"
+distribution_policy_sha256=$(sha256sum "$distribution_policy" | awk '{print $1}')
+for schema in component-redistribution-registry component-review-record dns-build-manifest \
+    dns-final-review-record; do
+    install -m 0644 "$repo_root/schemas/$schema.schema.json" \
+        "$generated_dir/$schema.schema.json"
+done
+source_snapshot_partial=$generated_dir/source-snapshot.tar.gz.partial
+trap 'rm -f "$source_snapshot_partial"' EXIT HUP INT TERM
+git -C "$monorepo_root" archive --format=tar.gz \
+    --prefix="diy-device-os-bootstrap-for-jeonghan-$source_revision/" \
+    --output="$source_snapshot_partial" "$source_revision"
+mv "$source_snapshot_partial" "$generated_dir/source-snapshot.tar.gz"
+trap - EXIT HUP INT TERM
 {
     echo "# Corresponding Source"
     echo
@@ -160,10 +192,31 @@ install -m 0644 "$tailscale_licenses" \
     echo "Source revision: $source_revision"
     echo "Repository: $source_repository"
     echo "Source archive: $source_archive"
+    echo "Bundled source snapshot: source-snapshot.tar.gz"
     echo
     echo "Third-party payloads retain their upstream terms."
     echo "See third-party-notices.md and the notices supplied with each payload."
 } > "$generated_dir/source.md"
+{
+    echo "# DNS Composite Image Distribution Status"
+    echo
+    echo "Status: personal-use-only"
+    echo
+    echo "Policy: $DISTRIBUTION_POLICY_ID"
+    echo "Policy SHA-256: $distribution_policy_sha256"
+    echo
+    echo "Components:"
+    echo "- debian-package-closure: personal-use-only"
+    echo "- technitium-oci: personal-use-only"
+    echo "- tailscale-archive: personal-use-only"
+    echo "- tailscale-dependency-report: personal-use-only"
+    echo "- repository-source-snapshot: personal-use-only"
+    echo
+    echo "This build and every recorded component remain unreviewed for redistribution."
+    echo "Build and fetch evidence does not create reviewed status."
+    echo "A separate reviewer-authored component record and final DNS review record are required before any reviewed claim."
+    echo "Any SPDX NOASSERTION value blocks promotion."
+} > "$generated_dir/distribution-status.md"
 
 cd "$builder_dir"
 build-simple-cdd --conf simple-cdd.conf --profiles dns
@@ -181,7 +234,12 @@ cleanup_iso_verify() {
 trap cleanup_iso_verify EXIT HUP INT TERM
 for embedded in install-gate dns01.conf dns02.conf dns03.conf \
     operator-authorized-keys age-recipient sources.env \
-    enrollment-record.schema.json source.md; do
+    enrollment-record.schema.json \
+    diy-device-os-bootstrap-for-jeonghan-license.txt license-history.md \
+    third-party-notices.md tailscale-license.txt tailscale-dependency-licenses.md \
+    source.md source-snapshot.tar.gz distribution-policy.json distribution-status.md \
+    component-redistribution-registry.schema.json component-review-record.schema.json \
+    dns-build-manifest.schema.json dns-final-review-record.schema.json; do
     xorriso -osirrox on -indev "$iso" \
         -extract "/simple-cdd/$embedded" "$iso_verify_dir/$embedded" \
         >/dev/null 2>&1 || fail "built ISO is missing /simple-cdd/$embedded"
@@ -204,13 +262,102 @@ cmp -s "$generated_dir/enrollment-record.schema.json" \
     fail "built ISO contains a stale enrollment schema"
 cmp -s "$generated_dir/source.md" "$iso_verify_dir/source.md" ||
     fail "built ISO contains stale source provenance"
+for licensing_payload in \
+    diy-device-os-bootstrap-for-jeonghan-license.txt license-history.md \
+    third-party-notices.md tailscale-license.txt tailscale-dependency-licenses.md \
+    source-snapshot.tar.gz distribution-policy.json distribution-status.md \
+    component-redistribution-registry.schema.json component-review-record.schema.json \
+    dns-build-manifest.schema.json dns-final-review-record.schema.json; do
+    cmp -s "$generated_dir/$licensing_payload" "$iso_verify_dir/$licensing_payload" ||
+        fail "built ISO contains a stale licensing payload: $licensing_payload"
+done
 
 iso_sha256=$(sha256sum "$iso" | awk '{print $1}')
 archive_sha256=$(sha256sum "$technitium_archive" | awk '{print $1}')
 tailscale_sha256=$(sha256sum "$tailscale_archive" | awk '{print $1}')
+tailscale_licenses_sha256=$(sha256sum "$tailscale_licenses" | awk '{print $1}')
+source_snapshot_sha256=$(sha256sum "$generated_dir/source-snapshot.tar.gz" | awk '{print $1}')
 created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 short_sha=$(printf '%s' "$iso_sha256" | cut -c1-16)
 build_id="debian-$DEBIAN_POINT_RELEASE-technitium-$TECHNITIUM_VERSION-$short_sha"
+
+packages_file=$artifact_dir/debian-packages.txt
+find "$builder_dir/mirror" -type f -name Packages -exec awk '
+    /^Package: / { package=$2 }
+    /^Version: / { if (package != "") print package "=" $2; package="" }
+' {} + 2>/dev/null | LC_ALL=C sort -u > "$packages_file"
+
+package_hashes=$artifact_dir/debian-package-sha256s.txt
+find "$builder_dir/mirror" -type f \( -name '*.deb' -o -name '*.udeb' \) \
+    -exec sha256sum {} + 2>/dev/null |
+    sed "s#$builder_dir/mirror/##" | LC_ALL=C sort > "$package_hashes"
+[ -s "$packages_file" ] || fail "Debian package closure is empty"
+[ -s "$package_hashes" ] || fail "Debian package artifact closure is empty"
+
+closure_manifest=$artifact_dir/debian-package-closure.manifest
+packages_sha256=$(sha256sum "$packages_file" | awk '{print $1}')
+package_hashes_sha256=$(sha256sum "$package_hashes" | awk '{print $1}')
+{
+    echo "format=dns-debian-package-closure-v1"
+    echo "debian_point_release=$DEBIAN_POINT_RELEASE"
+    echo "debian_snapshot=$DEBIAN_SNAPSHOT"
+    echo "packages_sha256=$packages_sha256"
+    echo "package_artifacts_sha256=$package_hashes_sha256"
+    echo "[packages]"
+    cat "$packages_file"
+    echo "[package-artifacts]"
+    cat "$package_hashes"
+} > "$closure_manifest"
+closure_sha256=$(sha256sum "$closure_manifest" | awk '{print $1}')
+
+jq -n \
+    --arg name "dns-appliance-installer-$build_id" \
+    --arg debian "$DEBIAN_POINT_RELEASE@$DEBIAN_SNAPSHOT" \
+    --arg technitium "$TECHNITIUM_IMAGE@$TECHNITIUM_AMD64_DIGEST" \
+    --arg tailscale "$TAILSCALE_VERSION" \
+    --arg revision "$source_revision" \
+    --arg source_repository "$source_repository" \
+    --arg source_archive "$source_archive" \
+    --arg created "$created" \
+    --rawfile packages "$packages_file" \
+    '{spdxVersion:"SPDX-2.3",dataLicense:"CC0-1.0",SPDXID:"SPDXRef-DOCUMENT",name:$name,documentNamespace:($source_repository+"/sbom/"+$revision+"/"+$name),creationInfo:{created:$created,creators:["Tool: diy-device-os-bootstrap-for-jeonghan/installer/installer/build-image"]},documentDescribes:["SPDXRef-DebianPackageClosure","SPDXRef-Technitium","SPDXRef-Tailscale","SPDXRef-TailscaleDependencyReport","SPDXRef-DIYDeviceOSBootstrapForJeonghan"],packages:([($packages|split("\n")[]|select(length>0))|{name:(split("=")[0]),versionInfo:(split("=")[1]),SPDXID:("SPDXRef-Package-"+(gsub("[^A-Za-z0-9.-]";"-"))),downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION"}]+[{name:"debian-package-closure",versionInfo:$debian,SPDXID:"SPDXRef-DebianPackageClosure",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION",comment:"Exact package versions and artifact hashes are retained in debian-package-closure.manifest."},{name:"diy-device-os-bootstrap-for-jeonghan",versionInfo:$revision,SPDXID:"SPDXRef-DIYDeviceOSBootstrapForJeonghan",downloadLocation:$source_archive,filesAnalyzed:false,licenseDeclared:"GPL-3.0-only",licenseConcluded:"GPL-3.0-only",copyrightText:"Copyright (c) 2026 dalsoop"},{name:"technitium-dns-server-container",versionInfo:$technitium,SPDXID:"SPDXRef-Technitium",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION",comment:"The container combines the GPL-3.0 Technitium DNS Server with separately licensed runtime content; inspect its embedded notices."},{name:"tailscale-linux-static",versionInfo:$tailscale,SPDXID:"SPDXRef-Tailscale",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"BSD-3-Clause",licenseConcluded:"NOASSERTION",copyrightText:"Copyright (c) 2020 Tailscale Inc & contributors",comment:"The upstream project is BSD-3-Clause; the static binaries include dependencies listed in the pinned Tailscale dependency-license report."},{name:"tailscale-dependency-license-report",versionInfo:$tailscale,SPDXID:"SPDXRef-TailscaleDependencyReport",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION"}])}' \
+    > "$artifact_dir/sbom.spdx.json"
+sbom_sha256=$(sha256sum "$artifact_dir/sbom.spdx.json" | awk '{print $1}')
+
+component_registry=$artifact_dir/component-redistribution-registry.json
+jq -n \
+    --arg policy_id "$DISTRIBUTION_POLICY_ID" \
+    --arg policy_sha256 "$distribution_policy_sha256" \
+    --arg debian_version "$DEBIAN_POINT_RELEASE@$DEBIAN_SNAPSHOT" \
+    --arg closure_sha256 "$closure_sha256" \
+    --arg technitium_version "$TECHNITIUM_VERSION" \
+    --arg technitium_archive_sha256 "$archive_sha256" \
+    --arg technitium_source_identity "$TECHNITIUM_AMD64_DIGEST" \
+    --arg tailscale_version "$TAILSCALE_VERSION" \
+    --arg tailscale_sha256 "$tailscale_sha256" \
+    --arg tailscale_licenses_sha256 "$tailscale_licenses_sha256" \
+    --arg source_revision "$source_revision" \
+    --arg source_snapshot_sha256 "$source_snapshot_sha256" \
+    '{
+      schema_version: 1,
+      policy: {id:$policy_id,sha256:$policy_sha256},
+      components: [
+        {id:"debian-package-closure",version:$debian_version,digest:{algorithm:"sha256",value:$closure_sha256},status:"personal-use-only"},
+        {id:"technitium-oci",version:$technitium_version,digest:{algorithm:"sha256",value:$technitium_archive_sha256},source_identity:{kind:"oci-digest",value:$technitium_source_identity},status:"personal-use-only"},
+        {id:"tailscale-archive",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_sha256},status:"personal-use-only"},
+        {id:"tailscale-dependency-report",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_licenses_sha256},status:"personal-use-only"},
+        {id:"repository-source-snapshot",version:$source_revision,digest:{algorithm:"sha256",value:$source_snapshot_sha256},status:"personal-use-only"}
+      ]
+    }' > "$component_registry"
+"$distribution_validator" --registry "$component_registry" \
+    --policy "$distribution_policy" >/dev/null
+component_registry_sha256=$(sha256sum "$component_registry" | awk '{print $1}')
+
+install -m 0644 "$generated_dir/source-snapshot.tar.gz" \
+    "$artifact_dir/repository-source-snapshot.tar.gz"
+install -m 0644 "$generated_dir/distribution-status.md" \
+    "$artifact_dir/DISTRIBUTION_STATUS.md"
+install -m 0644 "$distribution_policy" "$artifact_dir/distribution-policy.json"
 
 jq -n \
     --arg build_id "$build_id" \
@@ -226,31 +373,13 @@ jq -n \
     --arg source_revision "$source_revision" \
     --arg source_repository "$source_repository" \
     --arg source_archive "$source_archive" \
-    '{schema_version:1,build_id:$build_id,iso:$iso,iso_sha256:$iso_sha256,debian_point_release:$debian,debian_snapshot:$snapshot,technitium_version:$technitium,technitium_image_digest:$technitium_digest,technitium_archive_sha256:$technitium_archive_sha256,tailscale_version:$tailscale,tailscale_archive_sha256:$tailscale_archive_sha256,source_revision:$source_revision,source_repository:$source_repository,source_archive:$source_archive}' \
+    --arg component_registry_sha256 "$component_registry_sha256" \
+    --arg distribution_policy_sha256 "$distribution_policy_sha256" \
+    --arg sbom_sha256 "$sbom_sha256" \
+    --slurpfile registry "$component_registry" \
+    '{schema_version:1,artifact_id:"dns-appliance",build_id:$build_id,iso:$iso,iso_sha256:$iso_sha256,distribution_status:"personal-use-only",component_registry:"component-redistribution-registry.json",component_registry_sha256:$component_registry_sha256,distribution_policy_sha256:$distribution_policy_sha256,components:($registry[0].components|map({id,status})),sbom:"sbom.spdx.json",sbom_sha256:$sbom_sha256,debian_point_release:$debian,debian_snapshot:$snapshot,technitium_version:$technitium,technitium_image_digest:$technitium_digest,technitium_archive_sha256:$technitium_archive_sha256,tailscale_version:$tailscale,tailscale_archive_sha256:$tailscale_archive_sha256,source_revision:$source_revision,source_repository:$source_repository,source_archive:$source_archive}' \
     > "$artifact_dir/build-manifest.json"
 
-packages_file=$artifact_dir/debian-packages.txt
-find "$builder_dir/mirror" -type f -name Packages -exec awk '
-    /^Package: / { package=$2 }
-    /^Version: / { if (package != "") print package "=" $2; package="" }
-' {} + 2>/dev/null | LC_ALL=C sort -u > "$packages_file"
-
-package_hashes=$artifact_dir/debian-package-sha256s.txt
-find "$builder_dir/mirror" -type f \( -name '*.deb' -o -name '*.udeb' \) \
-    -exec sha256sum {} + 2>/dev/null |
-    sed "s#$builder_dir/mirror/##" | LC_ALL=C sort > "$package_hashes"
-
-jq -n \
-    --arg name "dns-appliance-installer-$build_id" \
-    --arg technitium "$TECHNITIUM_IMAGE@$TECHNITIUM_AMD64_DIGEST" \
-    --arg tailscale "$TAILSCALE_VERSION" \
-    --arg revision "$source_revision" \
-    --arg source_repository "$source_repository" \
-    --arg source_archive "$source_archive" \
-    --arg created "$created" \
-    --rawfile packages "$packages_file" \
-    '{spdxVersion:"SPDX-2.3",dataLicense:"CC0-1.0",SPDXID:"SPDXRef-DOCUMENT",name:$name,documentNamespace:($source_repository+"/sbom/"+$revision+"/"+$name),creationInfo:{created:$created,creators:["Tool: diy-device-os-bootstrap-for-jeonghan/installer/installer/build-image"]},documentDescribes:["SPDXRef-DIYDeviceOSBootstrapForJeonghan","SPDXRef-Technitium","SPDXRef-Tailscale"],packages:([($packages|split("\n")[]|select(length>0))|{name:(split("=")[0]),versionInfo:(split("=")[1]),SPDXID:("SPDXRef-Package-"+(gsub("[^A-Za-z0-9.-]";"-"))),downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION"}]+[{name:"diy-device-os-bootstrap-for-jeonghan",versionInfo:$revision,SPDXID:"SPDXRef-DIYDeviceOSBootstrapForJeonghan",downloadLocation:$source_archive,filesAnalyzed:false,licenseDeclared:"GPL-3.0-only",licenseConcluded:"GPL-3.0-only",copyrightText:"Copyright (c) 2026 dalsoop"},{name:"technitium-dns-server-container",versionInfo:$technitium,SPDXID:"SPDXRef-Technitium",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION",comment:"The container combines the GPL-3.0 Technitium DNS Server with separately licensed runtime content; inspect its embedded notices."},{name:"tailscale-linux-static",versionInfo:$tailscale,SPDXID:"SPDXRef-Tailscale",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"BSD-3-Clause",licenseConcluded:"NOASSERTION",copyrightText:"Copyright (c) 2020 Tailscale Inc & contributors",comment:"The upstream project is BSD-3-Clause; the static binaries include dependencies listed in the pinned Tailscale dependency-license report."}])}' \
-    > "$artifact_dir/sbom.spdx.json"
-
 echo "build manifest: $artifact_dir/build-manifest.json"
+echo "component registry: $component_registry"
 echo "SBOM: $artifact_dir/sbom.spdx.json"

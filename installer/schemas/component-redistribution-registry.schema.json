@@ -138,7 +138,14 @@
         "reviewer": { "type": "string", "minLength": 1 },
         "evidence": { "$ref": "#/$defs/evidence" },
         "obligations": { "$ref": "#/$defs/obligations" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "component_id": { "const": "technitium-oci" } }, "required": ["component_id"] },
+          "then": { "required": ["source_identity"] },
+          "else": { "not": { "required": ["source_identity"] } }
+        }
+      ]
     },
     "redistribution": {
       "oneOf": [
@@ -146,7 +153,7 @@
         { "$ref": "#/$defs/reviewedRedistribution" }
       ]
     },
-    "component": {
+    "ordinaryComponent": {
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "version", "digest", "redistribution"],
@@ -154,14 +161,24 @@
         "id": { "type": "string" },
         "version": { "type": "string", "minLength": 1 },
         "digest": { "$ref": "#/$defs/digest" },
+        "redistribution": { "$ref": "#/$defs/redistribution" }
+      }
+    },
+    "debianClosure": { "allOf": [{ "$ref": "#/$defs/ordinaryComponent" }, { "properties": { "id": { "const": "debian-package-closure" } } }] },
+    "technitiumOCI": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "digest", "source_identity", "redistribution"],
+      "properties": {
+        "id": { "const": "technitium-oci" },
+        "version": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
         "source_identity": { "$ref": "#/$defs/sourceIdentity" },
         "redistribution": { "$ref": "#/$defs/redistribution" }
       }
     },
-    "debianClosure": { "allOf": [{ "$ref": "#/$defs/component" }, { "properties": { "id": { "const": "debian-package-closure" } } }] },
-    "technitiumOCI": { "allOf": [{ "$ref": "#/$defs/component" }, { "properties": { "id": { "const": "technitium-oci" } } }] },
-    "tailscaleArchive": { "allOf": [{ "$ref": "#/$defs/component" }, { "properties": { "id": { "const": "tailscale-archive" } } }] },
-    "tailscaleDependencyReport": { "allOf": [{ "$ref": "#/$defs/component" }, { "properties": { "id": { "const": "tailscale-dependency-report" } } }] },
-    "repositorySourceSnapshot": { "allOf": [{ "$ref": "#/$defs/component" }, { "properties": { "id": { "const": "repository-source-snapshot" } } }] }
+    "tailscaleArchive": { "allOf": [{ "$ref": "#/$defs/ordinaryComponent" }, { "properties": { "id": { "const": "tailscale-archive" } } }] },
+    "tailscaleDependencyReport": { "allOf": [{ "$ref": "#/$defs/ordinaryComponent" }, { "properties": { "id": { "const": "tailscale-dependency-report" } } }] },
+    "repositorySourceSnapshot": { "allOf": [{ "$ref": "#/$defs/ordinaryComponent" }, { "properties": { "id": { "const": "repository-source-snapshot" } } }] }
   }
 }

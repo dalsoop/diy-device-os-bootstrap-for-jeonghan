@@ -79,6 +79,18 @@ jq '.components[0].status = "personal-use-only"' "$registry" \
 expect_failure "a top-level component status" \
     "$validator" --registry "$temporary/top-level-component-status.json" --policy "$policy"
 
+jq 'del(.components[1].source_identity)' "$registry" \
+    > "$temporary/technitium-source-identity-missing.json"
+expect_failure "a Technitium component without source identity" \
+    "$validator" --registry "$temporary/technitium-source-identity-missing.json" \
+    --policy "$policy"
+
+jq '.components[0].source_identity = {kind:"oci-digest",value:("sha256:"+("2"*64))}' \
+    "$registry" > "$temporary/non-technitium-source-identity.json"
+expect_failure "source identity on a non-Technitium component" \
+    "$validator" --registry "$temporary/non-technitium-source-identity.json" \
+    --policy "$policy"
+
 review=$temporary/technitium-review.json
 jq -n \
     --slurpfile policy "$policy" \
@@ -158,6 +170,22 @@ jq --slurpfile policy "$policy" '
   )
 ' "$registry" > "$reviewed_registry"
 "$validator" --registry "$reviewed_registry" --policy "$policy" >/dev/null
+
+jq 'del(.components[1].redistribution.source_identity)' "$reviewed_registry" \
+    > "$temporary/reviewed-technitium-source-identity-missing.json"
+expect_failure "reviewed Technitium redistribution without source identity" \
+    "$validator" \
+    --registry "$temporary/reviewed-technitium-source-identity-missing.json" \
+    --policy "$policy"
+
+jq '.components[1].redistribution.source_identity.value = ("sha256:"+("2"*64))' \
+    "$reviewed_registry" \
+    > "$temporary/reviewed-technitium-source-identity-mismatch.json"
+expect_failure "reviewed Technitium redistribution with mismatched source identity" \
+    "$validator" \
+    --registry "$temporary/reviewed-technitium-source-identity-mismatch.json" \
+    --policy "$policy"
+
 registry_sha256=$(sha256_file "$reviewed_registry")
 sbom_sha256=$(sha256_file "$temporary/sbom-complete.json")
 

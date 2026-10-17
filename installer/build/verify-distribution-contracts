@@ -188,7 +188,7 @@ jq -e --slurpfile policy "$policy" '
     (.version | type == "string" and length > 0) and
     (.digest | exact_keys(["algorithm","value"])) and
     .digest.algorithm == "sha256" and (.digest.value | digest) and
-    (if has("source_identity") then
+    (if .id == "technitium-oci" then
        exact_keys(["id","version","digest","source_identity","redistribution"]) and
        (.source_identity | source_identity)
      else

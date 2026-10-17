@@ -15,6 +15,8 @@
     "component_registry_sha256",
     "distribution_policy_sha256",
     "components",
+    "sbom",
+    "sbom_sha256",
     "debian_point_release",
     "debian_snapshot",
     "technitium_version",
@@ -36,6 +38,8 @@
     "component_registry": { "const": "component-redistribution-registry.json" },
     "component_registry_sha256": { "$ref": "#/$defs/sha256" },
     "distribution_policy_sha256": { "$ref": "#/$defs/sha256" },
+    "sbom": { "const": "sbom.spdx.json" },
+    "sbom_sha256": { "$ref": "#/$defs/sha256" },
     "components": {
       "type": "array",
       "minItems": 5,

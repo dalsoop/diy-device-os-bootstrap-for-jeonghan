@@ -81,25 +81,34 @@ jq -n \
       obligations: ($policy[0].obligation_kinds | map({kind:.,disposition:"embedded-artifact",location:{scope:"artifact",path:("licenses/"+.+".txt"),sha256:("3"*64)}}))
     }' > "$review"
 
-cat > "$temporary/sbom-noassertion.json" <<'EOF'
-{
-  "spdxVersion": "SPDX-2.3",
-  "packages": [
-    {
-      "name": "prebuilt-component",
-      "licenseDeclared": "NOASSERTION",
-      "licenseConcluded": "NOASSERTION",
-      "copyrightText": "NOASSERTION"
-    }
-  ]
-}
-EOF
+jq -n '
+  ["SPDXRef-DebianPackageClosure","SPDXRef-Technitium","SPDXRef-Tailscale","SPDXRef-TailscaleDependencyReport","SPDXRef-DIYDeviceOSBootstrapForJeonghan"] as $described |
+  {
+    spdxVersion:"SPDX-2.3",
+    dataLicense:"CC0-1.0",
+    SPDXID:"SPDXRef-DOCUMENT",
+    name:"dns-appliance-installer-dns-test-build",
+    documentNamespace:"https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/sbom/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/dns-appliance-installer-dns-test-build",
+    creationInfo:{created:"2026-10-17T00:00:00Z",creators:["Tool: dns-license-simulation"]},
+    documentDescribes:$described,
+    packages:($described | to_entries | map({
+      name:("component-"+(.key|tostring)),
+      versionInfo:"1.0.0",
+      SPDXID:.value,
+      downloadLocation:("https://artifacts.example.invalid/"+(.key|tostring)),
+      filesAnalyzed:false,
+      licenseDeclared:(if .key == 0 then "NOASSERTION" else "GPL-3.0-only" end),
+      licenseConcluded:"GPL-3.0-only",
+      copyrightText:"Copyright test"
+    }))
+  }
+' > "$temporary/sbom-noassertion.json"
 
 expect_failure "reviewed promotion while the SBOM contains NOASSERTION" \
     "$validator" --registry "$registry" --policy "$policy" \
     --component-review "$review" --sbom "$temporary/sbom-noassertion.json"
 
-jq '.packages[0] |= (.licenseDeclared="GPL-3.0-only" | .licenseConcluded="GPL-3.0-only" | .copyrightText="Copyright test")' \
+jq '.packages[0].licenseDeclared="GPL-3.0-only"' \
     "$temporary/sbom-noassertion.json" > "$temporary/sbom-complete.json"
 jq '.artifact_sha256 = ("9"*64)' "$review" > "$temporary/component-digest-mismatch.json"
 expect_failure "a component review artifact digest mismatch" \
@@ -117,11 +126,13 @@ expect_failure "a component review that drops OCI source identity" \
 reviewed_registry=$temporary/reviewed-registry.json
 jq '.components |= map(.status="redistribution-reviewed")' "$registry" > "$reviewed_registry"
 registry_sha256=$(sha256_file "$reviewed_registry")
+sbom_sha256=$(sha256_file "$temporary/sbom-complete.json")
 
 manifest=$temporary/build-manifest.json
 jq -n \
     --arg registry_sha256 "$registry_sha256" \
     --arg policy_sha256 "$policy_sha256" \
+    --arg sbom_sha256 "$sbom_sha256" \
     --slurpfile registry "$reviewed_registry" \
     '{
       schema_version: 1,
@@ -130,9 +141,22 @@ jq -n \
       iso: "dns-test.iso",
       iso_sha256: ("4"*64),
       distribution_status: "redistribution-reviewed",
+      component_registry: "component-redistribution-registry.json",
       component_registry_sha256: $registry_sha256,
       distribution_policy_sha256: $policy_sha256,
-      components: ($registry[0].components | map({id,status}))
+      components: ($registry[0].components | map({id,status})),
+      sbom: "sbom.spdx.json",
+      sbom_sha256: $sbom_sha256,
+      debian_point_release: "13.7.0",
+      debian_snapshot: "20261011T000000Z",
+      technitium_version: "15.6.1",
+      technitium_image_digest: ("sha256:"+("1"*64)),
+      technitium_archive_sha256: ("b"*64),
+      tailscale_version: "1.104.1",
+      tailscale_archive_sha256: ("c"*64),
+      source_revision: ("e"*40),
+      source_repository: "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan",
+      source_archive: ("https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/archive/"+("e"*40)+".tar.gz")
     }' > "$manifest"
 manifest_sha256=$(sha256_file "$manifest")
 
@@ -157,6 +181,39 @@ jq -n \
 "$validator" --registry "$reviewed_registry" --policy "$policy" \
     --final-review "$final_review" --build-manifest "$manifest" \
     --sbom "$temporary/sbom-complete.json" >/dev/null
+
+incomplete_manifest=$temporary/incomplete-build-manifest.json
+jq 'del(.debian_point_release)' "$manifest" > "$incomplete_manifest"
+incomplete_manifest_sha256=$(sha256_file "$incomplete_manifest")
+jq --arg sha256 "$incomplete_manifest_sha256" '.build_manifest_sha256=$sha256' \
+    "$final_review" > "$temporary/incomplete-manifest-final-review.json"
+expect_failure "a schema-incomplete build manifest with a matching review hash" \
+    "$validator" --registry "$reviewed_registry" --policy "$policy" \
+    --final-review "$temporary/incomplete-manifest-final-review.json" \
+    --build-manifest "$incomplete_manifest" --sbom "$temporary/sbom-complete.json"
+
+jq 'del(.sbom_sha256)' "$manifest" > "$temporary/unbound-sbom-build-manifest.json"
+unbound_manifest_sha256=$(sha256_file "$temporary/unbound-sbom-build-manifest.json")
+jq --arg sha256 "$unbound_manifest_sha256" '.build_manifest_sha256=$sha256' \
+    "$final_review" > "$temporary/unbound-sbom-final-review.json"
+expect_failure "a build manifest without an SBOM digest binding" \
+    "$validator" --registry "$reviewed_registry" --policy "$policy" \
+    --final-review "$temporary/unbound-sbom-final-review.json" \
+    --build-manifest "$temporary/unbound-sbom-build-manifest.json" \
+    --sbom "$temporary/sbom-complete.json"
+
+printf '{}\n' > "$temporary/substitute-empty-sbom.json"
+expect_failure "an empty substitute SBOM" \
+    "$validator" --registry "$reviewed_registry" --policy "$policy" \
+    --final-review "$final_review" --build-manifest "$manifest" \
+    --sbom "$temporary/substitute-empty-sbom.json"
+
+jq '.name += "-substitute"' "$temporary/sbom-complete.json" \
+    > "$temporary/substitute-valid-sbom.json"
+expect_failure "a valid-shaped SBOM whose bytes do not match the build manifest" \
+    "$validator" --registry "$reviewed_registry" --policy "$policy" \
+    --final-review "$final_review" --build-manifest "$manifest" \
+    --sbom "$temporary/substitute-valid-sbom.json"
 
 jq 'del(.obligations[3])' "$final_review" > "$temporary/incomplete-final-review.json"
 expect_failure "an incomplete final review record" \

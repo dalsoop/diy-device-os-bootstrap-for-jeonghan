@@ -6,6 +6,7 @@ set -euo pipefail
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 license_checker=${DEVICE_OS_LICENSE_CHECKER:-$repo_root/usb-media/check-license-policy}
+distribution_policy=$repo_root/usb-media/distribution-policy.json
 device=
 iso=
 manifest=
@@ -36,7 +37,8 @@ done
 [ -x "$license_checker" ] || { echo "write-usb-linux: shared license checker is unavailable" >&2; exit 1; }
 license_decision=$(mktemp)
 trap 'rm -f "$license_decision"' EXIT HUP INT TERM
-if ! "$license_checker" --mode personal-use --json > "$license_decision"; then
+if ! DEVICE_OS_DISTRIBUTION_POLICY=$distribution_policy \
+    "$license_checker" --mode personal-use --json > "$license_decision"; then
     echo "write-usb-linux: personal-use license policy denied DNS media writing" >&2
     exit 1
 fi

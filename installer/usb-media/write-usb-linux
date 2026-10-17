@@ -10,6 +10,9 @@ catalog=${USB_MEDIA_CATALOG:-$repo_root/work/device-os/catalog.json}
 cache_dir=${USB_MEDIA_CACHE_DIR:-$repo_root/cache/usb-media}
 write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
 license_checker=${DEVICE_OS_LICENSE_CHECKER:-$script_dir/check-license-policy}
+distribution_renderer=${DEVICE_OS_DISTRIBUTION_RENDERER:-$script_dir/render-distribution-record}
+distribution_policy=$script_dir/distribution-policy.json
+decision_output=${DEVICE_OS_LICENSE_DECISION_OUTPUT:-}
 device=
 confirmation=
 image_build=0
@@ -114,17 +117,20 @@ done
 [ -r "$catalog" ] || fail "resolved catalog is missing; run ./device-os plan"
 "$script_dir/verify-catalog" "$catalog" >/dev/null
 [ -x "$license_checker" ] || fail "license policy checker is unavailable"
+[ -x "$distribution_renderer" ] || fail "distribution record renderer is unavailable"
 license_decision=$(mktemp)
-trap 'rm -f "$license_decision"' EXIT HUP INT TERM
-if ! USB_MEDIA_CATALOG=$catalog "$license_checker" --mode personal-use --json > "$license_decision"; then
+distribution_record=$(mktemp)
+decision_next=$license_decision.next
+trap 'rm -f "$license_decision" "$distribution_record" "$decision_next"' EXIT HUP INT TERM
+if ! DEVICE_OS_DISTRIBUTION_POLICY=$distribution_policy USB_MEDIA_CATALOG=$catalog \
+    "$license_checker" --mode personal-use --json > "$license_decision"; then
     rm -f "$license_decision"
     fail "personal-use license policy denied media creation"
 fi
-jq -e '.mode == "personal-use" and .decision == "allow" and .blockers == []' \
-    "$license_decision" >/dev/null || {
-    rm -f "$license_decision"
-    fail "personal-use license decision is malformed"
-}
+"$distribution_renderer" "$license_decision" "$distribution_policy" > "$distribution_record" ||
+    fail "personal-use distribution record is malformed"
+jq -e '.mode == "personal-use" and .decision == "allow"' "$distribution_record" >/dev/null ||
+    fail "personal-use distribution record is not allowed"
 repository_url=$(jq -er '.product.repository | select(startswith("https://"))' "$catalog")
 repository_revision=$(jq -er \
     '.catalog.revision | select(test("^[0-9a-f]{40}$"))' "$catalog")
@@ -139,28 +145,6 @@ for legal_file in LICENSE LICENSE_HISTORY.md THIRD_PARTY_NOTICES.md \
     third_party/licenses/Tailscale-BSD-3-Clause.txt; do
     [ -r "$monorepo_root/$legal_file" ] || fail "missing legal file: $legal_file"
 done
-
-[ -b "$device" ] || usage
-if [ "$image_build" -eq 1 ]; then
-    [ "$(lsblk -dnro TYPE "$device")" = loop ] ||
-        fail "image builds require a loop device"
-    [ -z "$confirmation" ] || fail "image builds do not accept erase confirmation"
-    serial=
-    model="generated raw image"
-else
-    [ "$(lsblk -dnro TYPE "$device")" = disk ] || fail "whole-disk target required"
-    [ "$(lsblk -dnro RM "$device")" = 1 ] || fail "target is not reported removable"
-
-    root_source=$(findmnt -nro SOURCE /)
-    root_parent=/dev/$(lsblk -no PKNAME "$root_source" 2>/dev/null | sed -n '1p')
-    [ "$device" != "$root_parent" ] || fail "refusing root disk"
-    serial=$(lsblk -dnro SERIAL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    model=$(lsblk -dnro MODEL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    [ -n "$serial" ] || fail "target has no readable serial"
-    [ -n "$model" ] || fail "target has no readable model"
-    [ "$confirmation" = "ERASE $device $serial" ] ||
-        fail "exact confirmation must include device and serial: ERASE $device $serial"
-fi
 
 data_label=$(jq -er '.usb.data_label' "$catalog")
 enrollment_label=$(jq -er '.usb.enrollment_label' "$catalog")
@@ -241,6 +225,27 @@ while IFS= read -r entry; do
                 fi
                 staged_registries["$id"]=$registry
                 staged_sboms["$id"]=$sbom
+                jq \
+                    --arg id "$id" \
+                    --arg artifact_sha256 "$actual" \
+                    --arg status "$manifest_status" \
+                    --slurpfile registry "$registry" '
+                  def component($id): first($registry[0].components[] | select(.id == $id));
+                  .selected_artifacts |= map(
+                    if .id == $id and (.kind == "runtime-artifact" or .kind == "final-artifact") then
+                      .sha256 = $artifact_sha256 | .status = $status
+                    elif .kind == "component" then
+                      (component(.id)) as $component |
+                      if $component == null then .
+                      else .sha256 = $component.digest.value | .status = $component.redistribution.status end
+                    else . end) |
+                  .warnings =
+                    ([.warnings[] | select(.code != "artifact-unreviewed")] +
+                     [.selected_artifacts[] | select(.status == "personal-use-only") |
+                       {code:"artifact-unreviewed",artifact_id:.id,
+                        message:(.id + " (" + .kind + ") is not reviewed for public redistribution")}])
+                ' "$license_decision" > "$decision_next"
+                mv "$decision_next" "$license_decision"
             fi
             ;;
         *) fail "unsupported entry source kind: $kind" ;;
@@ -273,6 +278,41 @@ while IFS= read -r bundle; do
         fail "repository bundle tree may not contain symlinks: $path"
     fi
 done < <(jq -c '.bundles[]' "$catalog")
+
+"$distribution_renderer" "$license_decision" "$distribution_policy" > "$distribution_record" ||
+    fail "enriched personal-use distribution record is malformed"
+jq -e '.mode == "personal-use" and .decision == "allow"' "$distribution_record" >/dev/null ||
+    fail "enriched personal-use distribution record is not allowed"
+if [ -n "$decision_output" ]; then
+    [[ "$decision_output" = /* ]] || fail "DEVICE_OS_LICENSE_DECISION_OUTPUT must be absolute"
+    [ -d "$(dirname -- "$decision_output")" ] || fail "license decision output directory is missing"
+    [ ! -L "$decision_output" ] || fail "license decision output may not be a symlink"
+    decision_output_temporary=$decision_output.tmp.$$
+    install -m 0600 "$license_decision" "$decision_output_temporary"
+    mv "$decision_output_temporary" "$decision_output"
+fi
+
+[ -b "$device" ] || usage
+if [ "$image_build" -eq 1 ]; then
+    [ "$(lsblk -dnro TYPE "$device")" = loop ] ||
+        fail "image builds require a loop device"
+    [ -z "$confirmation" ] || fail "image builds do not accept erase confirmation"
+    serial=
+    model="generated raw image"
+else
+    [ "$(lsblk -dnro TYPE "$device")" = disk ] || fail "whole-disk target required"
+    [ "$(lsblk -dnro RM "$device")" = 1 ] || fail "target is not reported removable"
+
+    root_source=$(findmnt -nro SOURCE /)
+    root_parent=/dev/$(lsblk -no PKNAME "$root_source" 2>/dev/null | sed -n '1p')
+    [ "$device" != "$root_parent" ] || fail "refusing root disk"
+    serial=$(lsblk -dnro SERIAL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    model=$(lsblk -dnro MODEL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    [ -n "$serial" ] || fail "target has no readable serial"
+    [ -n "$model" ] || fail "target has no readable model"
+    [ "$confirmation" = "ERASE $device $serial" ] ||
+        fail "exact confirmation must include device and serial: ERASE $device $serial"
+fi
 
 required_bytes=$((required_bytes + reserve_mib * 1024 * 1024 + overhead_mib * 1024 * 1024))
 device_bytes=$(blockdev --getsize64 "$device")
@@ -308,6 +348,7 @@ cleanup() {
     fi
     rm -rf "$temporary"
     rm -f "$license_decision"
+    rm -f "$distribution_record" "$decision_next"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -409,8 +450,7 @@ install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt"
     "$mount_dir/licenses/Tailscale-BSD-3-Clause.txt"
 install -m 0644 "$script_dir/distribution-policy.json" \
     "$mount_dir/licenses/distribution-policy.json"
-"$script_dir/render-distribution-record" "$license_decision" "$script_dir/distribution-policy.json" \
-    > "$mount_dir/licenses/DISTRIBUTION.json"
+install -m 0644 "$distribution_record" "$mount_dir/licenses/DISTRIBUTION.json"
 {
     echo "# Corresponding Source"
     echo

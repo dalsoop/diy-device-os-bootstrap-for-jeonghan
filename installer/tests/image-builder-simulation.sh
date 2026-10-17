@@ -34,11 +34,12 @@ EOF
 checker=$temporary/checker
 cat > "$checker" <<'EOF'
 #!/bin/sh
+[ "${DEVICE_OS_DISTRIBUTION_POLICY:-}" = "${EXPECTED_POLICY:?}" ] || exit 88
 if [ "${TEST_POLICY_DENY:-0}" = 1 ]; then
   exit 1
 fi
 cat <<'JSON'
-{"schema_version":1,"mode":"personal-use","decision":"allow","selected_artifacts":[{"id":"ventoy","kind":"bootloader","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","status":"personal-use-only"},{"id":"debian-live","kind":"catalog-entry","sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","status":"personal-use-only"}],"blockers":[],"warnings":[{"code":"personal-use-only","message":"Public redistribution is not approved."}]}
+{"schema_version":1,"mode":"personal-use","decision":"allow","selected_artifacts":[{"id":"ventoy","kind":"bootloader","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","status":"personal-use-only"},{"id":"debian-live","kind":"catalog-entry","sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","status":"personal-use-only"}],"blockers":[],"warnings":[{"code":"artifact-unreviewed","artifact_id":"ventoy","message":"Public redistribution is not approved."}]}
 JSON
 EOF
 chmod +x "$checker"
@@ -75,11 +76,19 @@ writer=$temporary/writer
 cat > "$writer" <<'EOF'
 #!/bin/sh
 [ "${DEVICE_OS_INTERNAL_IMAGE_BUILD:-0}" = 1 ]
+[ -n "${DEVICE_OS_LICENSE_DECISION_OUTPUT:-}" ]
+jq '.selected_artifacts += [
+  {id:"runtime-component",kind:"component",sha256:("e"*64),status:"redistribution-reviewed"},
+  {id:"media-final",kind:"final-artifact",sha256:("f"*64),status:"redistribution-reviewed"}
+]' "$DEVICE_OS_LICENSE_DECISION_OUTPUT" > "$DEVICE_OS_LICENSE_DECISION_OUTPUT.next"
+mv "$DEVICE_OS_LICENSE_DECISION_OUTPUT.next" "$DEVICE_OS_LICENSE_DECISION_OUTPUT"
 printf 'writer %s\n' "$*" >> "$TEST_LOG"
 EOF
 chmod +x "$writer"
 
 PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
+EXPECTED_POLICY="$repo_root/usb-media/distribution-policy.json" \
+DEVICE_OS_DISTRIBUTION_POLICY="$temporary/ambient-policy.json" \
 DEVICE_OS_SKIP_LOOP_NODE_SETUP=1 \
 DEVICE_OS_IMAGE_WRITER="$writer" \
 DEVICE_OS_LICENSE_CHECKER="$checker" \
@@ -101,7 +110,10 @@ jq -e '
   .license.mode == "personal-use" and
   .license.decision == "allow" and
   .license.distribution_policy_sha256 == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
-  [.license.selected_artifacts[].id] == ["ventoy", "debian-live"] and
+  [.license.selected_artifacts[].id] == ["ventoy", "debian-live", "runtime-component", "media-final"] and
+  .license.selected_artifacts[2].sha256 == ("e"*64) and
+  .license.selected_artifacts[2].status == "redistribution-reviewed" and
+  .license.selected_artifacts[3].sha256 == ("f"*64) and
   .world == null
 ' "$output.manifest.json" >/dev/null
 grep -q '^writer --device /dev/loop9 --catalog .* --image-build$' "$log"
@@ -120,6 +132,8 @@ fi
 : > "$log"
 policy_refusal=$temporary/policy-refusal.raw
 if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" TEST_POLICY_DENY=1 \
+    EXPECTED_POLICY="$repo_root/usb-media/distribution-policy.json" \
+    DEVICE_OS_DISTRIBUTION_POLICY="$temporary/ambient-policy.json" \
     DEVICE_OS_SKIP_LOOP_NODE_SETUP=1 \
     DEVICE_OS_IMAGE_WRITER="$writer" \
     DEVICE_OS_LICENSE_CHECKER="$checker" \

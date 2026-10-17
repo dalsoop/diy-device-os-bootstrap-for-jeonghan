@@ -16,19 +16,41 @@ fail() {
 command -v jq >/dev/null 2>&1 || fail "jq is required"
 
 jq -e '
+  def safe_id: type == "string" and test("^[a-z0-9][a-z0-9-]*$");
+  def digest: type == "string" and test("^[a-f0-9]{64}$");
+  def artifact:
+    type == "object" and keys == ["id","kind","sha256","status"] and
+    (.id | safe_id) and
+    (.kind == "bootloader" or .kind == "catalog-entry" or .kind == "runtime-artifact" or
+      .kind == "component" or .kind == "final-artifact") and
+    (.sha256 == null or (.sha256 | digest)) and
+    (.status == "personal-use-only" or .status == "redistribution-reviewed");
+  def finding:
+    type == "object" and keys == ["artifact_id","code","message"] and
+    (.artifact_id == null or (.artifact_id | safe_id)) and
+    (.code | safe_id) and
+    (.message | type == "string" and length > 0);
+  type == "object" and
   keys == ["blockers","decision","mode","schema_version","selected_artifacts","warnings"] and
   .schema_version == 1 and
   (.mode == "personal-use" or .mode == "source-release" or .mode == "prebuilt-release") and
   (.decision == "allow" or .decision == "deny") and
-  (.selected_artifacts | type == "array" and all(.[];
-    keys == ["id","kind","sha256","status"] and
-    (.status == "personal-use-only" or .status == "redistribution-reviewed") and
-    (.sha256 == null or (.sha256 | test("^[a-f0-9]{64}$"))))) and
-  (all(.blockers[], .warnings[];
-    keys == ["artifact_id","code","message"] and
-    (.artifact_id == null or (.artifact_id | test("^[a-z0-9][a-z0-9-]*$"))))) and
+  (.selected_artifacts | type == "array" and all(.[]; artifact)) and
+  (.blockers | type == "array" and all(.[]; finding)) and
+  (.warnings | type == "array" and all(.[]; finding)) and
   (if .decision == "allow" then .blockers == [] else (.blockers | length > 0) end)
 ' "$decision" >/dev/null || fail "license decision violates its exact contract"
+
+jq -e '
+  type == "object" and
+  (keys | sort) == ["generated_artifacts","prebuilt_release","schema_version","source_release"] and
+  .schema_version == 1 and
+  (.source_release | type == "object" and keys == ["enabled"] and .enabled == true) and
+  (.generated_artifacts | type == "object" and keys == ["enabled"] and .enabled == false) and
+  (.prebuilt_release | type == "object" and
+    (keys | sort) == ["enabled","required_github_environment"] and
+    .enabled == false and .required_github_environment == "prebuilt-distribution")
+' "$policy" >/dev/null || fail "global distribution policy violates its exact contract"
 
 if command -v sha256sum >/dev/null 2>&1; then
     policy_sha256=$(sha256sum "$policy" | awk 'NR == 1 {print $1}')

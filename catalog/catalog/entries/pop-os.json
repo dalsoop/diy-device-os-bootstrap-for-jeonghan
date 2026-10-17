@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "pop-os",
   "group": "desktop",
   "version": "24.04-build-28",
@@ -15,6 +15,9 @@
     "filename": "pop-os_24.04_amd64_generic_28.iso",
     "url": "https://iso.pop-os.org/24.04/amd64/generic/28/pop-os_24.04_amd64_generic_28.iso",
     "sha256": "8d78e500fc95da765a91cddcf2ab7ba71ce4e7997e4f008456d4d872ee8f8221"
+  },
+  "redistribution": {
+    "status": "personal-use-only"
   }
 }
 

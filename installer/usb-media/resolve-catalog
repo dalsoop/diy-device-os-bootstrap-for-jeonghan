@@ -25,10 +25,10 @@ done
 jq -e '
   (keys | sort) == ["generated_artifacts","prebuilt_release","schema_version","source_release"] and
   .schema_version == 1 and
-  (.source_release | keys == ["enabled"] and .enabled == true) and
-  (.generated_artifacts | keys == ["enabled"] and .enabled == false) and
+  (.source_release | keys == ["enabled"] and (.enabled | type == "boolean")) and
+  (.generated_artifacts | keys == ["enabled"] and (.enabled | type == "boolean")) and
   (.prebuilt_release | (keys | sort) == ["enabled","required_github_environment"] and
-    .enabled == false and .required_github_environment == "prebuilt-distribution")
+    (.enabled | type == "boolean") and .required_github_environment == "prebuilt-distribution")
 ' "$distribution_policy" >/dev/null || fail "distribution policy is malformed"
 
 jq -e '

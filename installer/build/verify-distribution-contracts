@@ -258,7 +258,7 @@ if [ -n "$component_review" ]; then
       ([.obligations[].kind] | sort) == ($policy[0].obligation_kinds | sort)
     ' "$component_review" >/dev/null || fail "component review is incomplete or does not bind its parent component"
 
-    jq -e '[.. | strings | select(. == "NOASSERTION")] | length == 0' "$sbom" >/dev/null ||
+    jq -e '[.. | strings | ascii_upcase | select(contains("NOASSERTION"))] | length == 0' "$sbom" >/dev/null ||
         fail "NOASSERTION blocks component reviewed status"
 fi
 
@@ -335,7 +335,7 @@ if [ -n "$final_review" ]; then
       ([.obligations[].kind] | sort) == ($policy[0].obligation_kinds | sort)
     ' "$final_review" >/dev/null || fail "final review is incomplete or does not bind the DNS artifact"
 
-    jq -e '[.. | strings | select(. == "NOASSERTION")] | length == 0' "$sbom" >/dev/null ||
+    jq -e '[.. | strings | ascii_upcase | select(contains("NOASSERTION"))] | length == 0' "$sbom" >/dev/null ||
         fail "NOASSERTION blocks final reviewed status"
 fi
 

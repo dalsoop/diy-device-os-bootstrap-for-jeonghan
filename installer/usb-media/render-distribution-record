@@ -45,11 +45,11 @@ jq -e '
   type == "object" and
   (keys | sort) == ["generated_artifacts","prebuilt_release","schema_version","source_release"] and
   .schema_version == 1 and
-  (.source_release | type == "object" and keys == ["enabled"] and .enabled == true) and
-  (.generated_artifacts | type == "object" and keys == ["enabled"] and .enabled == false) and
+  (.source_release | type == "object" and keys == ["enabled"] and (.enabled | type == "boolean")) and
+  (.generated_artifacts | type == "object" and keys == ["enabled"] and (.enabled | type == "boolean")) and
   (.prebuilt_release | type == "object" and
     (keys | sort) == ["enabled","required_github_environment"] and
-    .enabled == false and .required_github_environment == "prebuilt-distribution")
+    (.enabled | type == "boolean") and .required_github_environment == "prebuilt-distribution")
 ' "$policy" >/dev/null || fail "global distribution policy violates its exact contract"
 
 if command -v sha256sum >/dev/null 2>&1; then

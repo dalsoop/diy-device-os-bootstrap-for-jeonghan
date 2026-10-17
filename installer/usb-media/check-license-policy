@@ -87,6 +87,25 @@ sha256_file() {
     fi
 }
 
+absolute_path_has_no_symlink_components() {
+    local path=$1 remainder component prefix=
+    [[ "$path" = /* ]] || return 1
+    remainder=${path#/}
+    while [ -n "$remainder" ]; do
+        component=${remainder%%/*}
+        if [[ "$remainder" = */* ]]; then
+            remainder=${remainder#*/}
+        else
+            remainder=
+        fi
+        [ -n "$component" ] || continue
+        case "$component" in .|..) return 1 ;; esac
+        prefix=$prefix/$component
+        [ ! -L "$prefix" ] || return 1
+    done
+    return 0
+}
+
 assignment() {
     local collection=$1 value=$2 id path map
     case "$value" in *=*) ;; *) usage ;; esac
@@ -139,10 +158,10 @@ policy_valid=0
 if [ -f "$policy" ] && [ ! -L "$policy" ] && jq -e '
   (keys | sort) == ["generated_artifacts","prebuilt_release","schema_version","source_release"] and
   .schema_version == 1 and
-  (.source_release | keys == ["enabled"] and .enabled == true) and
-  (.generated_artifacts | keys == ["enabled"] and .enabled == false) and
+  (.source_release | keys == ["enabled"] and (.enabled | type == "boolean")) and
+  (.generated_artifacts | keys == ["enabled"] and (.enabled | type == "boolean")) and
   (.prebuilt_release | (keys | sort) == ["enabled","required_github_environment"] and
-    .enabled == false and .required_github_environment == "prebuilt-distribution")
+    (.enabled | type == "boolean") and .required_github_environment == "prebuilt-distribution")
 ' "$policy" >/dev/null 2>&1; then
     policy_valid=1
 else
@@ -197,8 +216,16 @@ enumerate_personal() {
 
 valid_file_path() {
     local path=$1 description=$2
-    if [[ "$path" != /* ]] || [ ! -f "$path" ] || [ -L "$path" ]; then
-        block artifact-unreviewed "$description must be an absolute, regular, non-symlink file"
+    if [[ "$path" != /* ]]; then
+        block artifact-unreviewed "$description must be an absolute, regular file with no symlinked path components"
+        return 1
+    fi
+    if ! absolute_path_has_no_symlink_components "$path"; then
+        block artifact-unreviewed "$description path contains a symlink or non-canonical component"
+        return 1
+    fi
+    if [ ! -f "$path" ]; then
+        block artifact-unreviewed "$description must be an absolute, regular file with no symlinked path components"
         return 1
     fi
     return 0
@@ -325,7 +352,15 @@ check_obligations() {
                 path=$(jq -r '.location.path' <<<"$line")
                 expected=$(jq -r '.location.sha256' <<<"$line")
                 candidate=$release_root/$path
-                if [ -z "$root_real" ] || [ ! -f "$candidate" ] || [ -L "$candidate" ]; then
+                if [ -z "$root_real" ]; then
+                    block obligation-unfulfilled "release-bundle obligation is missing for $artifact: $path" "$artifact"
+                    continue
+                fi
+                if ! absolute_path_has_no_symlink_components "$candidate"; then
+                    block obligation-unfulfilled "release-bundle obligation path contains a symlink or non-canonical component for $artifact: $path" "$artifact"
+                    continue
+                fi
+                if [ ! -f "$candidate" ]; then
                     block obligation-unfulfilled "release-bundle obligation is missing for $artifact: $path" "$artifact"
                     continue
                 fi
@@ -451,7 +486,7 @@ check_dns_runtime() {
         else
             block artifact-unreviewed "SPDX SBOM violates the exact DNS contract: $id" "$id"
         fi
-        if jq -e '[.. | strings | select(. == "NOASSERTION")] | length > 0' "$sbom" >/dev/null; then
+        if jq -e '[.. | strings | ascii_upcase | select(contains("NOASSERTION"))] | length > 0' "$sbom" >/dev/null; then
             block noassertion-present "$id SPDX SBOM contains NOASSERTION" "$id"
         fi
     fi
@@ -528,12 +563,17 @@ case "$mode" in
         add_artifact repository-source-snapshot final-artifact "$source_sha" redistribution-reviewed
         ;;
     prebuilt-release)
-        if [ "$policy_valid" -eq 1 ] && ! jq -e '.prebuilt_release.enabled == true' "$policy" >/dev/null; then
-            block policy-disabled "prebuilt releases are disabled by global policy"
+        if [ "$policy_valid" -eq 1 ] &&
+            ! jq -e '.generated_artifacts.enabled == true and .prebuilt_release.enabled == true' "$policy" >/dev/null; then
+            block policy-disabled "prebuilt releases require generated-artifact and prebuilt-release policy to both be enabled"
         fi
         root_real=
-        if [[ "$release_root" != /* ]] || [ ! -d "$release_root" ] || [ -L "$release_root" ]; then
-            block obligation-unfulfilled "release root must be an absolute, existing, non-symlink directory"
+        if [[ "$release_root" != /* ]]; then
+            block obligation-unfulfilled "release root must be an absolute, existing directory with no symlinked path components"
+        elif ! absolute_path_has_no_symlink_components "$release_root"; then
+            block obligation-unfulfilled "release root path contains a symlink or non-canonical component"
+        elif [ ! -d "$release_root" ]; then
+            block obligation-unfulfilled "release root must be an absolute, existing directory with no symlinked path components"
         else
             root_real=$(realpath "$release_root")
         fi

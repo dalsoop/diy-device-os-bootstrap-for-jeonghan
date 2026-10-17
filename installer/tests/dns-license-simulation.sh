@@ -8,6 +8,7 @@ repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 validator=$repo_root/build/verify-distribution-contracts
 policy=$repo_root/build/distribution-policy.json
 temporary=$(mktemp -d)
+temporary=$(CDPATH='' cd -- "$temporary" && pwd -P)
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 
 sha256_file() {
@@ -133,6 +134,14 @@ jq -n '
 expect_failure "reviewed promotion while the SBOM contains NOASSERTION" \
     "$validator" --registry "$registry" --policy "$policy" \
     --component-review "$review" --sbom "$temporary/sbom-noassertion.json"
+
+for noassertion_variant in ' noassertion ' 'LicenseRef-NoAssertion'; do
+    jq --arg value "$noassertion_variant" '.packages[0].licenseDeclared=$value' \
+        "$temporary/sbom-noassertion.json" > "$temporary/sbom-noassertion-variant.json"
+    expect_failure "a normalized or decorated NOASSERTION value: $noassertion_variant" \
+        "$validator" --registry "$registry" --policy "$policy" \
+        --component-review "$review" --sbom "$temporary/sbom-noassertion-variant.json"
+done
 
 jq '.packages[0].licenseDeclared="GPL-3.0-only"' \
     "$temporary/sbom-noassertion.json" > "$temporary/sbom-complete.json"

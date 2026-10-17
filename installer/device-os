@@ -17,6 +17,10 @@ usage() {
 DIY Device OS Bootstrap for Jeonghan
 
 Usage:
+  ./device-os license check --mode personal-use [--json]
+  ./device-os license check --mode source-release [--json]
+  ./device-os license check --mode prebuilt-release --catalog ABS \
+    --artifact id=ABS --manifest id=ABS --review id=ABS --release-root ABS [--json]
   ./device-os world validate             Validate the selected World and media
   ./device-os world available            List Catalog entries and World selection
   ./device-os world plan                 Show World-selected USB contents
@@ -161,6 +165,12 @@ show_available() {
 
 command=${1:-help}
 case "$command" in
+    license)
+        shift
+        [ "${1:-}" = check ] || { usage >&2; exit 2; }
+        shift
+        exec "$repo_root/usb-media/check-license-policy" "$@"
+        ;;
     available)
         resolve
         selected=$(jq -c '.entries' "$collection")

@@ -9,6 +9,10 @@ monorepo_root=$(CDPATH='' cd -- "$repo_root/.." && pwd)
 catalog=${USB_MEDIA_CATALOG:-$repo_root/work/device-os/catalog.json}
 cache_dir=${USB_MEDIA_CACHE_DIR:-$repo_root/cache/usb-media}
 write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
+license_checker=${DEVICE_OS_LICENSE_CHECKER:-$script_dir/check-license-policy}
+distribution_renderer=${DEVICE_OS_DISTRIBUTION_RENDERER:-$script_dir/render-distribution-record}
+distribution_policy=$script_dir/distribution-policy.json
+decision_output=${DEVICE_OS_LICENSE_DECISION_OUTPUT:-}
 device=
 confirmation=
 image_build=0
@@ -16,6 +20,9 @@ declare -A runtime_artifacts=()
 declare -A runtime_manifests=()
 declare -A staged_sources=()
 declare -A staged_manifests=()
+declare -A staged_registries=()
+declare -A staged_sboms=()
+declare -A staged_reviews=()
 
 usage() {
     cat >&2 <<EOF
@@ -81,11 +88,13 @@ while [ "$#" -gt 0 ]; do
         --catalog) catalog=${2:-}; shift 2 ;;
         --runtime-artifact)
             assignment_parts "${2:-}"
+            [ -z "${runtime_artifacts[$assignment_id]+x}" ] || fail "duplicate runtime artifact ID: $assignment_id"
             runtime_artifacts["$assignment_id"]=$assignment_path
             shift 2
             ;;
         --runtime-manifest)
             assignment_parts "${2:-}"
+            [ -z "${runtime_manifests[$assignment_id]+x}" ] || fail "duplicate runtime manifest ID: $assignment_id"
             runtime_manifests["$assignment_id"]=$assignment_path
             shift 2
             ;;
@@ -107,6 +116,21 @@ for command in lsblk findmnt jq sha256sum python3 sfdisk blockdev udevadm mkfs.e
 done
 [ -r "$catalog" ] || fail "resolved catalog is missing; run ./device-os plan"
 "$script_dir/verify-catalog" "$catalog" >/dev/null
+[ -x "$license_checker" ] || fail "license policy checker is unavailable"
+[ -x "$distribution_renderer" ] || fail "distribution record renderer is unavailable"
+license_decision=$(mktemp)
+distribution_record=$(mktemp)
+decision_next=$license_decision.next
+trap 'rm -f "$license_decision" "$distribution_record" "$decision_next"' EXIT HUP INT TERM
+if ! DEVICE_OS_DISTRIBUTION_POLICY=$distribution_policy USB_MEDIA_CATALOG=$catalog \
+    "$license_checker" --mode personal-use --json > "$license_decision"; then
+    rm -f "$license_decision"
+    fail "personal-use license policy denied media creation"
+fi
+"$distribution_renderer" "$license_decision" "$distribution_policy" > "$distribution_record" ||
+    fail "personal-use distribution record is malformed"
+jq -e '.mode == "personal-use" and .decision == "allow"' "$distribution_record" >/dev/null ||
+    fail "personal-use distribution record is not allowed"
 repository_url=$(jq -er '.product.repository | select(startswith("https://"))' "$catalog")
 repository_revision=$(jq -er \
     '.catalog.revision | select(test("^[0-9a-f]{40}$"))' "$catalog")
@@ -121,28 +145,6 @@ for legal_file in LICENSE LICENSE_HISTORY.md THIRD_PARTY_NOTICES.md \
     third_party/licenses/Tailscale-BSD-3-Clause.txt; do
     [ -r "$monorepo_root/$legal_file" ] || fail "missing legal file: $legal_file"
 done
-
-[ -b "$device" ] || usage
-if [ "$image_build" -eq 1 ]; then
-    [ "$(lsblk -dnro TYPE "$device")" = loop ] ||
-        fail "image builds require a loop device"
-    [ -z "$confirmation" ] || fail "image builds do not accept erase confirmation"
-    serial=
-    model="generated raw image"
-else
-    [ "$(lsblk -dnro TYPE "$device")" = disk ] || fail "whole-disk target required"
-    [ "$(lsblk -dnro RM "$device")" = 1 ] || fail "target is not reported removable"
-
-    root_source=$(findmnt -nro SOURCE /)
-    root_parent=/dev/$(lsblk -no PKNAME "$root_source" 2>/dev/null | sed -n '1p')
-    [ "$device" != "$root_parent" ] || fail "refusing root disk"
-    serial=$(lsblk -dnro SERIAL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    model=$(lsblk -dnro MODEL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    [ -n "$serial" ] || fail "target has no readable serial"
-    [ -n "$model" ] || fail "target has no readable model"
-    [ "$confirmation" = "ERASE $device $serial" ] ||
-        fail "exact confirmation must include device and serial: ERASE $device $serial"
-fi
 
 data_label=$(jq -er '.usb.data_label' "$catalog")
 enrollment_label=$(jq -er '.usb.enrollment_label' "$catalog")
@@ -174,8 +176,8 @@ while IFS= read -r entry; do
         runtime-artifact)
             source_file=${runtime_artifacts[$id]:-}
             manifest=${runtime_manifests[$id]:-}
-            [ -r "$source_file" ] || fail "missing --runtime-artifact $id=/absolute/path"
-            [ -r "$manifest" ] || fail "missing --runtime-manifest $id=/absolute/path"
+            [ -f "$source_file" ] && [ ! -L "$source_file" ] || fail "missing or symlinked --runtime-artifact $id=/absolute/path"
+            [ -f "$manifest" ] && [ ! -L "$manifest" ] || fail "missing or symlinked --runtime-manifest $id=/absolute/path"
             digest_field=$(jq -er '.source.manifest_digest_field' <<<"$entry")
             expected=$(jq -er --arg field "$digest_field" \
                 '.[$field] | select(type == "string" and test("^[a-f0-9]{64}$"))' "$manifest")
@@ -184,6 +186,66 @@ while IFS= read -r entry; do
             staged_manifests["$id"]=$manifest
             if [ "$adapter" = dns-appliance ]; then
                 dns_manifest=$manifest
+                companion_dir=$(dirname -- "$manifest")
+                registry=$companion_dir/$(jq -er '.source.component_registry_filename' <<<"$entry")
+                sbom=$companion_dir/$(jq -er '.source.sbom_filename' <<<"$entry")
+                [ -f "$registry" ] && [ ! -L "$registry" ] || fail "DNS component registry is missing or symlinked"
+                [ -f "$sbom" ] && [ ! -L "$sbom" ] || fail "DNS SPDX SBOM is missing or symlinked"
+                "$repo_root/build/verify-distribution-contracts" --registry "$registry" >/dev/null
+                registry_digest=$(sha256sum "$registry" | awk '{print $1}')
+                sbom_digest=$(sha256sum "$sbom" | awk '{print $1}')
+                dns_policy_digest=$(sha256sum "$repo_root/build/distribution-policy.json" | awk '{print $1}')
+                jq -e \
+                    --arg registry_digest "$registry_digest" \
+                    --arg sbom_digest "$sbom_digest" \
+                    --arg policy_digest "$dns_policy_digest" \
+                    --slurpfile registry "$registry" '
+                  def exact_keys($expected): (keys | sort) == ($expected | sort);
+                  ["schema_version","artifact_id","build_id","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
+                  exact_keys($fields) and .schema_version == 1 and .artifact_id == "dns-appliance" and
+                  (.distribution_status == "personal-use-only" or .distribution_status == "redistribution-reviewed") and
+                  .component_registry == "component-redistribution-registry.json" and
+                  .component_registry_sha256 == $registry_digest and
+                  .distribution_policy_sha256 == $policy_digest and
+                  .components == ($registry[0].components | map({id,status:.redistribution.status})) and
+                  .sbom == "sbom.spdx.json" and .sbom_sha256 == $sbom_digest
+                ' "$manifest" >/dev/null || fail "DNS build manifest distribution evidence is invalid"
+                jq -e '.spdxVersion == "SPDX-2.3" and .dataLicense == "CC0-1.0" and (.packages | type == "array" and length >= 5)' \
+                    "$sbom" >/dev/null || fail "DNS SPDX SBOM is malformed"
+                manifest_status=$(jq -er '.distribution_status' "$manifest")
+                [ "$(jq -er '.redistribution.status' <<<"$entry")" = "$manifest_status" ] ||
+                    fail "DNS entry and build manifest distribution statuses differ"
+                if [ "$manifest_status" = redistribution-reviewed ]; then
+                    review=$companion_dir/$(jq -er '.final_review.record_filename' <<<"$entry")
+                    [ -f "$review" ] && [ ! -L "$review" ] || fail "reviewed DNS artifact requires the exact final review"
+                    "$repo_root/build/verify-distribution-contracts" \
+                        --registry "$registry" --final-review "$review" \
+                        --build-manifest "$manifest" --sbom "$sbom" >/dev/null
+                    staged_reviews["$id"]=$review
+                fi
+                staged_registries["$id"]=$registry
+                staged_sboms["$id"]=$sbom
+                jq \
+                    --arg id "$id" \
+                    --arg artifact_sha256 "$actual" \
+                    --arg status "$manifest_status" \
+                    --slurpfile registry "$registry" '
+                  def component($id): first($registry[0].components[] | select(.id == $id));
+                  .selected_artifacts |= map(
+                    if .id == $id and (.kind == "runtime-artifact" or .kind == "final-artifact") then
+                      .sha256 = $artifact_sha256 | .status = $status
+                    elif .kind == "component" then
+                      (component(.id)) as $component |
+                      if $component == null then .
+                      else .sha256 = $component.digest.value | .status = $component.redistribution.status end
+                    else . end) |
+                  .warnings =
+                    ([.warnings[] | select(.code != "artifact-unreviewed")] +
+                     [.selected_artifacts[] | select(.status == "personal-use-only") |
+                       {code:"artifact-unreviewed",artifact_id:.id,
+                        message:(.id + " (" + .kind + ") is not reviewed for public redistribution")}])
+                ' "$license_decision" > "$decision_next"
+                mv "$decision_next" "$license_decision"
             fi
             ;;
         *) fail "unsupported entry source kind: $kind" ;;
@@ -191,6 +253,10 @@ while IFS= read -r entry; do
     staged_sources["$id"]=$source_file
     required_bytes=$((required_bytes + $(stat -c %s "$source_file")))
 done < <(jq -c '.entries[]' "$catalog")
+for supplied_id in "${!runtime_artifacts[@]}" "${!runtime_manifests[@]}"; do
+    jq -e --arg id "$supplied_id" '.entries[] | select(.id == $id and .source.kind == "runtime-artifact")' \
+        "$catalog" >/dev/null || fail "runtime input names an unknown or non-runtime ID: $supplied_id"
+done
 if [ -n "$dns_manifest" ]; then
     [ "$reserve_mib" -ge 512 ] || fail "dns-appliance requires at least 512 MiB enrollment reserve"
 else
@@ -212,6 +278,41 @@ while IFS= read -r bundle; do
         fail "repository bundle tree may not contain symlinks: $path"
     fi
 done < <(jq -c '.bundles[]' "$catalog")
+
+"$distribution_renderer" "$license_decision" "$distribution_policy" > "$distribution_record" ||
+    fail "enriched personal-use distribution record is malformed"
+jq -e '.mode == "personal-use" and .decision == "allow"' "$distribution_record" >/dev/null ||
+    fail "enriched personal-use distribution record is not allowed"
+if [ -n "$decision_output" ]; then
+    [[ "$decision_output" = /* ]] || fail "DEVICE_OS_LICENSE_DECISION_OUTPUT must be absolute"
+    [ -d "$(dirname -- "$decision_output")" ] || fail "license decision output directory is missing"
+    [ ! -L "$decision_output" ] || fail "license decision output may not be a symlink"
+    decision_output_temporary=$decision_output.tmp.$$
+    install -m 0600 "$license_decision" "$decision_output_temporary"
+    mv "$decision_output_temporary" "$decision_output"
+fi
+
+[ -b "$device" ] || usage
+if [ "$image_build" -eq 1 ]; then
+    [ "$(lsblk -dnro TYPE "$device")" = loop ] ||
+        fail "image builds require a loop device"
+    [ -z "$confirmation" ] || fail "image builds do not accept erase confirmation"
+    serial=
+    model="generated raw image"
+else
+    [ "$(lsblk -dnro TYPE "$device")" = disk ] || fail "whole-disk target required"
+    [ "$(lsblk -dnro RM "$device")" = 1 ] || fail "target is not reported removable"
+
+    root_source=$(findmnt -nro SOURCE /)
+    root_parent=/dev/$(lsblk -no PKNAME "$root_source" 2>/dev/null | sed -n '1p')
+    [ "$device" != "$root_parent" ] || fail "refusing root disk"
+    serial=$(lsblk -dnro SERIAL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    model=$(lsblk -dnro MODEL "$device" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    [ -n "$serial" ] || fail "target has no readable serial"
+    [ -n "$model" ] || fail "target has no readable model"
+    [ "$confirmation" = "ERASE $device $serial" ] ||
+        fail "exact confirmation must include device and serial: ERASE $device $serial"
+fi
 
 required_bytes=$((required_bytes + reserve_mib * 1024 * 1024 + overhead_mib * 1024 * 1024))
 device_bytes=$(blockdev --getsize64 "$device")
@@ -246,6 +347,8 @@ cleanup() {
         umount "$enroll_dir" || true
     fi
     rm -rf "$temporary"
+    rm -f "$license_decision"
+    rm -f "$distribution_record" "$decision_next"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -345,6 +448,9 @@ install -m 0644 "$monorepo_root/THIRD_PARTY_NOTICES.md" \
     "$mount_dir/licenses/THIRD_PARTY_NOTICES.md"
 install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt" \
     "$mount_dir/licenses/Tailscale-BSD-3-Clause.txt"
+install -m 0644 "$script_dir/distribution-policy.json" \
+    "$mount_dir/licenses/distribution-policy.json"
+install -m 0644 "$distribution_record" "$mount_dir/licenses/DISTRIBUTION.json"
 {
     echo "# Corresponding Source"
     echo
@@ -367,6 +473,16 @@ while IFS= read -r entry; do
         manifest_destination=$(jq -er '.source.manifest_destination' <<<"$entry")
         install -d -m 0755 "$(dirname -- "$mount_dir/$manifest_destination")"
         install -m 0644 "${staged_manifests[$id]}" "$mount_dir/$manifest_destination"
+        if [ -n "${staged_registries[$id]:-}" ]; then
+            registry_destination=$(jq -er '.source.component_registry_destination' <<<"$entry")
+            sbom_destination=$(jq -er '.source.sbom_destination' <<<"$entry")
+            install -m 0644 "${staged_registries[$id]}" "$mount_dir/$registry_destination"
+            install -m 0644 "${staged_sboms[$id]}" "$mount_dir/$sbom_destination"
+            if [ -n "${staged_reviews[$id]:-}" ]; then
+                review_destination=$(jq -er '.final_review.record_destination' <<<"$entry")
+                install -m 0644 "${staged_reviews[$id]}" "$mount_dir/$review_destination"
+            fi
+        fi
     fi
 done < <(jq -c '.entries[]' "$catalog")
 
@@ -393,6 +509,7 @@ install -m 0644 "$catalog" "$mount_dir/manifests/media-catalog.json"
     find images -type f -name '*.iso' -exec sha256sum {} + | LC_ALL=C sort > manifests/SHA256SUMS
     sha256sum manifests/media-catalog.json > manifests/MEDIA-CATALOG.SHA256
     find licenses -type f -exec sha256sum {} + | LC_ALL=C sort > manifests/LICENSES.SHA256
+    find manifests -type f ! -name 'MANIFESTS.SHA256' -exec sha256sum {} + | LC_ALL=C sort > manifests/MANIFESTS.SHA256
 )
 "$script_dir/render-ventoy-config" "$catalog" > "$mount_dir/ventoy/ventoy.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
@@ -408,6 +525,7 @@ python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
         echo "DNS 등록 결과는 DNS-ENROLL 파티션에만 기록된다."
     fi
     echo "라이선스, 제3자 고지와 소스 위치는 licenses/에 있다."
+    echo "이 USB는 개인 사용 전용이며 공개 재배포 승인을 의미하지 않는다."
     echo "Ventoy 언어는 L 키로 바꾼다."
 } > "$mount_dir/README_KO.txt"
 {
@@ -420,6 +538,7 @@ python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
         echo "DNS enrollment output is written only to DNS-ENROLL."
     fi
     echo "Licenses, third-party notices, and source locations are under licenses/."
+    echo "This USB is for personal use only and does not approve public redistribution."
     echo "Press L to change Ventoy language."
 } > "$mount_dir/README_EN.txt"
 sync -f "$mount_dir"
@@ -442,6 +561,7 @@ mount -o ro,nodev,nosuid,noexec "$main_partition" "$mount_dir"
     sha256sum -c manifests/SHA256SUMS
     sha256sum -c manifests/MEDIA-CATALOG.SHA256
     sha256sum -c manifests/LICENSES.SHA256
+    sha256sum -c manifests/MANIFESTS.SHA256
     python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
         ventoy/ventoy.json
 )

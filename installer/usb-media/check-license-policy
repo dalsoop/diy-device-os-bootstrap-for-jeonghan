@@ -204,9 +204,117 @@ valid_file_path() {
     return 0
 }
 
+validate_dns_build_manifest() {
+    jq -e --slurpfile schema "$repo_root/schemas/dns-build-manifest.schema.json" '
+      def exact_keys($expected): (keys | sort) == ($expected | sort);
+      def digest: type == "string" and test("^[a-f0-9]{64}$");
+      def status: . == "personal-use-only" or . == "redistribution-reviewed";
+      def component_status($id):
+        exact_keys(["id","status"]) and .id == $id and (.status | status);
+      ["schema_version","artifact_id","build_id","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
+      ($schema[0]["$id"] | endswith("/installer/schemas/dns-build-manifest.schema.json")) and
+      $schema[0].additionalProperties == false and
+      (($schema[0].required | sort) == ($fields | sort)) and
+      (($schema[0].properties | keys | sort) == ($fields | sort)) and
+      exact_keys($fields) and
+      .schema_version == 1 and .artifact_id == "dns-appliance" and
+      (.build_id | type == "string" and length > 0) and
+      (.iso | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._+-]*\\.iso$")) and
+      (.iso_sha256 | digest) and (.distribution_status | status) and
+      .component_registry == "component-redistribution-registry.json" and
+      (.component_registry_sha256 | digest) and (.distribution_policy_sha256 | digest) and
+      (.components | type == "array" and length == 5) and
+      (.components[0] | component_status("debian-package-closure")) and
+      (.components[1] | component_status("technitium-oci")) and
+      (.components[2] | component_status("tailscale-archive")) and
+      (.components[3] | component_status("tailscale-dependency-report")) and
+      (.components[4] | component_status("repository-source-snapshot")) and
+      .sbom == "sbom.spdx.json" and (.sbom_sha256 | digest) and
+      (.debian_point_release | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+      (.debian_snapshot | test("^[0-9]{8}T[0-9]{6}Z$")) and
+      (.technitium_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+      (.technitium_image_digest | test("^sha256:[a-f0-9]{64}$")) and
+      (.technitium_archive_sha256 | digest) and
+      (.tailscale_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+      (.tailscale_archive_sha256 | digest) and
+      (.source_revision | type == "string" and test("^[a-f0-9]{40}$")) and
+      .source_repository == "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan" and
+      .source_archive == (.source_repository + "/archive/" + .source_revision + ".tar.gz")
+    ' "$1" >/dev/null 2>&1
+}
+
+validate_dns_sbom() {
+    jq -e '
+      def exact_keys($expected): (keys | sort) == ($expected | sort);
+      def nonempty: type == "string" and length > 0;
+      def package:
+        (exact_keys(["name","versionInfo","SPDXID","downloadLocation","filesAnalyzed","licenseDeclared","licenseConcluded","copyrightText"]) or
+         exact_keys(["name","versionInfo","SPDXID","downloadLocation","filesAnalyzed","licenseDeclared","licenseConcluded","copyrightText","comment"])) and
+        (.name | nonempty) and (.versionInfo | nonempty) and
+        (.SPDXID | type == "string" and test("^SPDXRef-[A-Za-z0-9.-]+$")) and
+        (.downloadLocation | nonempty) and .filesAnalyzed == false and
+        (.licenseDeclared | nonempty) and (.licenseConcluded | nonempty) and
+        (.copyrightText | nonempty) and ((has("comment") | not) or (.comment | nonempty));
+      ["SPDXRef-DebianPackageClosure","SPDXRef-Technitium","SPDXRef-Tailscale","SPDXRef-TailscaleDependencyReport","SPDXRef-DIYDeviceOSBootstrapForJeonghan"] as $described |
+      exact_keys(["spdxVersion","dataLicense","SPDXID","name","documentNamespace","creationInfo","documentDescribes","packages"]) and
+      .spdxVersion == "SPDX-2.3" and .dataLicense == "CC0-1.0" and .SPDXID == "SPDXRef-DOCUMENT" and
+      (.name | type == "string" and startswith("dns-appliance-installer-") and length > 25) and
+      (.documentNamespace | type == "string" and startswith("https://")) and
+      (.creationInfo | exact_keys(["created","creators"])) and
+      (.creationInfo.created | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+      (.creationInfo.creators | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)) and
+      .documentDescribes == $described and
+      (.packages | type == "array" and length >= 5 and all(.[]; package)) and
+      (([.packages[].SPDXID] | length) == ([.packages[].SPDXID] | unique | length)) and
+      ([.packages[].SPDXID] as $ids | all($described[]; . as $id | $ids | index($id) != null))
+    ' "$1" >/dev/null 2>&1
+}
+
 check_obligations() {
-    local record=$1 artifact=$2 root_real=$3 line disposition path expected candidate candidate_real actual
-    while IFS= read -r line; do
+    local record=$1 artifact=$2 root_real=$3 kind count line disposition path expected candidate candidate_real actual
+    if ! jq -e '.obligations | type == "array"' <<<"$record" >/dev/null 2>&1; then
+        block obligation-unfulfilled "obligations are missing or malformed for $artifact" "$artifact"
+        return
+    fi
+    while IFS= read -r kind; do
+        [ -n "$kind" ] || {
+            block obligation-unfulfilled "obligation kind is malformed for $artifact" "$artifact"
+            continue
+        }
+        case "$kind" in license-text|notices|corresponding-source|trademark) ;; *)
+            block obligation-unfulfilled "obligation kind is mismatched for $artifact: $kind" "$artifact"
+            ;;
+        esac
+    done < <(jq -r '.obligations[] | if type == "object" and (.kind | type == "string") then .kind else "" end' <<<"$record")
+    for kind in license-text notices corresponding-source trademark; do
+        count=$(jq -r --arg kind "$kind" '[.obligations[] | select(type == "object" and .kind == $kind)] | length' <<<"$record")
+        if [ "$count" -eq 0 ]; then
+            block obligation-unfulfilled "required obligation is missing for $artifact: $kind" "$artifact"
+            continue
+        fi
+        if [ "$count" -ne 1 ]; then
+            block obligation-unfulfilled "required obligation is duplicated for $artifact: $kind" "$artifact"
+            continue
+        fi
+        line=$(jq -c --arg kind "$kind" '.obligations[] | select(type == "object" and .kind == $kind)' <<<"$record")
+        if ! jq -e --arg kind "$kind" '
+          def exact_keys($expected): (keys | sort) == ($expected | sort);
+          def digest: type == "string" and test("^[a-f0-9]{64}$");
+          def safe_path: type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._+/-]*$") and
+            (startswith("/") | not) and (split("/") | all(. != "" and . != "." and . != ".."));
+          def location($scope): exact_keys(["scope","path","sha256"]) and .scope == $scope and
+            (.path | safe_path) and (.sha256 | digest);
+          type == "object" and .kind == $kind and
+          if .disposition == "embedded-artifact" then
+            exact_keys(["kind","disposition","location"]) and (.location | location("artifact"))
+          elif .disposition == "bundle-file" then
+            exact_keys(["kind","disposition","location"]) and (.location | location("release-bundle"))
+          elif .disposition == "not-required" then exact_keys(["kind","disposition"])
+          else false end
+        ' <<<"$line" >/dev/null 2>&1; then
+            block obligation-unfulfilled "obligation is malformed or mismatched for $artifact: $kind" "$artifact"
+            continue
+        fi
         disposition=$(jq -r '.disposition' <<<"$line")
         case "$disposition" in
             not-required) ;;
@@ -233,7 +341,7 @@ check_obligations() {
                 ;;
             *) block obligation-unfulfilled "unknown obligation disposition for $artifact" "$artifact" ;;
         esac
-    done < <(jq -c '.obligations[]?' <<<"$record")
+    done
 }
 
 check_prebuilt_entry() {
@@ -282,8 +390,8 @@ check_dns_runtime() {
     review=$(assigned_path "$id" "$review_map")
     if [ -z "$manifest" ] || ! valid_file_path "$manifest" "manifest $id"; then
         block artifact-unreviewed "runtime build manifest is missing: $id" "$id"
-    elif ! jq -e 'type == "object"' "$manifest" >/dev/null 2>&1; then
-        block artifact-unreviewed "runtime build manifest is malformed: $id" "$id"
+    elif ! validate_dns_build_manifest "$manifest"; then
+        block artifact-unreviewed "runtime build manifest violates the exact DNS contract: $id" "$id"
     else
         manifest_ok=1
         expected=$(jq -r '.iso_sha256 // empty' "$manifest" 2>/dev/null || true)
@@ -303,8 +411,9 @@ check_dns_runtime() {
     sbom=$dir/$(jq -r '.source.sbom_filename' <<<"$entry")
     if ! valid_file_path "$registry" "component registry $id"; then
         block artifact-unreviewed "component registry is missing: $id" "$id"
-    elif ! jq -e 'type == "object" and (.components | type == "array")' "$registry" >/dev/null 2>&1; then
-        block artifact-unreviewed "component registry is malformed: $id" "$id"
+    elif ! "$repo_root/build/verify-distribution-contracts" --registry "$registry" \
+        --policy "$repo_root/build/distribution-policy.json" >/dev/null 2>&1; then
+        block artifact-unreviewed "component registry violates the exact DNS contract: $id" "$id"
     else
         registry_ok=1
     fi
@@ -335,9 +444,13 @@ check_dns_runtime() {
     if ! valid_file_path "$sbom" "SPDX SBOM $id"; then
         block artifact-unreviewed "SPDX SBOM is missing: $id" "$id"
     elif ! jq -e 'type == "object"' "$sbom" >/dev/null 2>&1; then
-        block artifact-unreviewed "SPDX SBOM is malformed: $id" "$id"
+        block artifact-unreviewed "SPDX SBOM violates the exact DNS contract: $id" "$id"
     else
-        sbom_ok=1
+        if validate_dns_sbom "$sbom"; then
+            sbom_ok=1
+        else
+            block artifact-unreviewed "SPDX SBOM violates the exact DNS contract: $id" "$id"
+        fi
         if jq -e '[.. | strings | select(. == "NOASSERTION")] | length > 0' "$sbom" >/dev/null; then
             block noassertion-present "$id SPDX SBOM contains NOASSERTION" "$id"
         fi

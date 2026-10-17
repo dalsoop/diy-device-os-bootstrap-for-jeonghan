@@ -293,9 +293,9 @@ if "$checker" --mode prebuilt-release --catalog "$temporary/reviewed-catalog.jso
     fail "prebuilt release allowed malformed runtime evidence"
 fi
 jq -e '
-  ([.blockers[].message] | index("runtime build manifest is malformed: dns-appliance")) != null and
-  ([.blockers[].message] | index("component registry is malformed: dns-appliance")) != null and
-  ([.blockers[].message] | index("SPDX SBOM is malformed: dns-appliance")) != null and
+  ([.blockers[].message] | index("runtime build manifest violates the exact DNS contract: dns-appliance")) != null and
+  ([.blockers[].message] | index("component registry violates the exact DNS contract: dns-appliance")) != null and
+  ([.blockers[].message] | index("SPDX SBOM violates the exact DNS contract: dns-appliance")) != null and
   ([.blockers[].message] | index("final review is malformed: dns-appliance")) != null and
   ([.selected_artifacts[] | select(.kind == "component") | .id] ==
     ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","repository-source-snapshot"])
@@ -316,6 +316,63 @@ jq -e '
   ([.blockers[].message] | index("exact final review is missing: dns-appliance")) != null and
   ([.selected_artifacts[] | select(.kind == "component")] | length) == 5
 ' "$temporary/missing-evidence.json" >/dev/null || fail "missing evidence was not independently aggregated"
+
+if "$checker" --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
+    "${artifact_args[@]}" \
+    --manifest "dns-appliance=$temporary/runtime/build-manifest.json" \
+    --review "dns-appliance=$temporary/runtime/missing-review.json" \
+    --release-root "$temporary/release" --json > "$temporary/independent-contracts.json"; then
+    fail "prebuilt release allowed independently malformed DNS contracts"
+fi
+jq -e '
+  ([.blockers[].message] | index("runtime build manifest violates the exact DNS contract: dns-appliance")) != null and
+  ([.blockers[].message] | index("SPDX SBOM violates the exact DNS contract: dns-appliance")) != null and
+  ([.blockers[].message] | index("exact final review is missing: dns-appliance")) != null
+' "$temporary/independent-contracts.json" >/dev/null ||
+    fail "available manifest and SBOM were not exact-validated without a review"
+
+mkdir -p "$temporary/independent-registry"
+printf '%s\n' '{"schema_version":1,"artifact_id":"dns-appliance","components":[],"unexpected":true}' \
+    > "$temporary/independent-registry/component-redistribution-registry.json"
+if "$checker" --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
+    "${artifact_args[@]}" \
+    --manifest "dns-appliance=$temporary/independent-registry/missing-build-manifest.json" \
+    --review "dns-appliance=$temporary/independent-registry/missing-review.json" \
+    --release-root "$temporary/release" --json > "$temporary/independent-registry.json"; then
+    fail "prebuilt release allowed an independently malformed component registry"
+fi
+jq -e '
+  ([.blockers[].message] | index("runtime build manifest is missing: dns-appliance")) != null and
+  ([.blockers[].message] | index("component registry violates the exact DNS contract: dns-appliance")) != null and
+  ([.blockers[].message] | index("exact final review is missing: dns-appliance")) != null
+' "$temporary/independent-registry.json" >/dev/null ||
+    fail "available registry was not exact-validated without manifest or review"
+
+jq '.obligations = [
+  {kind:"license-text",disposition:"not-required"},
+  {kind:"license-text",disposition:"not-required"},
+  {kind:"notices",disposition:"bundle-file",location:{scope:"artifact",path:"NOTICE",sha256:("a"*64)}},
+  {kind:"corresponding-source",disposition:"not-required"},
+  {kind:"unexpected",disposition:"not-required"}
+]' "$temporary/runtime/dns-final-review-record.json" > "$temporary/runtime/bad-obligations-review.json"
+if "$checker" --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
+    "${artifact_args[@]}" \
+    --manifest "dns-appliance=$temporary/runtime/build-manifest.json" \
+    --review "dns-appliance=$temporary/runtime/bad-obligations-review.json" \
+    --release-root "$temporary/release" --json > "$temporary/bad-obligations.json"; then
+    fail "prebuilt release allowed malformed obligation coverage"
+fi
+jq -e '
+  ([.blockers[] | select(.code == "obligation-unfulfilled") | .message] |
+    index("required obligation is duplicated for dns-appliance: license-text")) != null and
+  ([.blockers[] | select(.code == "obligation-unfulfilled") | .message] |
+    index("obligation is malformed or mismatched for dns-appliance: notices")) != null and
+  ([.blockers[] | select(.code == "obligation-unfulfilled") | .message] |
+    index("required obligation is missing for dns-appliance: trademark")) != null and
+  ([.blockers[] | select(.code == "obligation-unfulfilled") | .message] |
+    index("obligation kind is mismatched for dns-appliance: unexpected")) != null
+' "$temporary/bad-obligations.json" >/dev/null ||
+    fail "missing, duplicate, malformed, and mismatched obligations were not reported"
 
 "$distribution_renderer" "$temporary/denied.json" "$repo_root/usb-media/distribution-policy.json" \
     > "$temporary/DISTRIBUTION.json"

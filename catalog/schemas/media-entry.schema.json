@@ -3,31 +3,180 @@
   "$id": "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/blob/main/catalog/schemas/media-entry.schema.json",
   "title": "Device OS Entry",
   "type": "object",
-  "required": ["schema_version", "id", "group", "version", "destination", "menu_alias", "description_ko", "description_en", "boot_behavior", "profile_adapter", "source"],
+  "required": ["schema_version", "id", "group", "version", "destination", "menu_alias", "description_ko", "description_en", "boot_behavior", "profile_adapter", "source", "redistribution"],
   "properties": {
-    "schema_version": { "const": 1 },
-    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-    "group": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "schema_version": { "const": 2 },
+    "id": { "$ref": "#/$defs/id" },
+    "group": { "$ref": "#/$defs/id" },
     "version": { "type": "string", "minLength": 1 },
     "architecture": { "type": "string", "minLength": 1 },
-    "destination": { "type": "string", "pattern": "^images/.+\\.iso$" },
+    "destination": {
+      "allOf": [
+        { "$ref": "#/$defs/safeRelativePath" },
+        { "pattern": "^images/.+\\.iso$" }
+      ]
+    },
     "menu_alias": { "type": "string", "minLength": 1 },
     "description_ko": { "type": "string", "minLength": 1 },
     "description_en": { "type": "string", "minLength": 1 },
     "boot_behavior": { "enum": ["interactive-installer", "live-environment"] },
     "profile_adapter": { "const": "none" },
+    "source": { "$ref": "#/$defs/source" },
+    "redistribution": { "$ref": "#/$defs/redistribution" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "httpsUrl": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "safeRelativePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9](?:[A-Za-z0-9._+!/-]*[A-Za-z0-9._+!-])?$"
+    },
     "source": {
       "type": "object",
       "required": ["kind", "filename", "url", "sha256"],
       "properties": {
         "kind": { "const": "locked-download" },
-        "filename": { "type": "string", "minLength": 1 },
-        "url": { "type": "string", "pattern": "^https://" },
-        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        "filename": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+!-]*$"
+        },
+        "url": { "$ref": "#/$defs/httpsUrl" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "redistribution": {
+      "oneOf": [
+        { "$ref": "#/$defs/personalUseOnly" },
+        { "$ref": "#/$defs/redistributionReviewed" }
+      ]
+    },
+    "personalUseOnly": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "const": "personal-use-only" }
+      },
+      "additionalProperties": false
+    },
+    "redistributionReviewed": {
+      "type": "object",
+      "required": ["status", "artifact_version", "artifact_url", "artifact_sha256", "reviewed_at", "reviewer", "evidence", "obligations"],
+      "properties": {
+        "status": { "const": "redistribution-reviewed" },
+        "artifact_version": { "type": "string", "minLength": 1 },
+        "artifact_url": { "$ref": "#/$defs/httpsUrl" },
+        "artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "reviewed_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "reviewer": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/evidence" },
+        "obligations": { "$ref": "#/$defs/obligations" }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["kind", "url"],
+        "properties": {
+          "kind": { "enum": ["license", "notices", "corresponding-source", "trademark"] },
+          "url": { "$ref": "#/$defs/httpsUrl" }
+        },
+        "additionalProperties": false
+      },
+      "allOf": [
+        { "contains": { "type": "object", "properties": { "kind": { "const": "license" } }, "required": ["kind"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "notices" } }, "required": ["kind"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "corresponding-source" } }, "required": ["kind"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "trademark" } }, "required": ["kind"] } }
+      ]
+    },
+    "obligations": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/obligation" },
+      "allOf": [
+        { "contains": { "type": "object", "properties": { "kind": { "const": "license-text" } }, "required": ["kind"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "notices" } }, "required": ["kind"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "corresponding-source" } }, "required": ["kind"] } },
+        { "contains": { "type": "object", "properties": { "kind": { "const": "trademark" } }, "required": ["kind"] } }
+      ]
+    },
+    "obligation": {
+      "oneOf": [
+        { "$ref": "#/$defs/embeddedObligation" },
+        { "$ref": "#/$defs/bundleObligation" },
+        { "$ref": "#/$defs/notRequiredObligation" }
+      ]
+    },
+    "embeddedObligation": {
+      "type": "object",
+      "required": ["kind", "disposition", "location"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/obligationKind" },
+        "disposition": { "const": "embedded-artifact" },
+        "location": {
+          "allOf": [
+            { "$ref": "#/$defs/location" },
+            { "properties": { "scope": { "const": "artifact" } } }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "bundleObligation": {
+      "type": "object",
+      "required": ["kind", "disposition", "location"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/obligationKind" },
+        "disposition": { "const": "bundle-file" },
+        "location": {
+          "allOf": [
+            { "$ref": "#/$defs/location" },
+            { "properties": { "scope": { "const": "release-bundle" } } }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "notRequiredObligation": {
+      "type": "object",
+      "required": ["kind", "disposition"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/obligationKind" },
+        "disposition": { "const": "not-required" }
+      },
+      "additionalProperties": false
+    },
+    "obligationKind": {
+      "enum": ["license-text", "notices", "corresponding-source", "trademark"]
+    },
+    "location": {
+      "type": "object",
+      "required": ["scope", "path", "sha256"],
+      "properties": {
+        "scope": { "enum": ["artifact", "release-bundle"] },
+        "path": { "$ref": "#/$defs/safeRelativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
       },
       "additionalProperties": false
     }
-  },
-  "additionalProperties": false
+  }
 }
-

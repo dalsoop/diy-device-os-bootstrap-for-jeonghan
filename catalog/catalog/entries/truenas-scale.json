@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "truenas-scale",
   "group": "storage",
   "version": "25.10.7",
@@ -15,6 +15,9 @@
     "filename": "TrueNAS-SCALE-25.10.7.iso",
     "url": "https://download.truenas.com/TrueNAS-SCALE-Goldeye/25.10.7/TrueNAS-SCALE-25.10.7.iso",
     "sha256": "54ce9441ce66966a392e28f63604ca3c2c083d0bec4db7bb5af2f74f7a007c8e"
+  },
+  "redistribution": {
+    "status": "personal-use-only"
   }
 }
 

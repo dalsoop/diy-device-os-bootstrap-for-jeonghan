@@ -14,6 +14,14 @@
     "redistribution": { "$ref": "#/$defs/redistribution" }
   },
   "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "redistribution": { "$ref": "#/$defs/personalUseOnly" }
+      }
+    },
+    { "$ref": "#/$defs/reviewedArtifactTuples" }
+  ],
   "$defs": {
     "id": {
       "type": "string",
@@ -49,6 +57,30 @@
       "oneOf": [
         { "$ref": "#/$defs/personalUseOnly" },
         { "$ref": "#/$defs/redistributionReviewed" }
+      ]
+    },
+    "reviewedArtifactTuples": {
+      "oneOf": [
+        {
+          "properties": {
+            "id": { "const": "ventoy" },
+            "version": { "const": "1.1.18" },
+            "source": {
+              "properties": {
+                "url": { "const": "https://github.com/ventoy/Ventoy/releases/download/v1.1.18/ventoy-1.1.18-linux.tar.gz" },
+                "sha256": { "const": "d86ff9de63d94c8b8f1f6b14d23c55af4b88e8207bf2893890892a6a97b1ad54" }
+              }
+            },
+            "redistribution": {
+              "properties": {
+                "status": { "const": "redistribution-reviewed" },
+                "artifact_version": { "const": "1.1.18" },
+                "artifact_url": { "const": "https://github.com/ventoy/Ventoy/releases/download/v1.1.18/ventoy-1.1.18-linux.tar.gz" },
+                "artifact_sha256": { "const": "d86ff9de63d94c8b8f1f6b14d23c55af4b88e8207bf2893890892a6a97b1ad54" }
+              }
+            }
+          }
+        }
       ]
     },
     "personalUseOnly": {

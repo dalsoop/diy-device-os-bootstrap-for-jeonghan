@@ -43,6 +43,16 @@ rejects incomplete records, identity mismatches, unknown fields, unsafe paths,
 and invalid disposition/location combinations. This metadata records a review;
 it does not itself authorize or perform a public release.
 
+Because standard JSON Schema cannot compare arbitrary sibling values, each
+schema closes reviewed records over an explicit list of exact artifact
+ID/version/URL/SHA-256 tuples. A new or updated artifact may remain
+`personal-use-only` without changing that list; promoting it to
+`redistribution-reviewed` requires adding its exact tuple in the same change.
+The Catalog simulation checks that tuple branches cover every current record
+and are internally consistent. The integration contracts task must also run a
+standards-compliant JSON Schema 2020-12 validator against accepted and rejected
+reviewed fixtures; executable jq validation is not a substitute for that gate.
+
 For a release update, verify the authoritative vendor version, architecture,
 filename, URL, and lowercase SHA-256 as one review unit. Update the entry and
 its redistribution status together and rely on the root CI for validation. A passing

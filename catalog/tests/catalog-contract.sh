@@ -38,6 +38,37 @@ expect_rejected() {
     fi
 }
 
+assert_reviewed_tuple_coverage() {
+    schema=$1
+    shift
+    jq -r '[.id, .version, .source.url, .source.sha256] | @tsv' "$@" |
+        LC_ALL=C sort > "$temporary/current-tuples"
+    jq -r '
+      .["$defs"].reviewedArtifactTuples.oneOf[] |
+      [
+        .properties.id.const,
+        .properties.version.const,
+        .properties.source.properties.url.const,
+        .properties.source.properties.sha256.const
+      ] | @tsv
+    ' "$schema" | LC_ALL=C sort > "$temporary/schema-tuples"
+    cmp -s "$temporary/current-tuples" "$temporary/schema-tuples" ||
+        fail "reviewed schema tuple branches do not cover current records: $schema"
+    jq -e '
+      .oneOf[1]."$ref" == "#/$defs/reviewedArtifactTuples" and
+      all(.["$defs"].reviewedArtifactTuples.oneOf[];
+        .properties.redistribution.properties.status.const == "redistribution-reviewed" and
+        .properties.version.const ==
+          .properties.redistribution.properties.artifact_version.const and
+        .properties.source.properties.url.const ==
+          .properties.redistribution.properties.artifact_url.const and
+        .properties.source.properties.sha256.const ==
+          .properties.redistribution.properties.artifact_sha256.const
+      )
+    ' "$schema" >/dev/null ||
+        fail "reviewed schema tuple branch is not self-consistent: $schema"
+}
+
 reviewed_redistribution='{
   "status": "redistribution-reviewed",
   "artifact_version": "9.2-1",
@@ -68,6 +99,11 @@ for record in "$repo_root"/catalog/entries/*.json "$repo_root"/catalog/bootloade
     ' "$record" >/dev/null ||
         fail "current real record is not personal-use-only: $record"
 done
+
+assert_reviewed_tuple_coverage "$repo_root/schemas/media-entry.schema.json" \
+    "$repo_root"/catalog/entries/*.json
+assert_reviewed_tuple_coverage "$repo_root/schemas/bootloader.schema.json" \
+    "$repo_root"/catalog/bootloaders/*.json
 
 reset_fixture
 replace_entry '.source.sha256 = "not-a-digest"'

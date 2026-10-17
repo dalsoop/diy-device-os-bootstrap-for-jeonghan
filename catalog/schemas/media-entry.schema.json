@@ -25,6 +25,14 @@
     "redistribution": { "$ref": "#/$defs/redistribution" }
   },
   "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "redistribution": { "$ref": "#/$defs/personalUseOnly" }
+      }
+    },
+    { "$ref": "#/$defs/reviewedArtifactTuples" }
+  ],
   "$defs": {
     "id": {
       "type": "string",
@@ -60,6 +68,110 @@
       "oneOf": [
         { "$ref": "#/$defs/personalUseOnly" },
         { "$ref": "#/$defs/redistributionReviewed" }
+      ]
+    },
+    "reviewedArtifactTuples": {
+      "oneOf": [
+        {
+          "properties": {
+            "id": { "const": "debian-live" },
+            "version": { "const": "13.7.0" },
+            "source": {
+              "properties": {
+                "url": { "const": "https://cdimage.debian.org/debian-cd/13.7.0-live/amd64/iso-hybrid/debian-live-13.7.0-amd64-standard.iso" },
+                "sha256": { "const": "040a44f35186321eb6cdaab52a8a2d06224fe6b77f6fbb9f1861ad89c14e17ec" }
+              }
+            },
+            "redistribution": {
+              "properties": {
+                "status": { "const": "redistribution-reviewed" },
+                "artifact_version": { "const": "13.7.0" },
+                "artifact_url": { "const": "https://cdimage.debian.org/debian-cd/13.7.0-live/amd64/iso-hybrid/debian-live-13.7.0-amd64-standard.iso" },
+                "artifact_sha256": { "const": "040a44f35186321eb6cdaab52a8a2d06224fe6b77f6fbb9f1861ad89c14e17ec" }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "id": { "const": "pop-os" },
+            "version": { "const": "24.04-build-28" },
+            "source": {
+              "properties": {
+                "url": { "const": "https://iso.pop-os.org/24.04/amd64/generic/28/pop-os_24.04_amd64_generic_28.iso" },
+                "sha256": { "const": "8d78e500fc95da765a91cddcf2ab7ba71ce4e7997e4f008456d4d872ee8f8221" }
+              }
+            },
+            "redistribution": {
+              "properties": {
+                "status": { "const": "redistribution-reviewed" },
+                "artifact_version": { "const": "24.04-build-28" },
+                "artifact_url": { "const": "https://iso.pop-os.org/24.04/amd64/generic/28/pop-os_24.04_amd64_generic_28.iso" },
+                "artifact_sha256": { "const": "8d78e500fc95da765a91cddcf2ab7ba71ce4e7997e4f008456d4d872ee8f8221" }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "id": { "const": "proxmox-backup-server" },
+            "version": { "const": "4.2-1" },
+            "source": {
+              "properties": {
+                "url": { "const": "https://enterprise.proxmox.com/iso/proxmox-backup-server_4.2-1.iso" },
+                "sha256": { "const": "2fb299deac3929253712c9c3dfc9237edbe70af83c8848467616b771a1d5453e" }
+              }
+            },
+            "redistribution": {
+              "properties": {
+                "status": { "const": "redistribution-reviewed" },
+                "artifact_version": { "const": "4.2-1" },
+                "artifact_url": { "const": "https://enterprise.proxmox.com/iso/proxmox-backup-server_4.2-1.iso" },
+                "artifact_sha256": { "const": "2fb299deac3929253712c9c3dfc9237edbe70af83c8848467616b771a1d5453e" }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "id": { "const": "proxmox-ve" },
+            "version": { "const": "9.2-1" },
+            "source": {
+              "properties": {
+                "url": { "const": "https://enterprise.proxmox.com/iso/proxmox-ve_9.2-1.iso" },
+                "sha256": { "const": "4e88fe416df9b527624a175f24c9aa07c714d3332afb1ee3dbf3879573ef2c6c" }
+              }
+            },
+            "redistribution": {
+              "properties": {
+                "status": { "const": "redistribution-reviewed" },
+                "artifact_version": { "const": "9.2-1" },
+                "artifact_url": { "const": "https://enterprise.proxmox.com/iso/proxmox-ve_9.2-1.iso" },
+                "artifact_sha256": { "const": "4e88fe416df9b527624a175f24c9aa07c714d3332afb1ee3dbf3879573ef2c6c" }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "id": { "const": "truenas-scale" },
+            "version": { "const": "25.10.7" },
+            "source": {
+              "properties": {
+                "url": { "const": "https://download.truenas.com/TrueNAS-SCALE-Goldeye/25.10.7/TrueNAS-SCALE-25.10.7.iso" },
+                "sha256": { "const": "54ce9441ce66966a392e28f63604ca3c2c083d0bec4db7bb5af2f74f7a007c8e" }
+              }
+            },
+            "redistribution": {
+              "properties": {
+                "status": { "const": "redistribution-reviewed" },
+                "artifact_version": { "const": "25.10.7" },
+                "artifact_url": { "const": "https://download.truenas.com/TrueNAS-SCALE-Goldeye/25.10.7/TrueNAS-SCALE-25.10.7.iso" },
+                "artifact_sha256": { "const": "54ce9441ce66966a392e28f63604ca3c2c083d0bec4db7bb5af2f74f7a007c8e" }
+              }
+            }
+          }
+        }
       ]
     },
     "personalUseOnly": {

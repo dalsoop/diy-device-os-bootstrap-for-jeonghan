@@ -9,6 +9,7 @@ checker=$repo_root/usb-media/check-license-policy
 distribution_renderer=$repo_root/usb-media/render-distribution-record
 writer_bash=$(command -v bash)
 temporary=$(mktemp -d)
+temporary=$(CDPATH='' cd -- "$temporary" && pwd -P)
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 
 fail() {
@@ -206,7 +207,7 @@ cat > "$temporary/runtime/component-redistribution-registry.json" <<EOF
 ]}
 EOF
 cat > "$temporary/runtime/sbom.spdx.json" <<'EOF'
-{"spdxVersion":"SPDX-2.3","dataLicense":"CC0-1.0","packages":[],"licenseConcluded":"NOASSERTION"}
+{"spdxVersion":"SPDX-2.3","dataLicense":"CC0-1.0","packages":[],"licenseConcluded":" ( noassertion ) "}
 EOF
 registry_digest=$(sha256sum "$temporary/runtime/component-redistribution-registry.json" | awk '{print $1}')
 sbom_digest=$(sha256sum "$temporary/runtime/sbom.spdx.json" | awk '{print $1}')
@@ -239,6 +240,111 @@ jq --arg digest "$dns_digest" '
   else . end) |
   .entries[0].redistribution.artifact_sha256 = ("f"*64)
 ' "$temporary/reviewed-catalog.next" > "$temporary/reviewed-catalog.json"
+
+# Future policy shapes must be evaluable without representing GitHub Environment approval.
+jq '
+  .generated_artifacts.enabled = true |
+  .prebuilt_release.enabled = true
+' "$repo_root/usb-media/distribution-policy.json" > "$temporary/enabled-policy.json"
+jq --slurpfile policy "$temporary/enabled-policy.json" \
+    '.distribution_policy = $policy[0]' "$temporary/reviewed-catalog.json" \
+    > "$temporary/enabled-catalog.json"
+"$repo_root/usb-media/verify-catalog" "$temporary/enabled-catalog.json" >/dev/null
+if DEVICE_OS_DISTRIBUTION_POLICY="$temporary/enabled-policy.json" \
+    "$checker" --mode prebuilt-release --catalog "$temporary/enabled-catalog.json" \
+    "${artifact_args[@]}" \
+    --manifest "dns-appliance=$temporary/runtime/build-manifest.json" \
+    --review "dns-appliance=$temporary/runtime/dns-final-review-record.json" \
+    --release-root "$temporary/release" --json > "$temporary/enabled-evaluation.json"; then
+    fail "incomplete evidence unexpectedly passed the enabled prebuilt policy"
+fi
+jq -e '
+  .decision == "deny" and
+  ([.blockers[].code] | index("policy-disabled")) == null and
+  ([.blockers[].message | select(contains("symlink or non-canonical"))] | length) == 0 and
+  (has("environment_approval") | not)
+' "$temporary/enabled-evaluation.json" >/dev/null ||
+    fail "enabled policy did not pass the CLI policy gate independently of Environment approval"
+jq -e '
+  (keys | sort) == ["generated_artifacts","prebuilt_release","schema_version","source_release"] and
+  .generated_artifacts == {enabled:true} and
+  .prebuilt_release == {enabled:true,required_github_environment:"prebuilt-distribution"} and
+  (.prebuilt_release | has("approval") | not)
+' "$temporary/enabled-policy.json" >/dev/null ||
+    fail "enabled policy fixture represents more than the required Environment name"
+"$distribution_renderer" "$temporary/enabled-evaluation.json" "$temporary/enabled-policy.json" >/dev/null
+
+for disabled_flag in generated_artifacts prebuilt_release; do
+    jq --arg flag "$disabled_flag" '.[$flag].enabled = false' \
+        "$temporary/enabled-policy.json" > "$temporary/one-flag-disabled-policy.json"
+    jq --slurpfile policy "$temporary/one-flag-disabled-policy.json" \
+        '.distribution_policy = $policy[0]' "$temporary/reviewed-catalog.json" \
+        > "$temporary/one-flag-disabled-catalog.json"
+    if DEVICE_OS_DISTRIBUTION_POLICY="$temporary/one-flag-disabled-policy.json" \
+        "$checker" --mode prebuilt-release \
+        --catalog "$temporary/one-flag-disabled-catalog.json" \
+        --release-root "$temporary/release" --json \
+        > "$temporary/one-flag-disabled-evaluation.json"; then
+        fail "prebuilt policy allowed while $disabled_flag was disabled"
+    fi
+    jq -e '([.blockers[].code] | index("policy-disabled")) != null' \
+        "$temporary/one-flag-disabled-evaluation.json" >/dev/null ||
+        fail "prebuilt evaluation did not require both policy flags"
+done
+
+expect_symlink_component_rejected() {
+    description=$1
+    expected_message=$2
+    shift 2
+    if "$checker" "$@" --json > "$temporary/symlink-component-denied.json"; then
+        fail "$description was accepted"
+    fi
+    jq -e --arg message "$expected_message" \
+        '([.blockers[].message] | index($message)) != null' \
+        "$temporary/symlink-component-denied.json" >/dev/null ||
+        fail "$description did not report its symlinked path component"
+}
+
+mkdir -p "$temporary/symlink-target"
+cp "$temporary/ventoy.bin" "$temporary/symlink-target/ventoy.bin"
+ln -s symlink-target "$temporary/symlink-input"
+expect_symlink_component_rejected "an artifact under a symlinked ancestor" \
+    "artifact ventoy path contains a symlink or non-canonical component" \
+    --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
+    --artifact "ventoy=$temporary/symlink-input/ventoy.bin" \
+    --release-root "$temporary/release"
+
+ln -s runtime "$temporary/runtime-link"
+expect_symlink_component_rejected "a manifest under a symlinked ancestor" \
+    "manifest dns-appliance path contains a symlink or non-canonical component" \
+    --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
+    --manifest "dns-appliance=$temporary/runtime-link/build-manifest.json" \
+    --release-root "$temporary/release"
+expect_symlink_component_rejected "a review under a symlinked ancestor" \
+    "final review dns-appliance path contains a symlink or non-canonical component" \
+    --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
+    --review "dns-appliance=$temporary/runtime-link/dns-final-review-record.json" \
+    --release-root "$temporary/release"
+
+mkdir -p "$temporary/release-parent/actual"
+ln -s release-parent "$temporary/release-parent-link"
+expect_symlink_component_rejected "a release root under a symlinked ancestor" \
+    "release root path contains a symlink or non-canonical component" \
+    --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
+    --release-root "$temporary/release-parent-link/actual"
+
+mkdir -p "$temporary/release/obligation-real"
+printf 'license fixture\n' > "$temporary/release/obligation-real/license.txt"
+ln -s obligation-real "$temporary/release/obligation-link"
+obligation_digest=$(sha256sum "$temporary/release/obligation-real/license.txt" | awk '{print $1}')
+jq --arg digest "$obligation_digest" '
+  .bootloader.redistribution.obligations[0].location.path = "obligation-link/license.txt" |
+  .bootloader.redistribution.obligations[0].location.sha256 = $digest
+' "$temporary/reviewed-catalog.json" > "$temporary/symlink-obligation-catalog.json"
+expect_symlink_component_rejected "an obligation file under a symlinked ancestor" \
+    "release-bundle obligation path contains a symlink or non-canonical component for ventoy: obligation-link/license.txt" \
+    --mode prebuilt-release --catalog "$temporary/symlink-obligation-catalog.json" \
+    --artifact "ventoy=$temporary/ventoy.bin" --release-root "$temporary/release"
 
 if "$checker" --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
     "${artifact_args[@]}" \

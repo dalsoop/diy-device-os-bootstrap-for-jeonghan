@@ -90,10 +90,10 @@ jq -e '
   (.distribution_policy |
     exact_keys(["schema_version","source_release","generated_artifacts","prebuilt_release"]) and
     .schema_version == 1 and
-    (.source_release | exact_keys(["enabled"]) and .enabled == true) and
-    (.generated_artifacts | exact_keys(["enabled"]) and .enabled == false) and
+    (.source_release | exact_keys(["enabled"]) and (.enabled | type == "boolean")) and
+    (.generated_artifacts | exact_keys(["enabled"]) and (.enabled | type == "boolean")) and
     (.prebuilt_release | exact_keys(["enabled","required_github_environment"]) and
-      .enabled == false and .required_github_environment == "prebuilt-distribution")) and
+      (.enabled | type == "boolean") and .required_github_environment == "prebuilt-distribution")) and
   (.product.name | type == "string" and length > 0) and
   (.product.repository | startswith("https://github.com/")) and
   .catalog.repository == "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan" and

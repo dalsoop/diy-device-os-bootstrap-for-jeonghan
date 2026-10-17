@@ -6,16 +6,16 @@ The current release state is a source-validated prototype, not a physically qual
 
 | Capability | Built | Highest verified state | Remaining work |
 | --- | --- | --- | --- |
-| One personal `jeonghan-home` World with DNS assets, network, nodes, services, and two media passes | Yes | Resolver and contract simulation | Publish and inspect the first completed physical generation |
-| World-driven exact media selection | Yes | CI simulation | Disposable physical USB confirmation for each pass |
+| One personal `jeonghan-home` World with DNS assets, network, nodes, services, and two media passes | Yes | Completed `inventory-capture` physical generation with full raw readback | Mount and inspect the payload, then qualify BIOS and UEFI boot |
+| World-driven exact media selection | Yes | Manifest-bound `inventory-capture` physical write and generation inspection | Repeat the qualification path for the rebuilt `dns-install` image |
 | Public Catalog for Proxmox VE, Proxmox Backup Server, TrueNAS SCALE, Pop!_OS, and Debian Live | Yes | Metadata contracts and isolated fixtures | Vendor-provenance archive and physical boot qualification per entry before use |
 | Data-driven `locked-download` and `runtime-artifact` resolution | Yes | Isolated success and rejection simulations | A reviewed extension mechanism for any new source kind or profile adapter |
 | HTTPS download with SHA-256 cache promotion | Yes | Source simulations | Clean online Linux preparation using the current pins |
 | Nominal, offline, runtime-artifact, and read-only-device capacity calculation | Yes | Isolated tests and a prior read-only 16 GB macOS query | Exact result using the final rebuilt DNS ISO and target USB |
 | Korean Ventoy presentation with no automatic timeout | Yes | Generated configuration checks | Physical BIOS and UEFI menu verification |
 | Linux removable-device USB writer | Yes | Source simulation after target-resolution fix | Rebuilt disposable USB, readback, filesystem, BIOS, and UEFI evidence |
-| Cross-platform exact-size raw-image builder and macOS MBR-last writer | Yes | Isolated builder and writer success/failure simulations | Physical container-built image, revised write, filesystem, BIOS, and UEFI qualification |
-| Append-only World event and generation publication after verified write | Yes | Isolated two-device success, failed-write, collision, and record-shape simulations | First disposable physical Linux and macOS writes with inspected tracked evidence |
+| Cross-platform exact-size raw-image builder and macOS MBR-last writer | Yes | Manifest-bound 15,833,497,600-byte physical write and full MBR-last raw readback | Mount and inspect filesystems and payload, then qualify BIOS and UEFI boot |
+| Append-only World event and generation publication after verified write | Yes | Inspected physical macOS generation after full raw readback | Merge the generation through the protected pull-request path and repeat on Linux when needed |
 | Offline Korean DNS appliance image with immutable locks | Yes | Source validation and ISO embedded-file readback logic; exactly-one-role build gate | Capture the three real inventories, then complete two clean amd64 Debian 13 builds and artifact comparison |
 | Exact HP/NIC/internal-disk install gate with mapper ancestry resolution | Yes | Isolated rejection and disk-preparation simulation | VM BIOS/UEFI install and disposable physical `dns01` rerun |
 | Retry-safe encrypted first-boot enrollment | Yes | Source contract | Power-loss and real exFAT fault injection |
@@ -31,7 +31,7 @@ The current release state is a source-validated prototype, not a physically qual
 
 1. Build the fixed DNS ISO twice on amd64 Debian 13 and compare manifests and artifacts.
 2. Pass disposable VM BIOS and UEFI installation with the mapper-backed installer-media fixtures represented.
-3. Rebuild one disposable physical USB, verify its filesystems and payload, and prove both firmware paths.
+3. Mount and inspect the completed `inventory-capture` USB filesystems and payload, then prove both firmware paths.
 4. Enable only `dns01`, complete its physical install and enrollment, then repeat one at a time for `dns02` and `dns03`.
 5. Prove cluster formation, trusted TLS, Tailscale restrictions, backup restore, and agent read access.
 6. Perform router DHCP DNS cutover with a wired rollback client.

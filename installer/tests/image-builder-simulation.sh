@@ -15,12 +15,33 @@ output=$temporary/device-os.raw
 mkdir -p "$mock_bin"
 cat > "$catalog" <<EOF
 {
+  "schema_version": 2,
+  "distribution_policy": {
+    "schema_version": 1,
+    "source_release": {"enabled": true},
+    "generated_artifacts": {"enabled": false},
+    "prebuilt_release": {"enabled": false, "required_github_environment": "prebuilt-distribution"}
+  },
+  "bootloader": {"id": "ventoy", "redistribution": {"status": "personal-use-only"}},
+  "entries": [{"id": "debian-live", "source": {"kind": "locked-download", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "redistribution": {"status": "personal-use-only"}}],
   "catalog": {
     "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   }
 }
 EOF
+
+checker=$temporary/checker
+cat > "$checker" <<'EOF'
+#!/bin/sh
+if [ "${TEST_POLICY_DENY:-0}" = 1 ]; then
+  exit 1
+fi
+cat <<'JSON'
+{"schema_version":1,"mode":"personal-use","decision":"allow","selected_artifacts":[{"id":"ventoy","kind":"bootloader","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","status":"personal-use-only"},{"id":"debian-live","kind":"catalog-entry","sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","status":"personal-use-only"}],"blockers":[],"warnings":[{"code":"personal-use-only","message":"Public redistribution is not approved."}]}
+JSON
+EOF
+chmod +x "$checker"
 
 make_mock() {
     name=$1
@@ -61,6 +82,7 @@ chmod +x "$writer"
 PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
 DEVICE_OS_SKIP_LOOP_NODE_SETUP=1 \
 DEVICE_OS_IMAGE_WRITER="$writer" \
+DEVICE_OS_LICENSE_CHECKER="$checker" \
     "$builder" --output "$output" --size 4294967296 --catalog "$catalog" >/dev/null
 
 [ -f "$output" ]
@@ -68,7 +90,7 @@ DEVICE_OS_IMAGE_WRITER="$writer" \
 [ -f "$output.manifest.json" ]
 grep -q '  device-os.raw$' "$output.sha256"
 jq -e '
-  .schema_version == 1 and
+  .schema_version == 2 and
   .kind == "device-os-raw-image" and
   .image.filename == "device-os.raw" and
   .image.bytes == 4294967296 and
@@ -76,6 +98,10 @@ jq -e '
   .catalog.sha256 == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
   .catalog.revision == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
   .catalog.tree == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" and
+  .license.mode == "personal-use" and
+  .license.decision == "allow" and
+  .license.distribution_policy_sha256 == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
+  [.license.selected_artifacts[].id] == ["ventoy", "debian-live"] and
   .world == null
 ' "$output.manifest.json" >/dev/null
 grep -q '^writer --device /dev/loop9 --catalog .* --image-build$' "$log"
@@ -88,6 +114,23 @@ if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
     "$builder" --output "$output" --size 4294967296 --catalog "$catalog" \
     >/dev/null 2>&1; then
     echo "image-builder-simulation: existing output was overwritten" >&2
+    exit 1
+fi
+
+: > "$log"
+policy_refusal=$temporary/policy-refusal.raw
+if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" TEST_POLICY_DENY=1 \
+    DEVICE_OS_SKIP_LOOP_NODE_SETUP=1 \
+    DEVICE_OS_IMAGE_WRITER="$writer" \
+    DEVICE_OS_LICENSE_CHECKER="$checker" \
+    "$builder" --output "$policy_refusal" --size 4294967296 --catalog "$catalog" \
+    >/dev/null 2>&1; then
+    echo "image-builder-simulation: denied license policy was accepted" >&2
+    exit 1
+fi
+[ ! -e "$policy_refusal" ]
+if grep -q '^writer ' "$log"; then
+    echo "image-builder-simulation: policy refusal reached the image writer" >&2
     exit 1
 fi
 

@@ -7,6 +7,7 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 catalog=${USB_MEDIA_CATALOG:-$repo_root/work/device-os/catalog.json}
 writer=${DEVICE_OS_IMAGE_WRITER:-$script_dir/write-usb-linux}
+license_checker=${DEVICE_OS_LICENSE_CHECKER:-$script_dir/check-license-policy}
 output=
 size=
 declare -a runtime_args=()
@@ -57,6 +58,20 @@ esac
 [ ! -e "$output.sha256" ] || fail "checksum already exists: $output.sha256"
 [ ! -e "$output.manifest.json" ] || fail "image manifest already exists: $output.manifest.json"
 [ -r "$catalog" ] || fail "resolved catalog is missing: $catalog"
+[ -x "$license_checker" ] || fail "license policy checker is unavailable"
+
+license_decision=$(mktemp)
+trap 'rm -f "$license_decision"' EXIT HUP INT TERM
+if ! USB_MEDIA_CATALOG=$catalog "$license_checker" --mode personal-use --json > "$license_decision"; then
+    rm -f "$license_decision"
+    fail "personal-use license policy denied raw image creation"
+fi
+jq -e '.mode == "personal-use" and .decision == "allow" and .blockers == []' \
+    "$license_decision" >/dev/null || {
+    rm -f "$license_decision"
+    fail "personal-use license decision is malformed"
+}
+distribution_policy_sha256=$(sha256sum "$script_dir/distribution-policy.json" | awk 'NR == 1 {print $1}')
 
 if [ "${DEVICE_OS_SKIP_LOOP_NODE_SETUP:-0}" != 1 ] &&
     [ -c /dev/loop-control ] && [ ! -b /dev/loop0 ]; then
@@ -81,6 +96,7 @@ cleanup() {
     rm -f "$temporary"
     rm -f "$checksum_temporary"
     rm -f "$manifest_temporary"
+    rm -f "$license_decision"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -135,16 +151,25 @@ jq -n \
     --arg revision "$catalog_revision" \
     --arg tree "$catalog_tree" \
     --argjson world "$world_binding" \
+    --arg distribution_policy_sha256 "$distribution_policy_sha256" \
+    --slurpfile license_decision "$license_decision" \
     '{
-      schema_version: 1,
+      schema_version: 2,
       kind: "device-os-raw-image",
       image: {filename: $filename, bytes: $bytes, sha256: $image_sha256},
       catalog: {sha256: $catalog_sha256, revision: $revision, tree: $tree},
+      license: {
+        mode: $license_decision[0].mode,
+        decision: $license_decision[0].decision,
+        distribution_policy_sha256: $distribution_policy_sha256,
+        selected_artifacts: $license_decision[0].selected_artifacts
+      },
       world: $world
     }' > "$manifest_temporary"
 mv "$temporary" "$output"
 mv "$checksum_temporary" "$output.sha256"
 mv "$manifest_temporary" "$output.manifest.json"
+rm -f "$license_decision"
 trap - EXIT HUP INT TERM
 
 echo "usb-media build-image-linux: created $output"

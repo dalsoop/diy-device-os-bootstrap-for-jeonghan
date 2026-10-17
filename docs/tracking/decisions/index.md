@@ -13,3 +13,4 @@
 | [0009](0009-resolve-physical-installer-media.md) | Resolve physical installer media before preparing a DNS target | Accepted |
 | [0010](0010-resolve-media-through-declarative-catalog.md) | Resolve media through a pinned declarative Catalog | Accepted |
 | [0011](0011-keep-destructive-actions-target-specific.md) | Keep destructive actions behind target-specific gates | Accepted |
+| [0012](0012-default-to-source-only-releases.md) | Default to source-only releases and require independent prebuilt gates | Accepted |

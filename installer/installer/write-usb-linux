@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 set -euo pipefail
 
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
+license_checker=${DEVICE_OS_LICENSE_CHECKER:-$repo_root/usb-media/check-license-policy}
 device=
 iso=
 manifest=
@@ -30,6 +33,33 @@ done
 
 [ "$(uname -s)" = Linux ] || { echo "write-usb-linux: Linux is required" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || { echo "write-usb-linux: run as root" >&2; exit 1; }
+[ -x "$license_checker" ] || { echo "write-usb-linux: shared license checker is unavailable" >&2; exit 1; }
+license_decision=$(mktemp)
+trap 'rm -f "$license_decision"' EXIT HUP INT TERM
+if ! "$license_checker" --mode personal-use --json > "$license_decision"; then
+    echo "write-usb-linux: personal-use license policy denied DNS media writing" >&2
+    exit 1
+fi
+jq -e '
+  keys == ["blockers","decision","mode","schema_version","selected_artifacts","warnings"] and
+  .schema_version == 1 and .mode == "personal-use" and .decision == "allow" and .blockers == [] and
+  (.selected_artifacts | type == "array" and length > 0 and all(.[];
+    keys == ["id","kind","sha256","status"] and
+    (.id | test("^[a-z0-9][a-z0-9-]*$")) and
+    (.kind == "bootloader" or .kind == "catalog-entry" or .kind == "runtime-artifact" or
+      .kind == "component" or .kind == "final-artifact") and
+    (.status == "personal-use-only" or .status == "redistribution-reviewed") and
+    (.sha256 == null or (.sha256 | test("^[a-f0-9]{64}$"))))) and
+  (.warnings | type == "array" and all(.[];
+    keys == ["artifact_id","code","message"] and
+    (.artifact_id == null or (.artifact_id | test("^[a-z0-9][a-z0-9-]*$"))) and
+    (.code | test("^[a-z0-9][a-z0-9-]*$")) and (.message | type == "string" and length > 0)))
+' "$license_decision" >/dev/null || {
+    echo "write-usb-linux: personal-use license decision is malformed" >&2
+    exit 1
+}
+rm -f "$license_decision"
+trap - EXIT HUP INT TERM
 if ! { [ -f "$iso" ] && [ ! -L "$iso" ] &&
        [ -f "$manifest" ] && [ ! -L "$manifest" ] &&
        [ -f "$registry" ] && [ ! -L "$registry" ] &&
@@ -37,8 +67,6 @@ if ! { [ -f "$iso" ] && [ ! -L "$iso" ] &&
     usage
 fi
 
-script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
-repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 "$repo_root/build/verify-distribution-contracts" --registry "$registry" >/dev/null
 registry_sha=$(sha256sum "$registry" | awk '{print $1}')
 sbom_sha=$(sha256sum "$sbom" | awk '{print $1}')

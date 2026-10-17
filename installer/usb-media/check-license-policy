@@ -174,18 +174,20 @@ load_catalog() {
 }
 
 enumerate_personal() {
-    local id sha status kind
+    local id sha status kind component
     id=$(jq -r '.bootloader.id' "$catalog")
     sha=$(jq -r '.bootloader.source.sha256 // empty' "$catalog")
     status=$(jq -r '.bootloader.redistribution.status' "$catalog")
     add_artifact "$id" bootloader "$sha" "$status"
-    [ "$status" = personal-use-only ] &&
-        warn artifact-unreviewed "$id is approved for personal use only; public redistribution is not approved" "$id"
     while IFS=$'\t' read -r id kind sha status; do
         [ "$sha" = - ] && sha=
         add_artifact "$id" "$kind" "$sha" "$status"
-        [ "$status" = personal-use-only ] &&
-            warn artifact-unreviewed "$id is approved for personal use only; public redistribution is not approved" "$id"
+        if [ "$kind" = runtime-artifact ]; then
+            while IFS= read -r component; do
+                add_artifact "$component" component "" "$status"
+            done < <(jq -r '.component_ids[]' "$repo_root/build/distribution-policy.json")
+            add_artifact "$id" final-artifact "" "$status"
+        fi
     done < <(jq -r '.entries[] |
       [.id,
        (if .source.kind == "runtime-artifact" then "runtime-artifact" else "catalog-entry" end),
@@ -266,23 +268,34 @@ check_prebuilt_entry() {
             check_obligations "$redistribution" "$id" "$root_real"
         fi
     else
+        add_artifact "$id" final-artifact "$actual" "$status"
         check_dns_runtime "$entry" "$path" "$actual" "$root_real"
     fi
 }
 
 check_dns_runtime() {
-    local entry=$1 artifact=$2 actual=$3 root_real=$4 id manifest review dir registry sbom expected manifest_sha registry_sha review_record status
+    local entry=$1 artifact=$2 actual=$3 root_real=$4 id manifest review dir registry sbom expected manifest_sha registry_sha review_record
+    local manifest_ok=0 review_ok=0
     id=$(jq -r '.id' <<<"$entry")
     manifest=$(assigned_path "$id" "$manifest_map")
     review=$(assigned_path "$id" "$review_map")
     if [ -z "$manifest" ] || ! valid_file_path "$manifest" "manifest $id"; then
         block artifact-unreviewed "runtime build manifest is missing: $id" "$id"
-        return
+    else
+        manifest_ok=1
+        expected=$(jq -r '.iso_sha256 // empty' "$manifest" 2>/dev/null || true)
+        [ -n "$actual" ] && [ "$actual" = "$expected" ] ||
+            block review-digest-mismatch "$id bytes do not match the runtime build manifest" "$id"
     fi
-    expected=$(jq -r '.iso_sha256 // empty' "$manifest" 2>/dev/null || true)
-    [ -n "$actual" ] && [ "$actual" = "$expected" ] ||
-        block review-digest-mismatch "$id bytes do not match the runtime build manifest" "$id"
-    dir=$(dirname -- "$manifest")
+    if [ -n "$manifest" ]; then
+        dir=$(dirname -- "$manifest")
+    elif [ -n "$artifact" ]; then
+        dir=$(dirname -- "$artifact")
+    elif [ -n "$review" ]; then
+        dir=$(dirname -- "$review")
+    else
+        dir=$release_root
+    fi
     registry=$dir/$(jq -r '.source.component_registry_filename' <<<"$entry")
     sbom=$dir/$(jq -r '.source.sbom_filename' <<<"$entry")
     valid_file_path "$registry" "component registry $id" || true
@@ -294,36 +307,53 @@ check_dns_runtime() {
                 block component-unreviewed "$component is not redistribution-reviewed" "$component"
         done < <(jq -r '.components[]? | [.id,.digest.value,.redistribution.status] | @tsv' "$registry" 2>/dev/null || true)
         registry_sha=$(sha256_file "$registry")
-        [ "$registry_sha" = "$(jq -r '.component_registry_sha256 // empty' "$manifest")" ] ||
-            block review-digest-mismatch "$id component registry digest differs from the build manifest" "$id"
+        if [ "$manifest_ok" -eq 1 ]; then
+            [ "$registry_sha" = "$(jq -r '.component_registry_sha256 // empty' "$manifest")" ] ||
+                block review-digest-mismatch "$id component registry digest differs from the build manifest" "$id"
+        fi
     fi
     if [ -f "$sbom" ] && [ ! -L "$sbom" ]; then
         if jq -e '[.. | strings | select(. == "NOASSERTION")] | length > 0' "$sbom" >/dev/null 2>&1; then
             block noassertion-present "$id SPDX SBOM contains NOASSERTION" "$id"
         fi
-        [ "$(sha256_file "$sbom")" = "$(jq -r '.sbom_sha256 // empty' "$manifest")" ] ||
-            block review-digest-mismatch "$id SPDX SBOM digest differs from the build manifest" "$id"
+        if [ "$manifest_ok" -eq 1 ]; then
+            [ "$(sha256_file "$sbom")" = "$(jq -r '.sbom_sha256 // empty' "$manifest")" ] ||
+                block review-digest-mismatch "$id SPDX SBOM digest differs from the build manifest" "$id"
+        fi
     fi
     if [ -z "$review" ] || ! valid_file_path "$review" "final review $id"; then
         block artifact-unreviewed "exact final review is missing: $id" "$id"
-        return
+        review_record='{}'
+    else
+        review_ok=1
+        review_record=$(jq -c '.' "$review" 2>/dev/null || printf '{}')
     fi
-    review_record=$(jq -c '.' "$review" 2>/dev/null || printf '{}')
-    manifest_sha=$(sha256_file "$manifest")
-    if ! jq -e --arg artifact "$actual" --arg manifest "$manifest_sha" --arg registry "${registry_sha:-}" '
-        .artifact.sha256 == $artifact and
-        .inputs.build_manifest_sha256 == $manifest and
-        .inputs.component_registry_sha256 == $registry
-    ' <<<"$review_record" >/dev/null 2>&1; then
-        block review-digest-mismatch "$id final review does not bind the exact artifact and manifests" "$id"
+    if [ "$review_ok" -eq 1 ]; then
+        if ! jq -e --arg artifact "$actual" '.artifact.sha256 == $artifact' \
+            <<<"$review_record" >/dev/null 2>&1; then
+            block review-digest-mismatch "$id final review does not bind the exact artifact" "$id"
+        fi
+        if [ -n "${registry_sha:-}" ] &&
+            ! jq -e --arg registry "$registry_sha" '.inputs.component_registry_sha256 == $registry' \
+                <<<"$review_record" >/dev/null 2>&1; then
+            block review-digest-mismatch "$id final review does not bind the exact component registry" "$id"
+        fi
+        if [ "$manifest_ok" -eq 1 ]; then
+            manifest_sha=$(sha256_file "$manifest")
+            if ! jq -e --arg manifest "$manifest_sha" '.inputs.build_manifest_sha256 == $manifest' \
+                <<<"$review_record" >/dev/null 2>&1; then
+                block review-digest-mismatch "$id final review does not bind the exact build manifest" "$id"
+            fi
+        fi
+        check_obligations "$review_record" "$id" "$root_real"
     fi
-    if [ -f "$registry" ] && [ -f "$sbom" ] &&
+    if [ "$manifest_ok" -eq 1 ] && [ "$review_ok" -eq 1 ] &&
+        [ -f "$registry" ] && [ -f "$sbom" ] &&
         ! "$repo_root/build/verify-distribution-contracts" \
             --registry "$registry" --final-review "$review" \
             --build-manifest "$manifest" --sbom "$sbom" >/dev/null 2>&1; then
         block artifact-unreviewed "$id failed the DNS redistribution verifier" "$id"
     fi
-    check_obligations "$review_record" "$id" "$root_real"
 }
 
 case "$mode" in
@@ -345,7 +375,10 @@ case "$mode" in
         else
             source_sha=$(git -C "$monorepo_root" archive --format=tar "$revision" | shasum -a 256 | awk 'NR == 1 {print $1}')
         fi
-        if [ -n "$(git -C "$monorepo_root" status --porcelain --untracked-files=no 2>/dev/null || true)" ]; then
+        tracked_status=$temporary/git-status
+        if ! git -C "$monorepo_root" status --porcelain --untracked-files=no > "$tracked_status" 2>/dev/null; then
+            block artifact-unreviewed "Git tracked-status inspection failed"
+        elif [ -s "$tracked_status" ]; then
             block artifact-unreviewed "source release requires a clean tracked Git snapshot"
         fi
         add_artifact repository-source-snapshot final-artifact "$source_sha" redistribution-reviewed
@@ -401,6 +434,11 @@ case "$mode" in
         fi
         ;;
 esac
+
+while IFS=$'\t' read -r warning_id warning_kind; do
+    warn artifact-unreviewed \
+        "$warning_id ($warning_kind) is not reviewed for public redistribution" "$warning_id"
+done < <(jq -r 'select(.status == "personal-use-only") | [.id,.kind] | @tsv' "$artifacts_file")
 
 artifacts=$(jq -s '.' "$artifacts_file")
 blockers=$(jq -s 'unique_by(.code + "\u0000" + (.artifact_id // "") + "\u0000" + .message)' "$blockers_file")

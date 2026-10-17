@@ -6,6 +6,7 @@ set -euo pipefail
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 checker=$repo_root/usb-media/check-license-policy
+distribution_renderer=$repo_root/usb-media/render-distribution-record
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 
@@ -22,6 +23,11 @@ printf '%s\n' "$personal" | jq -e '
   (all(.warnings[]; keys == ["artifact_id","code","message"] and (.artifact_id | type == "string"))) and
   ([.selected_artifacts[].id] | index("ventoy")) != null and
   ([.selected_artifacts[].id] | index("dns-appliance")) != null and
+  ([.selected_artifacts[] | select(.kind == "component") | .id] ==
+    ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","repository-source-snapshot"]) and
+  ([.selected_artifacts[] | select(.id == "dns-appliance") | .kind] ==
+    ["runtime-artifact","final-artifact"]) and
+  (.warnings | length) == ([.selected_artifacts[] | select(.status == "personal-use-only")] | length) and
   (all(.selected_artifacts[];
     keys == ["id","kind","sha256","status"] and
     (.status == "personal-use-only" or .status == "redistribution-reviewed")))
@@ -41,6 +47,7 @@ echo 0
 EOF
 cat > "$mock_bin/deny-checker" <<'EOF'
 #!/bin/sh
+[ -z "${DNS_CHECKER_MARKER:-}" ] || printf 'called\n' > "$DNS_CHECKER_MARKER"
 exit 1
 EOF
 chmod +x "$mock_bin/uname" "$mock_bin/id" "$mock_bin/deny-checker"
@@ -92,6 +99,24 @@ printf '%s\n' "$source_result" | jq -e '
   .selected_artifacts[0].status == "redistribution-reviewed" and
   (all(.blockers[]; keys == ["artifact_id","code","message"] and .artifact_id == null))
 ' >/dev/null || fail "source-release surface is malformed"
+
+real_git=$(command -v git)
+git_mock_bin=$temporary/git-bin
+mkdir -p "$git_mock_bin"
+cat > "$git_mock_bin/git" <<EOF
+#!/bin/sh
+case " \$* " in
+  *" status --porcelain --untracked-files=no "*) exit 71 ;;
+  *) exec "$real_git" "\$@" ;;
+esac
+EOF
+chmod +x "$git_mock_bin/git"
+if PATH="$git_mock_bin:/usr/bin:/bin" "$checker" --mode source-release --json > "$temporary/status-failed.json"; then
+    fail "source release allowed a failed git status command"
+fi
+jq -e '.decision == "deny" and
+  ([.blockers[].message] | index("Git tracked-status inspection failed")) != null' \
+  "$temporary/status-failed.json" >/dev/null || fail "git status failure was not preserved as a blocker"
 
 # Exercise all fail-closed prebuilt evidence paths without enabling publication.
 USB_MEDIA_CATALOG="$temporary/reviewed-catalog.json" "$repo_root/usb-media/resolve-catalog" >/dev/null
@@ -197,6 +222,7 @@ jq -e '
     (.artifact_id == null or (.artifact_id | type == "string")))) and
   (all(.selected_artifacts[];
     .status == "personal-use-only" or .status == "redistribution-reviewed")) and
+  ([.selected_artifacts[] | select(.id == "dns-appliance") | .kind] | index("final-artifact")) != null and
   ([.blockers[].code] | index("policy-disabled")) != null and
   ([.blockers[].code] | index("artifact-unreviewed")) != null and
   ([.blockers[].code] | index("review-digest-mismatch")) != null and
@@ -205,6 +231,36 @@ jq -e '
   ([.blockers[].code] | index("noassertion-present")) != null and
   ([.blockers[].code] | index("unsupported-artifact-inspection")) != null
 ' "$temporary/evidence-denied.json" >/dev/null || fail "prebuilt evidence blocker coverage is incomplete"
+
+if "$checker" --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
+    "${artifact_args[@]}" \
+    --manifest "dns-appliance=$temporary/runtime/missing-build-manifest.json" \
+    --review "dns-appliance=$temporary/runtime/dns-final-review-record.json" \
+    --release-root "$temporary/release" --json > "$temporary/missing-manifest-denied.json"; then
+    fail "prebuilt release allowed a missing runtime manifest"
+fi
+jq -e '
+  ([.blockers[].code] | index("artifact-unreviewed")) != null and
+  ([.blockers[].code] | index("component-unreviewed")) != null and
+  ([.blockers[].code] | index("noassertion-present")) != null and
+  ([.blockers[].code] | index("obligation-unfulfilled")) != null and
+  ([.selected_artifacts[] | select(.id == "dns-appliance") | .kind] | index("final-artifact")) != null
+' "$temporary/missing-manifest-denied.json" >/dev/null ||
+    fail "missing manifest short-circuited independently determinable evidence"
+
+"$distribution_renderer" "$temporary/denied.json" "$repo_root/usb-media/distribution-policy.json" \
+    > "$temporary/DISTRIBUTION.json"
+policy_digest=$(sha256sum "$repo_root/usb-media/distribution-policy.json" | awk '{print $1}')
+jq -e --arg digest "$policy_digest" '
+  keys == ["decision","distribution_policy_sha256","mode","schema_version","selected_artifacts"] and
+  .schema_version == 1 and .distribution_policy_sha256 == $digest and
+  .mode == "prebuilt-release" and .decision == "deny"
+' "$temporary/DISTRIBUTION.json" >/dev/null || fail "USB distribution stamp is malformed"
+mkdir -p "$temporary/usb/licenses" "$temporary/usb/manifests"
+cp "$temporary/DISTRIBUTION.json" "$temporary/usb/licenses/DISTRIBUTION.json"
+(cd "$temporary/usb" && find licenses -type f -exec sha256sum {} + | LC_ALL=C sort > manifests/LICENSES.SHA256)
+(cd "$temporary/usb" && sha256sum -c manifests/LICENSES.SHA256 >/dev/null) ||
+    fail "distribution stamp checksum readback failed"
 
 dns_mock_bin=$temporary/dns-bin
 mkdir -p "$dns_mock_bin"
@@ -218,6 +274,7 @@ EOF
 chmod +x "$dns_mock_bin/lsblk"
 : > "$temporary/dns-writer-commands.log"
 if PATH="$dns_mock_bin:/usr/bin:/bin" TEST_COMMAND_LOG="$temporary/dns-writer-commands.log" \
+    DNS_CHECKER_MARKER="$temporary/dns-checker-called" DEVICE_OS_LICENSE_CHECKER="$mock_bin/deny-checker" \
     "$repo_root/installer/write-usb-linux" --device /dev/not-a-device \
         --iso "$temporary/runtime/dns-appliance.iso" \
         --manifest "$temporary/runtime/build-manifest.json" \
@@ -226,6 +283,7 @@ if PATH="$dns_mock_bin:/usr/bin:/bin" TEST_COMMAND_LOG="$temporary/dns-writer-co
         --confirm 'ERASE /dev/not-a-device' >/dev/null 2>&1; then
     fail "DNS Linux writer accepted invalid distribution evidence"
 fi
+[ -s "$temporary/dns-checker-called" ] || fail "DNS Linux writer did not invoke the shared license checker"
 [ ! -s "$temporary/dns-writer-commands.log" ] || fail "DNS Linux writer inspected a target after policy refusal"
 
 echo "license policy simulations: passed"

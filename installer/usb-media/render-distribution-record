@@ -1,0 +1,47 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 dalsoop
+# SPDX-License-Identifier: GPL-3.0-only
+set -eu
+
+decision=${1:-}
+policy=${2:-}
+
+fail() {
+    echo "render-distribution-record: $*" >&2
+    exit 1
+}
+
+[ -f "$decision" ] && [ ! -L "$decision" ] || fail "license decision must be a regular, non-symlink file"
+[ -f "$policy" ] && [ ! -L "$policy" ] || fail "distribution policy must be a regular, non-symlink file"
+command -v jq >/dev/null 2>&1 || fail "jq is required"
+
+jq -e '
+  keys == ["blockers","decision","mode","schema_version","selected_artifacts","warnings"] and
+  .schema_version == 1 and
+  (.mode == "personal-use" or .mode == "source-release" or .mode == "prebuilt-release") and
+  (.decision == "allow" or .decision == "deny") and
+  (.selected_artifacts | type == "array" and all(.[];
+    keys == ["id","kind","sha256","status"] and
+    (.status == "personal-use-only" or .status == "redistribution-reviewed") and
+    (.sha256 == null or (.sha256 | test("^[a-f0-9]{64}$"))))) and
+  (all(.blockers[], .warnings[];
+    keys == ["artifact_id","code","message"] and
+    (.artifact_id == null or (.artifact_id | test("^[a-z0-9][a-z0-9-]*$"))))) and
+  (if .decision == "allow" then .blockers == [] else (.blockers | length > 0) end)
+' "$decision" >/dev/null || fail "license decision violates its exact contract"
+
+if command -v sha256sum >/dev/null 2>&1; then
+    policy_sha256=$(sha256sum "$policy" | awk 'NR == 1 {print $1}')
+else
+    policy_sha256=$(shasum -a 256 "$policy" | awk 'NR == 1 {print $1}')
+fi
+
+jq -n --arg policy_sha256 "$policy_sha256" --slurpfile decision "$decision" '
+  {
+    schema_version: 1,
+    distribution_policy_sha256: $policy_sha256,
+    mode: $decision[0].mode,
+    decision: $decision[0].decision,
+    selected_artifacts: $decision[0].selected_artifacts
+  }
+'

@@ -409,7 +409,8 @@ install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt"
     "$mount_dir/licenses/Tailscale-BSD-3-Clause.txt"
 install -m 0644 "$script_dir/distribution-policy.json" \
     "$mount_dir/licenses/distribution-policy.json"
-install -m 0644 "$license_decision" "$mount_dir/licenses/DISTRIBUTION.json"
+"$script_dir/render-distribution-record" "$license_decision" "$script_dir/distribution-policy.json" \
+    > "$mount_dir/licenses/DISTRIBUTION.json"
 {
     echo "# Corresponding Source"
     echo

@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/blob/main/installer/schemas/component-redistribution-registry.schema.json",
+  "title": "DNS composite-image component redistribution registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy", "components"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sha256"],
+      "properties": {
+        "id": { "const": "dns-composite-image-redistribution-v1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        { "$ref": "#/$defs/debianClosure" },
+        { "$ref": "#/$defs/technitiumOCI" },
+        { "$ref": "#/$defs/tailscaleArchive" },
+        { "$ref": "#/$defs/tailscaleDependencyReport" },
+        { "$ref": "#/$defs/repositorySourceSnapshot" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "digest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "value": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "const": "oci-digest" },
+        "value": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "status": {
+      "enum": ["personal-use-only", "redistribution-reviewed"]
+    },
+    "ordinaryComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "digest", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "status": { "$ref": "#/$defs/status" }
+      }
+    },
+    "debianClosure": {
+      "allOf": [
+        { "$ref": "#/$defs/ordinaryComponent" },
+        { "properties": { "id": { "const": "debian-package-closure" } } }
+      ]
+    },
+    "technitiumOCI": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "digest", "source_identity", "status"],
+      "properties": {
+        "id": { "const": "technitium-oci" },
+        "version": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "source_identity": { "$ref": "#/$defs/sourceIdentity" },
+        "status": { "$ref": "#/$defs/status" }
+      }
+    },
+    "tailscaleArchive": {
+      "allOf": [
+        { "$ref": "#/$defs/ordinaryComponent" },
+        { "properties": { "id": { "const": "tailscale-archive" } } }
+      ]
+    },
+    "tailscaleDependencyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/ordinaryComponent" },
+        { "properties": { "id": { "const": "tailscale-dependency-report" } } }
+      ]
+    },
+    "repositorySourceSnapshot": {
+      "allOf": [
+        { "$ref": "#/$defs/ordinaryComponent" },
+        { "properties": { "id": { "const": "repository-source-snapshot" } } }
+      ]
+    }
+  }
+}

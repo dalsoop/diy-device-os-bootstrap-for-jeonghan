@@ -4,6 +4,7 @@
 set -eu
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+policy=$script_dir/distribution-policy.json
 # shellcheck disable=SC1091
 . "$script_dir/locks/sources.env"
 
@@ -24,6 +25,8 @@ printf '%s' "$SIMPLE_CDD_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
     fail "invalid Simple-CDD version"
 printf '%s' "$TECHNITIUM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
     fail "invalid Technitium version"
+[ "$TECHNITIUM_IMAGE" = docker.io/technitium/dns-server ] ||
+    fail "Technitium image repository is not locked"
 printf '%s' "$TECHNITIUM_INDEX_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' ||
     fail "invalid Technitium index digest"
 printf '%s' "$TECHNITIUM_AMD64_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' ||
@@ -42,5 +45,19 @@ case "$TAILSCALE_LICENSES_URL" in
 esac
 printf '%s' "$TAILSCALE_LICENSES_SHA256" | grep -Eq '^[0-9a-f]{64}$' ||
     fail "invalid Tailscale dependency-license SHA-256"
+[ "$SOURCE_REPOSITORY" = https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan ] ||
+    fail "source repository is not locked"
+[ "$DISTRIBUTION_POLICY_ID" = dns-composite-image-redistribution-v1 ] ||
+    fail "distribution policy identity is not locked"
+
+command -v jq >/dev/null 2>&1 || fail "jq is required"
+[ -r "$policy" ] || fail "distribution policy is missing"
+jq -e --arg id "$DISTRIBUTION_POLICY_ID" '
+  .schema_version == 1 and .id == $id and
+  .component_ids == ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","repository-source-snapshot"] and
+  .statuses == ["personal-use-only","redistribution-reviewed"] and
+  .evidence_kinds == ["license","notices","corresponding-source","trademark"] and
+  .obligation_kinds == ["license-text","notices","corresponding-source","trademark"]
+' "$policy" >/dev/null || fail "distribution policy is malformed"
 
 echo "source locks: valid"

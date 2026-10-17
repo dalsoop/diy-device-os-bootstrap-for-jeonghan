@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "dns-appliance",
   "group": "dns",
   "destination": "images/01-dns/dns-appliance-installer.iso",
@@ -8,9 +8,22 @@
   "description_en": "Guarded DNS installer; exact HP inventory and reinstall authorization are required.",
   "boot_behavior": "guarded-unattended",
   "profile_adapter": "dns-appliance",
+  "redistribution": {
+    "status": "personal-use-only"
+  },
   "source": {
     "kind": "runtime-artifact",
     "manifest_digest_field": "iso_sha256",
-    "manifest_destination": "manifests/dns-build-manifest.json"
+    "manifest_destination": "manifests/dns-build-manifest.json",
+    "component_registry_filename": "component-redistribution-registry.json",
+    "component_registry_digest_field": "component_registry_sha256",
+    "component_registry_destination": "manifests/dns-component-redistribution-registry.json",
+    "distribution_policy_digest_field": "distribution_policy_sha256"
+  },
+  "final_review": {
+    "required_for_status": "redistribution-reviewed",
+    "record_filename": "dns-final-review-record.json",
+    "record_destination": "manifests/dns-final-review-record.json",
+    "schema": "installer/schemas/dns-final-review-record.schema.json"
   }
 }

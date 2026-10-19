@@ -64,6 +64,7 @@ for required in \
     usb-media/local-entries/dns-appliance.json \
     collections/device-os.json \
     usb-media/guides/dns-inventory.md \
+    installer/inventory-wizard \
     ../docs/tracking/decisions/0010-resolve-media-through-declarative-catalog.md \
     management/dns-appliance-status-monitor/config.json \
     management/dns-appliance-status-monitor/server.py \

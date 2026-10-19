@@ -381,7 +381,8 @@ while IFS= read -r bundle; do
             ;;
         repository-tree)
             install -d -m 0755 "$mount_dir/$destination"
-            cp -a "$repo_root/$path/." "$mount_dir/$destination/"
+            # exFAT records no owner, so copy the tree without preserving one.
+            cp -R "$repo_root/$path/." "$mount_dir/$destination/"
             ;;
         *) fail "unsupported bundle source kind: $kind" ;;
     esac

@@ -118,3 +118,11 @@ and compares all of them before live target inspection or any write.
 **Cause:** BIOS ISOLINUX zero means wait, while Simple-CDD also emits GRUB `set timeout=0`, which means immediate boot.
 
 **Response:** leave the Simple-CDD timeout override empty to preserve Debian no-timeout defaults; image acceptance extracts both boot menus and rejects automatic timeouts. VM BIOS and UEFI menu waiting must still be observed before installation qualification.
+
+## An offline package profile needs real package names and enough space
+
+**Symptom:** Simple-CDD cannot find `dnsutils`, or its single-image package check fails after building a CD-sized tree.
+
+**Cause:** Debian 13 provides `dnsutils` through the real `bind9-dnsutils` package, while Simple-CDD checks package filenames rather than virtual provides. Its default CD size is also too small for the appliance's offline package closure and application payload.
+
+**Response:** request `bind9-dnsutils` explicitly and select one DVD-sized ISO. Keep Simple-CDD's required-package check enabled; a populated download mirror alone does not prove that the ISO contains the packages needed for an offline installation.

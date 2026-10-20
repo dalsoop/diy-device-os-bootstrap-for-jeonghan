@@ -182,9 +182,11 @@ install -m 0644 "$tailscale_licenses" \
 } > "$generated_dir/source.md"
 
 "$script_dir/fetch-debian-installer"
+mkdir -p "$artifact_dir"
 cd "$builder_dir"
 DNS_APPLIANCE_DI_DIR="$cache_dir/debian-installer-$DEBIAN_SNAPSHOT" \
-    build-simple-cdd --verbose --conf simple-cdd.conf --profiles dns
+    build-simple-cdd --verbose --logfile "$artifact_dir/simple-cdd.log" \
+        --conf simple-cdd.conf --profiles dns
 
 set -- images/*.iso
 [ -e "$1" ] || fail "Simple-CDD completed without an ISO"

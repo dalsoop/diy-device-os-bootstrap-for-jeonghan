@@ -1,5 +1,24 @@
 # Findings
 
+## Three-node DNS rollout lacks live inputs and topology evidence
+
+On 2026-10-21, `device-os world readiness` reported no captured inventory for
+`dns01`, `dns02`, or `dns03`, no single erase-enabled role, no valid operator
+SSH public-key input or age recovery recipient, missing locked Technitium and
+Tailscale build inputs, and no DNS installer ISO/build manifest. The offline
+network preflight observed a management gateway of `192.168.0.1`, while the
+planned `10.0.0.1/16` router and `10.0.5.1` through `10.0.5.3` nodes were
+unreachable. A passing offline-install topology calculation does not establish
+live node reachability or Internet readiness.
+
+Source fixes and simulations can proceed, but image creation and physical
+rollout cannot be qualified from these inputs. Capture each HP machine with the
+non-destructive inventory media, provide public installation/recovery inputs
+through ignored local paths, verify locked dependencies, and qualify the
+intended network before building and testing BIOS/UEFI installation. Enable only
+the `dns01` pilot after current target-specific authorization; the remaining
+nodes and router DNS cutover depend on that pilot's evidence.
+
 ## The first physical DNS pilot selected its installer USB
 
 Under the original Ventoy boot path, the installer resolved `/dev/mapper/Ventoy` without following its sysfs slave and partition ancestry. The 30.8 GB SanDisk installer USB later showed the intended DNS target layout and an invalid EFI filesystem, proving that the removable installer became writable. This can destroy installation media and could select the wrong disk.

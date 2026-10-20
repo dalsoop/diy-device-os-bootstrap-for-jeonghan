@@ -28,8 +28,10 @@ ShellCheck and Python syntax validation.
 
 `management-simulation.sh` covers machine-readable and audited DNS planning,
 the literal apply confirmation, generation-bound reinstall authorization, and
-the `/16` network prerequisite. It stubs network calls and never contacts a DNS
-server.
+the `/16` network prerequisite, generated first-boot recursion permissions for
+LAN and Tailscale clients, and the firewall's Tailscale source-address guard.
+It also verifies root-only environment-file permissions and bootstrap-password
+omission after enrollment. It stubs network calls and never contacts a DNS server.
 
 `media-catalog-simulation.sh` also checks capacity planning with
 checksum-matched sparse cache files, a runtime artifact with a matching

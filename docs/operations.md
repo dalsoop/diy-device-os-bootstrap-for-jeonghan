@@ -250,6 +250,12 @@ TAILSCALE_OAUTH_CLIENT_SECRET_FILE=/secure/tailscale/client-secret \
 
 Confirm each node's hostname, `tag:dns-appliance`, Tailscale address, peer reachability, `accept-dns=false`, and absence of routes, exit-node behavior, Tailscale SSH, Serve, and Funnel.
 
+For remote DNS, use the three enrolled nodes' Tailscale IPv4 addresses as tailnet nameservers, not their `10.0.5.x` LAN addresses. No subnet routing is required. First allow the intended client identities to reach `tag:dns-appliance` on both UDP and TCP 53 in the tailnet policy. The appliance recursion ACL includes `100.64.0.0/10`; nftables accepts DNS on `tailscale0` and rejects that source range on other network interfaces.
+
+Before changing tailnet DNS, run `dig @<node-tailscale-ip> home.arpa SOA` and `dig @<node-tailscale-ip> example.com A` from an approved remote client for each node, then repeat both with `+tcp`. Check that an unauthorized peer cannot query them. These live checks require installed, enrolled appliances and are separate from source simulations.
+
+Choose restricted nameservers for `home.arpa` when only internal names should use the appliances. To send public lookups through them as well, configure global nameservers and enable the tailnet DNS override on clients. Keep all three appliances on `--accept-dns=false` to avoid making their own resolver depend on this client configuration. All three nameservers must serve the same intended data; listing them does not establish strict primary/secondary query order. Technitium web administration still uses the LAN listener or a verified SSH tunnel to loopback.
+
 ## DNS change and router cutover
 
 Check health, create a plan, compare it with the reviewed zone change, then apply from the exact approved clean commit using the command's literal confirmation:

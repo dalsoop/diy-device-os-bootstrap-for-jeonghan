@@ -116,4 +116,61 @@ jq -e '
 ' "$temporary/network.json" >/dev/null
 pass network_preflight_offline_json_is_explicit
 
-echo "RESULT $pass_count/6 management simulations passed"
+# Exercise the actual first-boot renderer without running appliance setup.
+python3 - "$repo_root/installer/payload/dns-appliance-firstboot" "$temporary" <<'PY'
+import pathlib
+import re
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text()
+function = re.search(r"^write_technitium_env\(\) \{\n.*?^\}", source, re.M | re.S)
+assert function, "first-boot environment renderer is missing"
+fixture = function.group().replace("/etc/dns-appliance", "${fixture_dir}")
+pathlib.Path(sys.argv[2], "render-env").write_text(
+    'set -eu\n' + fixture + '\nwrite_technitium_env "$1"\n'
+)
+PY
+for include_password in true false; do
+    fixture_dir="$temporary" ROLE=dns01 CLUSTER_DOMAIN=home.arpa \
+        ADDRESS=10.0.5.1 LAN_CIDR=10.0.0.0/16 technitium_token="$temporary/token" \
+        sh "$temporary/render-env" "$include_password"
+    python3 - "$temporary/technitium.env" "$include_password" <<'PY'
+import ipaddress
+import pathlib
+import stat
+import sys
+
+path = pathlib.Path(sys.argv[1])
+config = dict(line.split("=", 1) for line in path.read_text().splitlines())
+assert stat.S_IMODE(path.stat().st_mode) == 0o600
+assert config["DNS_SERVER_RECURSION"] == "UseSpecifiedNetworkACL"
+networks = [ipaddress.ip_network(value) for value in config["DNS_SERVER_RECURSION_NETWORK_ACL"].split(",")]
+allowed = lambda address: any(ipaddress.ip_address(address) in network for network in networks)
+for address in ("127.0.0.1", "10.0.5.1", "10.0.255.254", "100.64.0.0", "100.100.1.2", "100.127.255.255"):
+    assert allowed(address), f"expected recursion for {address}"
+for address in ("1.1.1.1", "10.1.0.1", "100.63.255.255", "100.128.0.0", "192.168.0.1", "::1"):
+    assert not allowed(address), f"unexpected recursion for {address}"
+assert ("DNS_SERVER_ADMIN_PASSWORD_FILE" in config) == (sys.argv[2] == "true")
+assert config["DNS_SERVER_AUTH_STATIC_SESSIONS"] == "admin:token"
+PY
+done
+pass firstboot_recursion_allows_lan_and_tailscale_but_not_public_clients
+
+python3 - "$repo_root/installer/payload/nftables.conf" <<'PY'
+import pathlib
+import sys
+
+rules = [line.strip() for line in pathlib.Path(sys.argv[1]).read_text().splitlines()
+         if line.strip() and not line.strip().startswith("#")]
+guard = rules.index('iifname != "tailscale0" ip saddr 100.64.0.0/10 drop')
+assert rules.index('iifname "lo" accept') < guard
+for index, rule in enumerate(rules):
+    if "accept" in rule and rule != 'iifname "lo" accept' and not rule.startswith("type "):
+        assert guard < index, "CGNAT guard must precede connection and LAN allowances"
+assert 'iifname "tailscale0" udp dport 53 accept' in rules
+assert 'iifname "tailscale0" tcp dport { 22, 53, 9090, 9100, 53443 } accept' in rules
+assert 'type filter hook input priority 0; policy drop;' in rules
+PY
+pass tailscale_source_range_is_guarded_before_other_firewall_allowances
+
+echo "RESULT $pass_count/8 management simulations passed"

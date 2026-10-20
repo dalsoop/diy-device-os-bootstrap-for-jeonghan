@@ -93,6 +93,8 @@ Installation writes public enrollment evidence, sanitized install logs, `COMPLET
 
 DNS UDP/TCP 53 is allowed from the approved LAN. SSH, Cockpit, metrics, and Technitium administration are limited to management sources; cluster traffic is limited to fixed peers. IPv6 follows an explicit reviewed policy, and an accidental wildcard listener is a failed verification.
 
+Technitium recursion permits loopback, the configured LAN, and Tailscale IPv4 addresses (`100.64.0.0/10`). The firewall drops that source range outside `tailscale0` before established-connection or LAN rules; Tailscale authenticates peers, and the reviewed tailnet policy controls which peers may query UDP/TCP 53. This is a recursive resolver for those approved clients, not a public resolver. The Technitium web listener remains on loopback and the appliance LAN address; a tailnet firewall allowance alone does not make that listener available at a Tailscale address.
+
 Tailscale appliances accept no DNS configuration, advertise no subnet route, provide no exit node, and expose no Tailscale SSH, Serve, or Funnel. The agent path uses a forced command on the management host rather than opening appliance or router ports.
 
 If a wrong disk becomes writable, all media operations stop. The affected media is preserved, target-resolution logic and simulations are corrected, and disposable physical qualification repeats before any production node is enabled.

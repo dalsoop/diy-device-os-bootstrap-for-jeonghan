@@ -3,9 +3,9 @@
   "id": "dns-appliance",
   "group": "dns",
   "destination": "images/01-dns/dns-appliance-installer.iso",
-  "menu_alias": "DNS 서버 자동 설치 (HP 전용, 디스크 삭제 주의)",
-  "description_ko": "정확한 HP 인벤토리와 재설치 승인이 일치해야만 디스크 삭제를 허용한다.",
-  "description_en": "Guarded DNS installer; exact HP inventory and reinstall authorization are required.",
+  "menu_alias": "Debian OS + DNS 서버 설치 (내부 디스크 삭제 주의)",
+  "description_ko": "Debian OS와 DNS를 함께 설치합니다. 장비 식별·대상 디스크·재설치 승인 검사를 통과해야 합니다.",
+  "description_en": "Installs Debian OS and DNS together after hardware, target-disk and reinstall checks.",
   "boot_behavior": "guarded-unattended",
   "profile_adapter": "dns-appliance",
   "source": {

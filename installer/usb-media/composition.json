@@ -25,22 +25,42 @@
     {
       "id": "dns-appliance-status-monitor",
       "destination": "tools/dns-appliance-status-monitor",
-      "source": { "kind": "repository-tree", "path": "management/dns-appliance-status-monitor" }
+      "source": {
+        "kind": "repository-tree",
+        "path": "management/dns-appliance-status-monitor"
+      }
     },
     {
       "id": "dns-inventory-capture",
       "destination": "tools/capture-inventory",
-      "source": { "kind": "repository-file", "path": "installer/capture-inventory" }
+      "source": {
+        "kind": "repository-file",
+        "path": "installer/capture-inventory"
+      }
     },
     {
       "id": "dns-inventory-wizard",
       "destination": "tools/dns-inventory",
-      "source": { "kind": "repository-file", "path": "installer/inventory-wizard" }
+      "source": {
+        "kind": "repository-file",
+        "path": "installer/inventory-wizard"
+      }
     },
     {
       "id": "dns-inventory-guide",
       "destination": "guides/DNS_INVENTORY.md",
-      "source": { "kind": "repository-file", "path": "usb-media/guides/dns-inventory.md" }
+      "source": {
+        "kind": "repository-file",
+        "path": "usb-media/guides/dns-inventory.md"
+      }
+    },
+    {
+      "id": "dns-install-guide",
+      "destination": "guides/DNS_INSTALL.md",
+      "source": {
+        "kind": "repository-file",
+        "path": "usb-media/guides/dns-install.md"
+      }
     }
   ]
 }

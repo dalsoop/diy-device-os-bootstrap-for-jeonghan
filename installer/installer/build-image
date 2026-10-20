@@ -197,6 +197,20 @@ cleanup_iso_verify() {
     rm -rf "$iso_verify_dir"
 }
 trap cleanup_iso_verify EXIT HUP INT TERM
+xorriso -osirrox on -indev "$iso" -extract /boot/grub/grub.cfg "$iso_verify_dir/grub.cfg" \
+    >/dev/null 2>&1 || fail "built ISO is missing its UEFI menu"
+xorriso -osirrox on -indev "$iso" -extract /isolinux "$iso_verify_dir/isolinux" \
+    >/dev/null 2>&1 || fail "built ISO is missing its BIOS menu"
+awk '
+    /^[[:space:]]*set[[:space:]]+timeout=/ {
+        if ($0 !~ /^[[:space:]]*set[[:space:]]+timeout=-1[[:space:]]*$/) bad=1
+    }
+    END {exit bad ? 1 : 0}
+' "$iso_verify_dir/grub.cfg" || fail "built ISO enables automatic UEFI boot"
+awk '
+    toupper($1) == "TIMEOUT" && $2 != "0" {bad=1}
+    END {exit bad ? 1 : 0}
+' "$iso_verify_dir"/isolinux/*.cfg || fail "built ISO enables automatic BIOS boot"
 for embedded in install-gate guided.templates install-mode dns01.conf dns02.conf dns03.conf \
     operator-authorized-keys age-recipient sources.env \
     enrollment-record.schema.json source.md; do
@@ -253,15 +267,18 @@ jq -n \
     > "$artifact_dir/build-manifest.json"
 
 packages_file=$artifact_dir/debian-packages.txt
-find "$builder_dir/mirror" -type f -name Packages -exec awk '
+mirror_dir=$builder_dir/tmp/mirror
+find "$mirror_dir" -type f -name Packages -exec awk '
     /^Package: / { package=$2 }
     /^Version: / { if (package != "") print package "=" $2; package="" }
 ' {} + 2>/dev/null | LC_ALL=C sort -u > "$packages_file"
+[ -s "$packages_file" ] || fail "Debian package inventory is empty"
 
 package_hashes=$artifact_dir/debian-package-sha256s.txt
-find "$builder_dir/mirror" -type f \( -name '*.deb' -o -name '*.udeb' \) \
+find "$mirror_dir" -type f \( -name '*.deb' -o -name '*.udeb' \) \
     -exec sha256sum {} + 2>/dev/null |
-    sed "s#$builder_dir/mirror/##" | LC_ALL=C sort > "$package_hashes"
+    sed "s#$mirror_dir/##" | LC_ALL=C sort > "$package_hashes"
+[ -s "$package_hashes" ] || fail "Debian package checksum inventory is empty"
 
 jq -n \
     --arg name "dns-appliance-installer-$build_id" \

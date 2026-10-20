@@ -102,3 +102,5 @@ If a wrong disk becomes writable, all media operations stop. The affected media 
 ## Guided installation consent
 
 Guided media embed disabled role network profiles, not enabled hardware inventories. The Debian Installer frontend captures identities locally and requires an exact role/disk/serial/byte-count erase phrase. No internal-disk write occurs in capture; partition preparation repeats exact identity and size checks and rejects additional eligible internal disks. Volatile confirmation is invalid after reboot or hardware replacement. Existing active-generation reinstall authorization remains mandatory. This consent is distinct from USB burn confirmation and does not authorize router or network cutover.
+
+Mounted filesystem and swap checks resolve mapper/partition ancestry; active block-device holders also block preparation. Image acceptance checks the generated BIOS and UEFI menus for disabled automatic timeouts. Simple-CDD numeric `BOOT_TIMEOUT=0` must not be used because it means immediate UEFI boot.

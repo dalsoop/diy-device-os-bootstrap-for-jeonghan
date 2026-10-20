@@ -127,6 +127,7 @@ make_fixture() {
     make_disk "$root" sdb 1 'TEST USB' 'TEST-USB-01' 4194304 usb
     make_partition "$root" sdb sdb1
     printf '/dev/sdb1 /cdrom iso9660 ro 0 0\n' > "$root/mounts"
+    printf 'Filename Type Size Used Priority\n' > "$root/swaps"
 
     cat > "$root/media/dns01.conf" <<EOF
 role=dns01
@@ -161,6 +162,7 @@ run_gate() {
     DNS_INSTALLER_STATE_DIR="$root/run" \
     DNS_INSTALLER_SYS_ROOT="$root/sys" \
     DNS_INSTALLER_MOUNTS_FILE="$root/mounts" \
+    DNS_INSTALLER_SWAPS_FILE="$root/swaps" \
     DNS_INSTALLER_DEBCONF_SET="$test_root/bin/debconf-set" \
     DNS_INSTALLER_ENROLLMENT_DIR="$root/enrollment" \
     DNS_INSTALLER_DEVICE_ROOT="$root/dev" \
@@ -431,5 +433,20 @@ identify_guided "$root"
 make_partition "$root" sda sda1
 printf '/dev/sda1 /cdrom iso9660 ro 0 0\n' > "$root/mounts"
 expect_failure guided_rechecks_installer_parent_before_partitioning "$root"
+
+root=$(make_guided_fixture guided-mounted-mapper)
+make_partition "$root" sda sda1
+make_mapper "$root" dm-0 target-root sda1
+printf '/dev/mapper/target-root /target ext4 rw 0 0\n' >> "$root/mounts"
+expect_identify_failure guided_rejects_mounted_mapper_backing_disk "$root"
+
+root=$(make_guided_fixture guided-active-swap)
+make_partition "$root" sda sda1
+printf '/dev/sda1 partition 1024 0 -2\n' >> "$root/swaps"
+expect_identify_failure guided_rejects_active_swap_backing_disk "$root"
+
+root=$(make_guided_fixture guided-active-holder)
+mkdir -p "$root/sys/class/block/sda/holders/dm-0"
+expect_identify_failure guided_rejects_active_block_holder "$root"
 
 printf 'RESULT reviewed and guided install-gate simulations passed\n'

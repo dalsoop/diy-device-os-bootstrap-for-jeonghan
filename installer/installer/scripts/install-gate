@@ -7,6 +7,7 @@ media_dir=${DNS_INSTALLER_MEDIA_DIR:-/cdrom/simple-cdd}
 state_dir=${DNS_INSTALLER_STATE_DIR:-/run/dns-appliance}
 sys_root=${DNS_INSTALLER_SYS_ROOT:-/sys}
 mounts_file=${DNS_INSTALLER_MOUNTS_FILE:-/proc/mounts}
+swaps_file=${DNS_INSTALLER_SWAPS_FILE:-/proc/swaps}
 debconf_set_command=${DNS_INSTALLER_DEBCONF_SET:-debconf-set}
 device_root=${DNS_INSTALLER_DEVICE_ROOT:-/dev}
 zero_command=${DNS_INSTALLER_ZERO_COMMAND:-dd}
@@ -357,14 +358,36 @@ disk_is_usb_backed() {
 }
 
 assert_target_unmounted() {
-    disk=$1
+    checked_disk=$1
     while IFS=' ' read -r source _rest; do
         case "$source" in
-            "/dev/$disk"|"/dev/$disk"[0-9]*|"/dev/$disk"p[0-9]*)
-                fail "target disk $disk has a mounted filesystem"
+            "/dev/$checked_disk"|"/dev/$checked_disk"[0-9]*|"/dev/$checked_disk"p[0-9]*)
+                fail "target disk $checked_disk has a mounted filesystem"
+                ;;
+            /dev/*)
+                mounted_name=$(block_name_from_source "$source")
+                mounted_parent=$(physical_parent_disk "$mounted_name")
+                [ "$mounted_parent" != "$checked_disk" ] ||
+                    fail "target disk $checked_disk backs a mounted filesystem"
                 ;;
         esac
     done < "$mounts_file"
+    [ -r "$swaps_file" ] || fail "cannot inspect active swap"
+    while read -r source _rest; do
+        case "$source" in
+            /dev/*)
+                swap_name=$(block_name_from_source "$source")
+                swap_parent=$(physical_parent_disk "$swap_name")
+                [ "$swap_parent" != "$checked_disk" ] || fail "target disk $checked_disk backs active swap"
+                ;;
+        esac
+    done < "$swaps_file"
+    for component in "$sys_root/class/block/$checked_disk" \
+        "$sys_root/class/block/$checked_disk"/"$checked_disk"*; do
+        for holder in "$component"/holders/*; do
+            [ ! -e "$holder" ] || fail "target disk $checked_disk has an active block-device holder"
+        done
+    done
 }
 
 prepare_target_disk() {

@@ -110,3 +110,11 @@ and compares all of them before live target inspection or any write.
 **Cause:** Simple-CDD 0.6.9 unconditionally requests i386 installer boot files for an amd64 build, although trixie removed the i386 installer.
 
 **Response:** `fetch-debian-installer` verifies the dated snapshot Release using Debian archive signatures, verifies its referenced SHA-256 list, and verifies the six required amd64 text/graphical installer components. The builder passes this verified cache through Simple-CDD custom-installer support and disables only 32-bit UEFI support. BIOS and 64-bit UEFI remain qualification requirements. Never bypass signature or digest checks, use an unverified daily installer, or weaken a required source gate to make the build proceed.
+
+## Zero timeout has different BIOS and UEFI meanings
+
+**Symptom:** an ISO configured with Simple-CDD `BOOT_TIMEOUT=0` boots its UEFI default immediately.
+
+**Cause:** BIOS ISOLINUX zero means wait, while Simple-CDD also emits GRUB `set timeout=0`, which means immediate boot.
+
+**Response:** leave the Simple-CDD timeout override empty to preserve Debian no-timeout defaults; image acceptance extracts both boot menus and rejects automatic timeouts. VM BIOS and UEFI menu waiting must still be observed before installation qualification.

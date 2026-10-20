@@ -102,3 +102,11 @@ and compares all of them before live target inspection or any write.
 **Cause:** the router may still treat the LAN as `10.0.0.0/24`; sharing the first octet does not make `10.0.5.0/24` directly reachable.
 
 **Response:** preserve a wired recovery client and old router values, then configure a `10.0.0.0/16` LAN or an explicit route. Prove node reachability before changing DHCP DNS advertisement.
+
+## Simple-CDD requests a removed trixie i386 installer
+
+**Symptom:** an amd64 Debian 13 build fails with HTTP 404 while fetching `installer-i386/current/images/SHA256SUMS`.
+
+**Cause:** Simple-CDD 0.6.9 unconditionally requests i386 installer boot files for an amd64 build, although trixie removed the i386 installer.
+
+**Response:** `fetch-debian-installer` verifies the dated snapshot Release using Debian archive signatures, verifies its referenced SHA-256 list, and verifies the six required amd64 text/graphical installer components. The builder passes this verified cache through Simple-CDD custom-installer support and disables only 32-bit UEFI support. BIOS and 64-bit UEFI remain qualification requirements. Never bypass signature or digest checks, use an unverified daily installer, or weaken a required source gate to make the build proceed.

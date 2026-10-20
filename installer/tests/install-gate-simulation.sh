@@ -408,4 +408,28 @@ root=$(make_guided_fixture guided-unknown-mode)
 printf 'unknown\n' > "$root/media/install-mode"
 expect_failure unknown_install_mode_is_blocked "$root"
 
+root=$(make_guided_fixture guided-invalid-network)
+sed 's/gateway=10.0.0.1/gateway=192.168.0.1/' "$root/media/dns01.conf" > "$root/media/dns01.new"
+mv "$root/media/dns01.new" "$root/media/dns01.conf"
+expect_identify_failure guided_rejects_unreachable_gateway "$root"
+
+root=$(make_guided_fixture guided-duplicate-profile-field)
+printf 'address=10.0.5.9\n' >> "$root/media/dns01.conf"
+expect_identify_failure guided_rejects_duplicate_profile_fields "$root"
+
+root=$(make_guided_fixture guided-unsafe-network)
+printf 'domain=home.arpa;false\n' >> "$root/media/dns01.conf"
+expect_identify_failure guided_rejects_unsafe_network_values "$root"
+
+root=$(make_guided_fixture guided-disk-serial-changed)
+identify_guided "$root"
+printf 'NEW-DISK\n' > "$root/sys/class/block/sda/device/serial"
+expect_failure guided_rechecks_disk_serial_before_partitioning "$root"
+
+root=$(make_guided_fixture guided-target-is-now-installer)
+identify_guided "$root"
+make_partition "$root" sda sda1
+printf '/dev/sda1 /cdrom iso9660 ro 0 0\n' > "$root/mounts"
+expect_failure guided_rechecks_installer_parent_before_partitioning "$root"
+
 printf 'RESULT reviewed and guided install-gate simulations passed\n'

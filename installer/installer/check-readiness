@@ -41,6 +41,10 @@ for role in dns01 dns02 dns03; do
         inventory_complete=0
         block "captured inventory has the wrong role for $role"
     fi
+    if ! /bin/sh "$script_dir/scripts/install-gate" validate-profile "$file" "$role" 2>/dev/null; then
+        inventory_complete=0
+        block "$role has an invalid network profile"
+    fi
     enabled=$(awk -F= '$1 == "destructive_install_enabled" { print $2 }' "$file")
     case "$enabled" in
         true) enabled_count=$((enabled_count + 1)) ;;

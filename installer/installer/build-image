@@ -114,6 +114,7 @@ for role in dns01 dns02 dns03; do
         source_file=$inventory_dir/$role.conf.example
     fi
     [ -r "$source_file" ] || fail "missing inventory: $source_file"
+    /bin/sh "$script_dir/scripts/install-gate" validate-profile "$source_file" "$role"
     grep -q "^role=$role$" "$source_file" || fail "$role has the wrong role field"
     for key in address prefix_length netmask gateway dns_servers domain lan_cidr management_cidr cluster_domain; do
         value=$(awk -F= -v wanted="$key" '$1 == wanted { print $2 }' "$source_file")
@@ -180,8 +181,10 @@ install -m 0644 "$tailscale_licenses" \
     echo "See third-party-notices.md and the notices supplied with each payload."
 } > "$generated_dir/source.md"
 
+"$script_dir/fetch-debian-installer"
 cd "$builder_dir"
-build-simple-cdd --conf simple-cdd.conf --profiles dns
+DNS_APPLIANCE_DI_DIR="$cache_dir/debian-installer-$DEBIAN_SNAPSHOT" \
+    build-simple-cdd --verbose --conf simple-cdd.conf --profiles dns
 
 set -- images/*.iso
 [ -e "$1" ] || fail "Simple-CDD completed without an ISO"

@@ -141,3 +141,7 @@ The gateway is accessed through MCP stdio locally or a management-host forced SS
 | `dns_apply` | Fixed role, full lowercase 40-character approved commit, exact `APPLY home.arpa TO <role> AT <commit>` | Delegated apply result | Always discoverable but rejects calls unless host policy is enabled; requires applier token and trusted CA plus all `dnsctl` gates |
 
 There is no gateway interface for USB burn, OS installation, restore, reinstall authorization, enrollment, router mutation, arbitrary shell, arbitrary path, arbitrary URL, or raw credential input.
+
+`install-gate validate-profile <file> <role>` validates unique fields, required values, IPv4 ranges, prefix/netmask agreement, LAN membership, gateway reachability, management subnet containment and safe domain fields without reading hardware or writing disks. Image build, readiness and guided capture share this validator.
+
+`fetch-debian-installer` fetches the locked Debian snapshot Release/signature and installer checksums, verifies Debian archive signatures and the entire digest chain, then atomically promotes the six required amd64 text/graphical installer files into the ignored cache. Existing mismatched components fail rather than being silently replaced. Temporary verification/download files are removed after success or failure. This is an input preparation operation, never disk-write authority.

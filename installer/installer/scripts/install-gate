@@ -101,6 +101,48 @@ load_config() {
     done < "$config"
 }
 
+validate_profile() {
+    awk -F= -v role="$2" '
+        function ip(value,    a,n,i,result) {
+            n=split(value,a,"."); result=0
+            if (n != 4) bad=1
+            for (i=1;i<=n;i++) {
+                if (a[i] !~ /^[0-9]+$/ || a[i]+0 > 255 || length(a[i]) > 3) bad=1
+                result=result*256+a[i]
+            }
+            return result
+        }
+        function cidr(value,    a,n,p,addr) {
+            n=split(value,a,"/"); p=a[2]+0; addr=ip(a[1])
+            if (n != 2 || a[2] !~ /^[0-9]+$/ || p<1 || p>32) { bad=1; return 0 }
+            if (addr % (2^(32-p)) != 0) bad=1
+            return addr
+        }
+        /^[[:space:]]*(#|$)/ {next}
+        NF != 2 || $1 !~ /^[a-z0-9_]+$/ || seen[$1]++ {bad=1}
+        {v[$1]=$2}
+        END {
+            required="role address prefix_length netmask gateway dns_servers domain lan_cidr management_cidr cluster_domain"
+            count=split(required,keys," ")
+            for (i=1;i<=count;i++) if (v[keys[i]] == "") bad=1
+            if (v["role"] != role || role !~ /^dns0[123]$/) bad=1
+            p=v["prefix_length"]+0
+            if (v["prefix_length"] !~ /^[0-9]+$/ || p<1 || p>30) {exit 1}
+            size=2^(32-p)
+            address=ip(v["address"]); gateway=ip(v["gateway"])
+            ip(v["dns_servers"])
+            if (ip(v["netmask"]) != 2^32-size) bad=1
+            lan=cidr(v["lan_cidr"]); split(v["lan_cidr"],a,"/")
+            if (a[2]+0 != p || int(address/size)*size != lan || int(gateway/size)*size != lan) bad=1
+            if (address == gateway || address == lan || address == lan+size-1 || gateway == lan || gateway == lan+size-1) bad=1
+            management=cidr(v["management_cidr"]); split(v["management_cidr"],a,"/")
+            if (a[2]+0 < p || int(management/size)*size != lan) bad=1
+            if (v["domain"] !~ /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/ || v["cluster_domain"] !~ /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/) bad=1
+            exit bad ? 1 : 0
+        }
+    ' "$1" || fail "invalid or inconsistent network profile for $2"
+}
+
 match_node() {
     product_name_hash=$(hash_value "$(read_first_line "$sys_root/class/dmi/id/product_name")")
     product_sku_hash=$(hash_value "$(read_first_line "$sys_root/class/dmi/id/product_sku")")
@@ -452,6 +494,7 @@ capture_guided() {
     case "$selected_role" in dns01|dns02|dns03) ;; *) fail "invalid DNS role" ;; esac
     selected_profile=$media_dir/$selected_role.conf
     [ -r "$selected_profile" ] || fail "missing role network profile"
+    validate_profile "$selected_profile" "$selected_role"
     load_config "$selected_profile"
     [ "$ROLE" = "$selected_role" ] || fail "network profile role mismatch"
     [ "$DESTRUCTIVE_INSTALL_ENABLED" = false ] || fail "guided profiles must be disabled"
@@ -541,6 +584,10 @@ if [ "$install_mode" = guided ] && [ "${1:-}" = identify ]; then
 fi
 
 case "${1:-}" in
+    validate-profile)
+        [ "$#" -eq 3 ] || fail "validate-profile requires a file and role"
+        validate_profile "$2" "$3"
+        ;;
     identify)
         if [ "$install_mode" = guided ]; then capture_guided; else match_node; fi
         ;;

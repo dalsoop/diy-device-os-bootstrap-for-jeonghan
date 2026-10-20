@@ -124,4 +124,69 @@ if PATH="$mock_bin:/usr/bin:/bin" TEST_LOG="$log" \
     exit 1
 fi
 
-echo "image builder simulations: passed"
+installer_fixture=$temporary/debian-installer-fixture
+installer_bin=$temporary/installer-bin
+mkdir -p "$installer_fixture" "$installer_bin"
+printf 'test component\n' > "$installer_fixture/component"
+component_digest=$(sha256sum "$installer_fixture/component" | awk '{print $1}')
+for file in cdrom/initrd.gz cdrom/vmlinuz cdrom/debian-cd_info.tar.gz \
+    cdrom/gtk/initrd.gz cdrom/gtk/vmlinuz cdrom/gtk/debian-cd_info.tar.gz; do
+    printf '%s  ./%s\n' "$component_digest" "$file"
+done > "$installer_fixture/SHA256SUMS"
+list_digest=$(sha256sum "$installer_fixture/SHA256SUMS" | awk '{print $1}')
+printf 'SHA256:\n %s 1 main/installer-amd64/current/images/SHA256SUMS\n' \
+    "$list_digest" > "$installer_fixture/Release"
+printf 'test signature\n' > "$installer_fixture/Release.gpg"
+cat > "$installer_bin/curl" <<'EOF'
+#!/bin/sh
+set -eu
+output=
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --output) output=$2; shift 2 ;;
+        --proto|--tlsv1.2) if [ "$1" = --proto ]; then shift 2; else shift; fi ;;
+        --fail|--location) shift ;;
+        *) url=$1; shift ;;
+    esac
+done
+case "$url" in
+    */Release) source=Release ;;
+    */Release.gpg) source=Release.gpg ;;
+    */SHA256SUMS) source=SHA256SUMS ;;
+    *) source=component ;;
+esac
+cp "$DNS_TEST_INSTALLER_FIXTURE/$source" "$output"
+if [ "$source" = component ] && [ "${DNS_TEST_TAMPER_COMPONENT:-false}" = true ]; then
+    printf 'tampered\n' >> "$output"
+fi
+EOF
+cat > "$installer_bin/gpgv" <<'EOF'
+#!/bin/sh
+[ "${DNS_TEST_BAD_SIGNATURE:-false}" = false ]
+EOF
+chmod 0755 "$installer_bin/curl" "$installer_bin/gpgv"
+fetch_installer() {
+    PATH="$installer_bin:$PATH" DNS_TEST_INSTALLER_FIXTURE="$installer_fixture" \
+        DNS_APPLIANCE_CACHE_DIR="$1" "$repo_root/installer/fetch-debian-installer"
+}
+fetch_installer "$temporary/verified-installer" > "$temporary/installer-fetch.log" 2>&1
+fetch_installer "$temporary/verified-installer" >> "$temporary/installer-fetch.log" 2>&1
+cached_component=$(find "$temporary/verified-installer" -name vmlinuz -print -quit)
+printf 'tampered\n' >> "$cached_component"
+if fetch_installer "$temporary/verified-installer" >> "$temporary/installer-fetch.log" 2>&1; then
+    echo 'image-builder-simulation: tampered installer cache accepted' >&2; exit 1
+fi
+if DNS_TEST_BAD_SIGNATURE=true fetch_installer "$temporary/bad-signature" >> "$temporary/installer-fetch.log" 2>&1; then
+    echo 'image-builder-simulation: unsigned installer metadata accepted' >&2; exit 1
+fi
+if DNS_TEST_TAMPER_COMPONENT=true fetch_installer "$temporary/bad-component" >> "$temporary/installer-fetch.log" 2>&1; then
+    echo 'image-builder-simulation: tampered installer download accepted' >&2; exit 1
+fi
+printf 'tampered metadata\n' >> "$installer_fixture/SHA256SUMS"
+if fetch_installer "$temporary/bad-checksums" >> "$temporary/installer-fetch.log" 2>&1; then
+    echo 'image-builder-simulation: unbound installer checksum list accepted' >&2; exit 1
+fi
+[ -z "$(find "$temporary/verified-installer" "$temporary/bad-signature" \
+    "$temporary/bad-component" "$temporary/bad-checksums" -name '.verify.*' -print)" ]
+
+echo "image builder and signed Debian installer fetch simulations: passed"

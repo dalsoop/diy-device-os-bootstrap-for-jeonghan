@@ -134,3 +134,11 @@ and compares all of them before live target inspection or any write.
 **Cause:** the real Debian 13 kernel exposes SATA SCSI VPD pages rather than `/sys/class/block/sda/device/serial`. This was reproduced with the signed installer kernel and a disposable QEMU SATA disk.
 
 **Response:** inventory and installation share `disk-identity`. It reads kernel serial attributes where present, then uses Debian Installer's read-only `ata_id --export` probe on the exact SATA block device. Missing, duplicated, failed or changed serial evidence still blocks installation; a model, device name or generic WWID never substitutes for a serial.
+
+## debian-cd needs task metadata for a headless image
+
+**Symptom:** `update_tasks` cannot find `task-desktop` or `tasksel-data`, then fails to open `debian-tasks.desc`.
+
+**Cause:** these packages are absent from the minimal appliance mirror, but Debian 13's debian-cd reads their metadata unconditionally while generating image task lists.
+
+**Response:** include both through the required `dns-build` build-only profile. Only `dns` is automatically selected on the target, so this metadata does not request a desktop installation. Keep the required package and mirror-completeness checks enabled.

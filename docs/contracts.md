@@ -103,6 +103,8 @@ In guided mode, Debian Installer's debconf frontend asks for role and wired phys
 
 A build does not authorize media or internal-disk writing. Its manifest is paired with the DNS runtime artifact during capacity and burn. `check-readiness` uses the same mode environment and rejects a mismatched ISO manifest. Guided mode removes the separate capture/rebuild round trip; it does not establish VM or physical installation proof.
 
+Capture, the inventory wizard and the install gate use the same read-only `disk-identity` adapter, bundled beside the capture tools and the ISO gate. Kernel model/serial attributes are preferred; SATA serials may come from `ata_id --export` on the exact candidate block device. Failed, empty or ambiguous identity evidence is rejected, and the serial is re-read before disk preparation.
+
 ## Post-install management interfaces
 
 | Interface | Input | Output and side effects | Error cases |

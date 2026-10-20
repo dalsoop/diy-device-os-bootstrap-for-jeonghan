@@ -94,6 +94,23 @@ installer/management/network-preflight --offline --json 10.0.0.1/16 | jq
 
 The offline form marks outbound DNS and HTTPS readiness unknown. Internet is required to fetch public artifacts and enroll Tailscale, but the already-built DNS installer boots and installs offline. A passing Internet probe does not establish LAN routing, node health, or DNS readiness.
 
+## One USB: guided Debian OS and DNS installation
+
+The guided image is a candidate until BIOS and UEFI installation and a disposable `dns01` pilot pass. Build and validate on the designated M5 host, using its amd64 Debian 13 environment:
+
+```sh
+DNS_APPLIANCE_INSTALL_MODE=guided installer/installer/build-image
+DNS_APPLIANCE_INSTALL_MODE=guided installer/installer/check-readiness
+```
+
+Only operator SSH public keys and the public age recipient enter the image. Keep the corresponding private keys outside the checkout on the management host. The default network profiles retain the planned `10.0.0.0/16` LAN and `10.0.5.1` through `.3`; do not deploy them on a `192.168.0.0/24` LAN without a coordinated network/profile change.
+
+Use the resulting ISO and matching build manifest with the existing `dns-install` World media assembly. Boot the USB deliberately, select the role and connected wired NIC, review the network and internal disk, and type the exact erase phrase shown. Debian and DNS install in that pass; the USB need not return to the management host for an inventory rebuild. An ambiguous, mounted, removable, USB-backed or unreadable internal target blocks installation. Never bypass a rejection by editing a hardware hash.
+
+Keep the USB connected through first boot until encrypted enrollment completes. Qualify and recover `dns01` before repeating for `dns02` and `dns03`. Tailscale enrollment and cluster bootstrap still run from the management host after OS installation. An active role needs its existing generation-bound reinstall token plus a fresh on-target erase confirmation.
+
+The original reviewed-inventory path below remains available with the default `reviewed` mode.
+
 ## First pass: capture hardware inventory
 
 Prepare only the `inventory-capture` selection. On Linux, burn it directly:

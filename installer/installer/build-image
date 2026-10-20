@@ -9,6 +9,12 @@ monorepo_root=$(CDPATH='' cd -- "$repo_root/.." && pwd)
 builder_dir="$script_dir/simple-cdd"
 generated_dir="$builder_dir/generated"
 inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$repo_root/inventory/local}
+install_mode=${DNS_APPLIANCE_INSTALL_MODE:-reviewed}
+case "$install_mode" in
+    reviewed) ;;
+    guided) inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$repo_root/inventory/nodes} ;;
+    *) echo 'build-image: unknown install mode' >&2; exit 1 ;;
+esac
 authorized_keys=${DNS_APPLIANCE_AUTHORIZED_KEYS:-$script_dir/inputs/operator-authorized-keys}
 age_recipient=${DNS_APPLIANCE_AGE_RECIPIENT:-$script_dir/inputs/age-recipient}
 cache_dir=${DNS_APPLIANCE_CACHE_DIR:-$repo_root/cache}
@@ -92,7 +98,7 @@ printf '%s  %s\n' "$TAILSCALE_LICENSES_SHA256" "$tailscale_licenses" |
     sha256sum -c - >/dev/null || fail "Tailscale license inventory SHA-256 mismatch"
 
 mkdir -p "$generated_dir"
-for old in dns01.conf dns02.conf dns03.conf operator-authorized-keys age-recipient \
+for old in dns01.conf dns02.conf dns03.conf install-mode operator-authorized-keys age-recipient \
     technitium.oci.tar tailscale.tgz sources.env enrollment-record.schema.json \
     diy-device-os-bootstrap-for-jeonghan-license.txt license-history.md third-party-notices.md \
     tailscale-license.txt tailscale-dependency-licenses.md source.md; do
@@ -104,15 +110,19 @@ enabled_count=0
 
 for role in dns01 dns02 dns03; do
     source_file="$inventory_dir/$role.conf"
+    if [ "$install_mode" = guided ] && [ ! -r "$source_file" ]; then
+        source_file=$inventory_dir/$role.conf.example
+    fi
     [ -r "$source_file" ] || fail "missing inventory: $source_file"
     grep -q "^role=$role$" "$source_file" || fail "$role has the wrong role field"
-    for key in address netmask gateway dns_servers domain lan_cidr management_cidr cluster_domain; do
+    for key in address prefix_length netmask gateway dns_servers domain lan_cidr management_cidr cluster_domain; do
         value=$(awk -F= -v wanted="$key" '$1 == wanted { print $2 }' "$source_file")
         [ -n "$value" ] || fail "$role is missing $key"
     done
     enabled=$(awk -F= '$1 == "destructive_install_enabled" { print $2 }' "$source_file")
     case "$enabled" in
         true)
+            [ "$install_mode" = reviewed ] || fail "guided network profiles must be disabled"
             enabled_count=$((enabled_count + 1))
             grep -q 'REPLACE_' "$source_file" && fail "$role contains placeholders"
             for key in $required_hashes; do
@@ -132,8 +142,13 @@ for role in dns01 dns02 dns03; do
     install -m 0644 "$source_file" "$generated_dir/$role.conf"
 done
 
-[ "$enabled_count" -eq 1 ] ||
-    fail "exactly one role must have destructive_install_enabled=true; found $enabled_count"
+if [ "$install_mode" = reviewed ]; then
+    [ "$enabled_count" -eq 1 ] ||
+        fail "exactly one role must have destructive_install_enabled=true; found $enabled_count"
+else
+    [ "$enabled_count" -eq 0 ] || fail "guided media must not embed enabled hardware inventories"
+fi
+printf '%s\n' "$install_mode" > "$generated_dir/install-mode"
 
 install -m 0644 "$authorized_keys" "$generated_dir/operator-authorized-keys"
 printf '%s\n' "$recipient" > "$generated_dir/age-recipient"
@@ -179,7 +194,7 @@ cleanup_iso_verify() {
     rm -rf "$iso_verify_dir"
 }
 trap cleanup_iso_verify EXIT HUP INT TERM
-for embedded in install-gate dns01.conf dns02.conf dns03.conf \
+for embedded in install-gate guided.templates install-mode dns01.conf dns02.conf dns03.conf \
     operator-authorized-keys age-recipient sources.env \
     enrollment-record.schema.json source.md; do
     xorriso -osirrox on -indev "$iso" \
@@ -188,6 +203,10 @@ for embedded in install-gate dns01.conf dns02.conf dns03.conf \
 done
 cmp -s "$script_dir/scripts/install-gate" "$iso_verify_dir/install-gate" ||
     fail "built ISO contains a stale install-gate"
+cmp -s "$script_dir/scripts/guided.templates" "$iso_verify_dir/guided.templates" ||
+    fail "built ISO contains stale guided installer questions"
+cmp -s "$generated_dir/install-mode" "$iso_verify_dir/install-mode" ||
+    fail "built ISO contains a stale install mode"
 for role in dns01 dns02 dns03; do
     cmp -s "$generated_dir/$role.conf" "$iso_verify_dir/$role.conf" ||
         fail "built ISO contains stale inventory for $role"
@@ -214,6 +233,7 @@ build_id="debian-$DEBIAN_POINT_RELEASE-technitium-$TECHNITIUM_VERSION-$short_sha
 
 jq -n \
     --arg build_id "$build_id" \
+    --arg install_mode "$install_mode" \
     --arg iso "$(basename "$iso")" \
     --arg iso_sha256 "$iso_sha256" \
     --arg debian "$DEBIAN_POINT_RELEASE" \
@@ -226,7 +246,7 @@ jq -n \
     --arg source_revision "$source_revision" \
     --arg source_repository "$source_repository" \
     --arg source_archive "$source_archive" \
-    '{schema_version:1,build_id:$build_id,iso:$iso,iso_sha256:$iso_sha256,debian_point_release:$debian,debian_snapshot:$snapshot,technitium_version:$technitium,technitium_image_digest:$technitium_digest,technitium_archive_sha256:$technitium_archive_sha256,tailscale_version:$tailscale,tailscale_archive_sha256:$tailscale_archive_sha256,source_revision:$source_revision,source_repository:$source_repository,source_archive:$source_archive}' \
+    '{schema_version:1,build_id:$build_id,install_mode:$install_mode,iso:$iso,iso_sha256:$iso_sha256,debian_point_release:$debian,debian_snapshot:$snapshot,technitium_version:$technitium,technitium_image_digest:$technitium_digest,technitium_archive_sha256:$technitium_archive_sha256,tailscale_version:$tailscale,tailscale_archive_sha256:$tailscale_archive_sha256,source_revision:$source_revision,source_repository:$source_repository,source_archive:$source_archive}' \
     > "$artifact_dir/build-manifest.json"
 
 packages_file=$artifact_dir/debian-packages.txt

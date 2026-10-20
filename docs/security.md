@@ -98,3 +98,7 @@ Technitium recursion permits loopback, the configured LAN, and Tailscale IPv4 ad
 Tailscale appliances accept no DNS configuration, advertise no subnet route, provide no exit node, and expose no Tailscale SSH, Serve, or Funnel. The agent path uses a forced command on the management host rather than opening appliance or router ports.
 
 If a wrong disk becomes writable, all media operations stop. The affected media is preserved, target-resolution logic and simulations are corrected, and disposable physical qualification repeats before any production node is enabled.
+
+## Guided installation consent
+
+Guided media embed disabled role network profiles, not enabled hardware inventories. The Debian Installer frontend captures identities locally and requires an exact role/disk/serial/byte-count erase phrase. No internal-disk write occurs in capture; partition preparation repeats exact identity and size checks and rejects additional eligible internal disks. Volatile confirmation is invalid after reboot or hardware replacement. Existing active-generation reinstall authorization remains mandatory. This consent is distinct from USB burn confirmation and does not authorize router or network cutover.

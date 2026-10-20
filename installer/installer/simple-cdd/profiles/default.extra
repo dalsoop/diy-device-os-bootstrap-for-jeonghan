@@ -1,6 +1,7 @@
 generated/dns01.conf
 generated/dns02.conf
 generated/dns03.conf
+generated/install-mode
 generated/operator-authorized-keys
 generated/age-recipient
 generated/technitium.oci.tar
@@ -14,6 +15,7 @@ generated/tailscale-license.txt
 generated/tailscale-dependency-licenses.md
 generated/source.md
 ../scripts/install-gate
+../scripts/guided.templates
 ../payload/nftables.conf
 ../payload/sshd-hardening.conf
 ../payload/operator-sudoers

@@ -10,6 +10,28 @@ test_root=$(mktemp -d "${TMPDIR:-/tmp}/dns-install-gate.XXXXXX")
 trap 'rm -rf "$test_root"' EXIT HUP INT TERM
 
 mkdir -p "$test_root/bin"
+cat > "$test_root/bin/confmodule" <<'EOF'
+db_set() { :; }
+db_fset() { :; }
+db_input() { :; }
+db_go() { [ "${DNS_TEST_CANCEL:-false}" = false ]; }
+db_stop() { :; }
+db_x_loadtemplatefile() { :; }
+db_subst() {
+    if [ "$2" = confirmation ]; then printf '%s\n' "$3" > "$DNS_TEST_CONFIRMATION"; fi
+}
+db_get() {
+    case "$1" in
+        dns-appliance/role) RET=${DNS_TEST_ROLE:-dns01} ;;
+        dns-appliance/interface) RET=${DNS_TEST_INTERFACE:-en0} ;;
+        dns-appliance/erase)
+            RET=$(cat "$DNS_TEST_CONFIRMATION")
+            [ "${DNS_TEST_WRONG_CONFIRMATION:-false}" = false ] || RET=ERASE
+            ;;
+        *) return 1 ;;
+    esac
+}
+EOF
 cat > "$test_root/bin/sha256sum" <<'EOF'
 #!/bin/sh
 if [ -x /usr/bin/sha256sum ]; then
@@ -144,6 +166,8 @@ run_gate() {
     DNS_INSTALLER_DEVICE_ROOT="$root/dev" \
     DNS_INSTALLER_ZERO_COMMAND="$test_root/bin/dns-test-dd" \
     DNS_INSTALLER_BLOCKDEV_COMMAND="$test_root/bin/dns-test-blockdev" \
+    DNS_INSTALLER_DEBCONF_MODULE="$test_root/bin/confmodule" \
+    DNS_TEST_CONFIRMATION="$root/confirmation" \
     DNS_TEST_DEBCONF_LOG="$root/debconf.log" \
     DNS_TEST_DISK_LOG="$root/disk.log" \
     DNS_TEST_BLOCKDEV_LOG="$root/blockdev.log" \
@@ -276,4 +300,112 @@ authorize_erase=true
 EOF
 expect_failure stale_reinstall_token_is_blocked "$root"
 
-printf 'RESULT 17/17 install-gate simulations passed\n'
+make_guided_fixture() {
+    root=$(make_fixture "$1")
+    printf 'guided\n' > "$root/media/install-mode"
+    cp "$repo_root/installer/scripts/guided.templates" "$root/media/guided.templates"
+    sed 's/destructive_install_enabled=true/destructive_install_enabled=false/' \
+        "$root/media/dns01.conf" > "$root/media/dns01.conf.new"
+    mv "$root/media/dns01.conf.new" "$root/media/dns01.conf"
+    mkdir -p "$root/sys/class/net/en0/device"
+    printf '%s\n' "$root"
+}
+
+identify_guided() {
+    root=$1
+    run_gate "$root" identify > "$root/identify.log" 2>&1 || {
+        cat "$root/identify.log" >&2
+        exit 1
+    }
+    [ ! -s "$root/disk.log" ] || { echo 'guided capture wrote a disk' >&2; exit 1; }
+    [ -s "$root/run/erase-confirmation" ] || exit 1
+}
+
+expect_identify_failure() {
+    name=$1
+    root=$2
+    if run_gate "$root" identify > "$root/identify.log" 2>&1; then
+        printf 'FAIL %s unexpectedly identified\n' "$name" >&2
+        exit 1
+    fi
+    [ ! -s "$root/disk.log" ] && [ ! -s "$root/run/erase-confirmation" ] || exit 1
+    printf 'PASS %s\n' "$name"
+}
+
+root=$(make_guided_fixture guided-valid)
+identify_guided "$root"
+expect_success guided_capture_then_install_exact_target "$root"
+
+root=$(make_guided_fixture guided-unconfirmed)
+expect_failure guided_cannot_skip_capture_and_confirmation "$root"
+
+root=$(make_guided_fixture guided-wrong-confirmation)
+DNS_TEST_WRONG_CONFIRMATION=true
+export DNS_TEST_WRONG_CONFIRMATION
+expect_identify_failure guided_rejects_inexact_erase_phrase "$root"
+unset DNS_TEST_WRONG_CONFIRMATION
+
+root=$(make_guided_fixture guided-cancel)
+DNS_TEST_CANCEL=true
+export DNS_TEST_CANCEL
+expect_identify_failure guided_cancel_never_enables_install "$root"
+unset DNS_TEST_CANCEL
+
+root=$(make_guided_fixture guided-second-disk)
+make_disk "$root" sdc 0 'OTHER SSD' 'OTHER-DISK-02' 4194304
+expect_identify_failure guided_rejects_multiple_internal_disks "$root"
+
+root=$(make_guided_fixture guided-usb)
+make_disk "$root" sda 0 'TEST SSD' 'TEST-DISK-01' 2097152 usb
+expect_identify_failure guided_rejects_usb_backed_target "$root"
+
+root=$(make_guided_fixture guided-removable)
+printf '1\n' > "$root/sys/class/block/sda/removable"
+expect_identify_failure guided_rejects_removable_target "$root"
+
+root=$(make_guided_fixture guided-mounted)
+printf '/dev/sda1 /target ext4 rw 0 0\n' >> "$root/mounts"
+expect_identify_failure guided_rejects_mounted_target "$root"
+
+root=$(make_guided_fixture guided-completed)
+mkdir -p "$root/enrollment/records/dns01"
+printf 'old-generation\n' > "$root/enrollment/records/dns01/ACTIVE"
+expect_identify_failure guided_rejects_active_role_without_token "$root"
+
+root=$(make_guided_fixture guided-hardware-changed)
+identify_guided "$root"
+printf 'REPLACED-SERIAL\n' > "$root/sys/class/dmi/id/product_serial"
+expect_failure guided_rechecks_system_identity_before_partitioning "$root"
+
+root=$(make_guided_fixture guided-disk-size-changed)
+identify_guided "$root"
+printf '4194304\n' > "$root/sys/class/block/sda/size"
+expect_failure guided_requires_exact_confirmed_disk_size "$root"
+
+root=$(make_guided_fixture guided-extra-disk-after-confirm)
+identify_guided "$root"
+make_disk "$root" sdc 0 'OTHER SSD' 'OTHER-DISK-02' 4194304
+expect_failure guided_rechecks_single_target_before_partitioning "$root"
+
+root=$(make_guided_fixture guided-missing-confirmation)
+identify_guided "$root"
+rm "$root/run/erase-confirmation"
+expect_failure guided_requires_confirmation_at_partition_time "$root"
+
+root=$(make_guided_fixture guided-invalid-role)
+DNS_TEST_ROLE=../../other
+export DNS_TEST_ROLE
+expect_identify_failure guided_rejects_invalid_role "$root"
+unset DNS_TEST_ROLE
+
+root=$(make_guided_fixture guided-invalid-interface)
+DNS_TEST_INTERFACE=missing0
+export DNS_TEST_INTERFACE
+expect_identify_failure guided_rejects_unoffered_interface "$root"
+unset DNS_TEST_INTERFACE
+
+root=$(make_guided_fixture guided-unknown-mode)
+printf 'unknown\n' > "$root/media/install-mode"
+expect_failure unknown_install_mode_is_blocked "$root"
+
+printf 'RESULT reviewed and guided install-gate simulations passed\n'

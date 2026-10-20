@@ -38,3 +38,7 @@ The current release state is a source-validated prototype, not a physically qual
 7. Publish each inspected physical USB event or generation through the protected pull-request path after the corresponding disposable write.
 
 There is no source-code blocker to the first three steps. They require the supported Linux builder, disposable media, and physical HP access; source or documentation work cannot supply that evidence.
+
+## Guided OS + DNS candidate (2026-10-21)
+
+The guided path now captures identities and exact target-specific consent inside Debian Installer, then uses the existing guarded Debian OS + offline DNS installation path. On M5, 33 reviewed/guided source simulations passed, including cancellation, incorrect consent, changed hardware/size, multiple disks, USB/removable/mounted targets and active-role rejection. Image build, real debconf presentation, BIOS/UEFI full installation and physical HP qualification remain unproven. The previously completed physical USB generation remains inventory-only and does not install the OS.

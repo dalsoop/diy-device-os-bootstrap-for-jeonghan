@@ -122,3 +122,17 @@ The current mitigation is the fixed command allowlist, protected credential-file
 `restore-node` always invokes the selected Technitium HTTPS origin with certificate verification disabled while sending a bearer token and decrypted backup. Exact URL confirmation prevents accidental target substitution by the operator but does not authenticate that endpoint.
 
 The command is restricted to isolated restore drills and is not production-qualified. Closing this requires a trusted-CA or pinned-fingerprint input, endpoint validation, failure tests for an untrusted certificate, and a successful isolated restore with verification enabled.
+
+## Hosted CI conflicts with the M5-only validation policy
+
+On 2026-10-21, `.github/workflows/ci.yml` still selects GitHub-hosted
+`ubuntu-24.04` for the required `contracts` job on pull requests and pushes to
+`main`. The operator requires builds, tests, and lint gates to run only on
+`m5m1` or `m5m2`. Opening a pull request would therefore start validation on a
+disallowed host, even though source validation has passed separately on `m5m1`.
+
+The pending Tailscale DNS correction and newly verified USB generation remain
+on branches without a pull request. The workflow does not yet connect the
+required GitHub check to the designated M5 validation infrastructure. Closing
+this requires a reviewed runner/workflow integration; the required check and
+branch protection have not been changed or bypassed.

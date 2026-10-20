@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 set -eu
 
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+identity_reader=$script_dir/disk-identity
+[ -r "$identity_reader" ] || identity_reader=$script_dir/../disk-identity
 media_dir=${DNS_INSTALLER_MEDIA_DIR:-/cdrom/simple-cdd}
 state_dir=${DNS_INSTALLER_STATE_DIR:-/run/dns-appliance}
 sys_root=${DNS_INSTALLER_SYS_ROOT:-/sys}
@@ -41,6 +44,11 @@ read_first_line() {
     file=$1
     [ -r "$file" ] || fail "cannot read $file"
     sed -n '1p' "$file"
+}
+
+read_disk_identity() {
+    DNS_DISK_SYS_ROOT="$sys_root" DNS_DISK_DEVICE_ROOT="$device_root" \
+        /bin/sh "$identity_reader" "$1" "$2"
 }
 
 set_debconf() {
@@ -429,12 +437,11 @@ match_disk() {
         [ ! -e "$disk_path/partition" ] || continue
         [ "$(read_first_line "$disk_path/removable")" = 0 ] || continue
         [ "$disk" != "$media_disk" ] || continue
-        [ -r "$disk_path/device/model" ] || continue
-        [ -r "$disk_path/device/serial" ] || continue
         disk_is_usb_backed "$disk" && continue
-
-        model_hash=$(hash_value "$(read_first_line "$disk_path/device/model")")
-        serial_hash=$(hash_value "$(read_first_line "$disk_path/device/serial")")
+        model=$(read_disk_identity "$disk" model) || continue
+        serial=$(read_disk_identity "$disk" serial) || continue
+        model_hash=$(hash_value "$model")
+        serial_hash=$(hash_value "$serial")
         sectors=$(read_first_line "$disk_path/size")
         case "$sectors" in
             ''|*[!0-9]*) continue ;;
@@ -459,7 +466,7 @@ match_disk() {
     if [ "$install_mode" = guided ]; then
         assert_single_guided_disk
         [ "$guided_disk" = "$matched_name" ] || fail "confirmed target changed"
-        confirmation="ERASE $ROLE $matched_disk $(read_first_line "$sys_root/class/block/$matched_name/device/serial") $((matched_sectors * 512))"
+        confirmation="ERASE $ROLE $matched_disk $(read_disk_identity "$matched_name" serial) $((matched_sectors * 512))"
         [ -r "$state_dir/erase-confirmation" ] || fail "fresh erase confirmation is missing"
         [ "$(cat "$state_dir/erase-confirmation")" = "$confirmation" ] ||
             fail "erase confirmation no longer matches the target"
@@ -467,8 +474,8 @@ match_disk() {
     prepare_target_disk "$matched_name" "$matched_sectors"
     {
         printf 'TARGET_DISK=%s\n' "$matched_disk"
-        printf 'TARGET_DISK_MODEL=%s\n' "$(read_first_line "$sys_root/class/block/$matched_name/device/model")"
-        printf 'TARGET_DISK_SERIAL=%s\n' "$(read_first_line "$sys_root/class/block/$matched_name/device/serial")"
+        printf 'TARGET_DISK_MODEL=%s\n' "$(read_disk_identity "$matched_name" model)"
+        printf 'TARGET_DISK_SERIAL=%s\n' "$(read_disk_identity "$matched_name" serial)"
         printf 'TARGET_DISK_PREPARED=true\n'
     } >> "$state_file"
     set_debconf partman-auto/disk "$matched_disk"
@@ -488,7 +495,8 @@ assert_single_guided_disk() {
         [ "$candidate" != "$guided_media_disk" ] || continue
         disk_is_usb_backed "$candidate" && continue
         # Do not ignore an internal disk just because its identity is unreadable.
-        if [ ! -r "$guided_path/device/model" ] || [ ! -r "$guided_path/device/serial" ]; then
+        if ! read_disk_identity "$candidate" model >/dev/null ||
+            ! read_disk_identity "$candidate" serial >/dev/null; then
             fail "internal disk $candidate lacks a readable identity"
         fi
         assert_target_unmounted "$candidate"
@@ -543,8 +551,8 @@ capture_guided() {
 
     assert_single_guided_disk
     selected_disk=$guided_disk
-    selected_model=$(read_first_line "$sys_root/class/block/$selected_disk/device/model")
-    selected_serial=$(read_first_line "$sys_root/class/block/$selected_disk/device/serial")
+    selected_model=$(read_disk_identity "$selected_disk" model)
+    selected_serial=$(read_disk_identity "$selected_disk" serial)
     selected_sectors=$(read_first_line "$sys_root/class/block/$selected_disk/size")
     case "$selected_sectors" in ''|*[!0-9]*) fail "invalid disk size" ;; esac
     [ "$selected_sectors" -gt 262144 ] || fail "target disk is too small"

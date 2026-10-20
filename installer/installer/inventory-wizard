@@ -8,6 +8,7 @@ set -eu
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 capture=$script_dir/capture-inventory
+identity_reader=$script_dir/disk-identity
 output_dir=$(dirname -- "$script_dir")
 sys_root=${DNS_INVENTORY_SYS_ROOT:-/sys}
 mounts_file=${DNS_INVENTORY_MOUNTS_FILE:-/proc/mounts}
@@ -113,11 +114,11 @@ internal_disks() {
         [ ! -e "$path/partition" ] || continue
         [ "$(first_line "$path/removable")" = 0 ] || continue
         [ "$disk" != "$installer_disk" ] || continue
-        [ -r "$path/device/model" ] || continue
-        [ -r "$path/device/serial" ] || continue
         case "$(readlink -f "$path/device")" in
             */usb*/*) continue ;;
         esac
+        DNS_DISK_SYS_ROOT="$sys_root" /bin/sh "$identity_reader" "$disk" model >/dev/null || continue
+        DNS_DISK_SYS_ROOT="$sys_root" /bin/sh "$identity_reader" "$disk" serial >/dev/null || continue
         printf '%s\n' "$disk"
     done
 }
@@ -131,6 +132,8 @@ echo
     "root is required: sudo sh $0"
 [ -r "$capture" ] || fail "같은 폴더에 capture-inventory 가 없습니다." \
     "capture-inventory is missing next to this tool."
+[ -r "$identity_reader" ] || fail "디스크 식별 도구가 없습니다." \
+    "disk-identity is missing next to this tool."
 entry=$(mount_entry)
 [ -n "$entry" ] || fail "USB 데이터 파티션을 마운트한 뒤 그 안의 tools/dns-inventory 를 실행하세요: sudo mount /dev/mapper/VentoyPart /mnt" \
     "mount the USB data partition and run tools/dns-inventory from it: sudo mount /dev/mapper/VentoyPart /mnt"

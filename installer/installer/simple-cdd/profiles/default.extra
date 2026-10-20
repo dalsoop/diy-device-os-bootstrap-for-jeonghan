@@ -15,6 +15,7 @@ generated/tailscale-license.txt
 generated/tailscale-dependency-licenses.md
 generated/source.md
 ../scripts/install-gate
+../disk-identity
 ../scripts/guided.templates
 ../payload/nftables.conf
 ../payload/sshd-hardening.conf

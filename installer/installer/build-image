@@ -213,7 +213,7 @@ awk '
     toupper($1) == "TIMEOUT" && $2 != "0" {bad=1}
     END {exit bad ? 1 : 0}
 ' "$iso_verify_dir"/isolinux/*.cfg || fail "built ISO enables automatic BIOS boot"
-for embedded in install-gate guided.templates install-mode dns01.conf dns02.conf dns03.conf \
+for embedded in install-gate disk-identity guided.templates install-mode dns01.conf dns02.conf dns03.conf \
     operator-authorized-keys age-recipient sources.env \
     enrollment-record.schema.json source.md; do
     xorriso -osirrox on -indev "$iso" \
@@ -222,6 +222,8 @@ for embedded in install-gate guided.templates install-mode dns01.conf dns02.conf
 done
 cmp -s "$script_dir/scripts/install-gate" "$iso_verify_dir/install-gate" ||
     fail "built ISO contains a stale install-gate"
+cmp -s "$script_dir/disk-identity" "$iso_verify_dir/disk-identity" ||
+    fail "built ISO contains a stale disk-identity reader"
 cmp -s "$script_dir/scripts/guided.templates" "$iso_verify_dir/guided.templates" ||
     fail "built ISO contains stale guided installer questions"
 cmp -s "$generated_dir/install-mode" "$iso_verify_dir/install-mode" ||

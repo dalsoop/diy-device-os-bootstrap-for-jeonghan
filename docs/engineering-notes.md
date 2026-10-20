@@ -126,3 +126,11 @@ and compares all of them before live target inspection or any write.
 **Cause:** Debian 13 provides `dnsutils` through the real `bind9-dnsutils` package, while Simple-CDD checks package filenames rather than virtual provides. Its default CD size is also too small for the appliance's offline package closure and application payload.
 
 **Response:** request `bind9-dnsutils` explicitly and select one DVD-sized ISO. Keep Simple-CDD's required-package check enabled; a populated download mirror alone does not prove that the ISO contains the packages needed for an offline installation.
+
+## SATA disks do not expose the NVMe serial attribute
+
+**Symptom:** Debian Installer sees a SATA SSD but the install gate reports an unreadable disk identity.
+
+**Cause:** the real Debian 13 kernel exposes SATA SCSI VPD pages rather than `/sys/class/block/sda/device/serial`. This was reproduced with the signed installer kernel and a disposable QEMU SATA disk.
+
+**Response:** inventory and installation share `disk-identity`. It reads kernel serial attributes where present, then uses Debian Installer's read-only `ata_id --export` probe on the exact SATA block device. Missing, duplicated, failed or changed serial evidence still blocks installation; a model, device name or generic WWID never substitutes for a serial.

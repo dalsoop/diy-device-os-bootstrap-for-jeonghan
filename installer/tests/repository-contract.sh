@@ -14,6 +14,7 @@ for file in \
     installer/payload/dns-appliance-backup \
     installer/payload/dns-appliance-technitium-run \
     installer/fetch-locked-sources \
+    installer/disk-identity \
     installer/write-usb-linux \
     management/cluster-bootstrap \
     management/dnsctl \

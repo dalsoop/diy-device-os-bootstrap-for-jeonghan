@@ -73,6 +73,7 @@ medium=$temporary/medium
 mkdir -p "$medium/tools"
 cp "$repo_root/installer/inventory-wizard" "$medium/tools/dns-inventory"
 cp "$repo_root/installer/capture-inventory" "$medium/tools/capture-inventory"
+cp "$repo_root/installer/disk-identity" "$medium/tools/disk-identity"
 printf '/dev/sdb1 %s exfat rw,relatime 0 0\n' "$medium" > "$temporary/mounts"
 
 mkdir -p "$temporary/bin"

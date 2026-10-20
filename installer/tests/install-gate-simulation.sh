@@ -51,8 +51,14 @@ cat > "$test_root/bin/dns-test-blockdev" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >> "${DNS_TEST_BLOCKDEV_LOG:?}"
 EOF
+cat > "$test_root/bin/ata-id" <<'EOF'
+#!/bin/sh
+[ "$1" = --export ] || exit 1
+case "$2" in */dev/sda) root=${2%/dev/sda} ;; *) exit 1 ;; esac
+cat "$root/ata.properties"
+EOF
 chmod 0755 "$test_root/bin/sha256sum" "$test_root/bin/debconf-set" \
-    "$test_root/bin/dns-test-dd" "$test_root/bin/dns-test-blockdev"
+    "$test_root/bin/dns-test-dd" "$test_root/bin/dns-test-blockdev" "$test_root/bin/ata-id"
 
 normalize() {
     LC_ALL=C tr '[:lower:]' '[:upper:]' |
@@ -166,6 +172,7 @@ run_gate() {
     DNS_INSTALLER_DEBCONF_SET="$test_root/bin/debconf-set" \
     DNS_INSTALLER_ENROLLMENT_DIR="$root/enrollment" \
     DNS_INSTALLER_DEVICE_ROOT="$root/dev" \
+    DNS_DISK_ATA_ID_COMMAND="$test_root/bin/ata-id" \
     DNS_INSTALLER_ZERO_COMMAND="$test_root/bin/dns-test-dd" \
     DNS_INSTALLER_BLOCKDEV_COMMAND="$test_root/bin/dns-test-blockdev" \
     DNS_INSTALLER_DEBCONF_MODULE="$test_root/bin/confmodule" \
@@ -337,6 +344,54 @@ expect_identify_failure() {
 root=$(make_guided_fixture guided-valid)
 identify_guided "$root"
 expect_success guided_capture_then_install_exact_target "$root"
+
+make_sata_fixture() {
+    root=$(make_guided_fixture "$1")
+    rm "$root/sys/class/block/sda/device/serial"
+    printf 'ID_ATA=1\nID_TYPE=disk\nID_SERIAL_SHORT=TEST-DISK-01\n' > "$root/ata.properties"
+    printf '%s\n' "$root"
+}
+
+root=$(make_sata_fixture guided-sata)
+identify_guided "$root"
+expect_success guided_sata_identity_is_rechecked_before_install "$root"
+DNS_INVENTORY_SYS_ROOT="$root/sys" DNS_INVENTORY_DEVICE_ROOT="$root/dev" \
+    DNS_DISK_ATA_ID_COMMAND="$test_root/bin/ata-id" \
+    /bin/sh "$repo_root/installer/capture-inventory" dns01 10.0.5.1 en0 /dev/sda \
+    > "$root/captured.conf"
+grep -qx "expected_disk_serial_sha256=$(hash_value TEST-DISK-01)" "$root/captured.conf"
+printf 'PASS capture_and_install_share_sata_serial_identity\n'
+
+root=$(make_sata_fixture guided-sata-changed)
+identify_guided "$root"
+printf 'ID_ATA=1\nID_TYPE=disk\nID_SERIAL_SHORT=REPLACED\n' > "$root/ata.properties"
+expect_failure guided_rejects_changed_sata_serial "$root"
+
+root=$(make_sata_fixture guided-sata-missing)
+printf 'ID_ATA=1\nID_TYPE=disk\n' > "$root/ata.properties"
+expect_identify_failure guided_rejects_missing_sata_serial "$root"
+
+root=$(make_sata_fixture guided-sata-duplicate)
+printf 'ID_SERIAL_SHORT=OTHER\n' >> "$root/ata.properties"
+expect_identify_failure guided_rejects_ambiguous_sata_serial "$root"
+
+root=$(make_sata_fixture guided-sata-probe-failure)
+rm "$root/ata.properties"
+expect_identify_failure guided_rejects_failed_sata_identity_probe "$root"
+
+root=$(make_sata_fixture guided-sata-not-ata)
+printf 'ID_ATA=0\nID_TYPE=disk\nID_SERIAL_SHORT=TEST-DISK-01\n' > "$root/ata.properties"
+expect_identify_failure guided_rejects_unverified_ata_identity "$root"
+
+root=$(make_guided_fixture guided-block-serial)
+mv "$root/sys/class/block/sda/device/serial" "$root/sys/class/block/sda/serial"
+identify_guided "$root"
+expect_success guided_supports_kernel_block_serial_attribute "$root"
+
+root=$(make_guided_fixture guided-second-unreadable)
+make_disk "$root" sdc 0 'OTHER SSD' 'OTHER-DISK-02' 4194304
+rm "$root/sys/class/block/sdc/device/serial"
+expect_identify_failure guided_never_ignores_unreadable_second_disk "$root"
 
 root=$(make_guided_fixture guided-unconfirmed)
 expect_failure guided_cannot_skip_capture_and_confirmation "$root"

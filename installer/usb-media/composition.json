@@ -39,6 +39,14 @@
       }
     },
     {
+      "id": "dns-disk-identity",
+      "destination": "tools/disk-identity",
+      "source": {
+        "kind": "repository-file",
+        "path": "installer/disk-identity"
+      }
+    },
+    {
       "id": "dns-inventory-wizard",
       "destination": "tools/dns-inventory",
       "source": {

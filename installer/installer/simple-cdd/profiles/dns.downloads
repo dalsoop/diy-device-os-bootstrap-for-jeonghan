@@ -5,5 +5,12 @@
 # grub-pc conflicts with grub-efi-amd64.
 grub-pc
 grub-efi-amd64
+# grub-installer installs the Secure Boot chain only on UEFI targets. On a BIOS
+# target it purges grub-efi-amd64-bin and grub-efi-amd64-signed, and that purge
+# fails ("protected package") when dns.packages installed them, which aborts
+# the GRUB install.
+shim-signed
+grub-efi-amd64-signed
+mokutil
 # partman installs dosfstools only when an EFI system partition exists.
 dosfstools

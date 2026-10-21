@@ -21,7 +21,4 @@ sudo
 systemd-timesyncd
 unzip
 uuid-runtime
-grub-efi-amd64-signed
-mokutil
-shim-signed
 zstd

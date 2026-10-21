@@ -19,6 +19,15 @@ mkdir -p "$mock_bin"
 truncate -s 2097152 "$image"
 cat > "$catalog" <<EOF
 {
+  "schema_version": 2,
+  "distribution_policy": {
+    "schema_version": 1,
+    "source_release": {"enabled": true},
+    "generated_artifacts": {"enabled": false},
+    "prebuilt_release": {"enabled": false, "required_github_environment": "prebuilt-distribution"}
+  },
+  "bootloader": {"id": "ventoy", "redistribution": {"status": "personal-use-only"}},
+  "entries": [{"id": "debian-live", "source": {"kind": "locked-download", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}, "redistribution": {"status": "personal-use-only"}}],
   "catalog": {
     "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -31,7 +40,7 @@ cat > "$catalog" <<EOF
 EOF
 cat > "$image.manifest.json" <<EOF
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "kind": "device-os-raw-image",
   "image": {
     "filename": "device-os.raw",
@@ -43,9 +52,30 @@ cat > "$image.manifest.json" <<EOF
     "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   },
+  "license": {
+    "mode": "personal-use",
+    "decision": "allow",
+    "distribution_policy_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selected_artifacts": [
+      {"id":"ventoy","kind":"bootloader","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","status":"personal-use-only"},
+      {"id":"debian-live","kind":"catalog-entry","sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","status":"personal-use-only"}
+    ]
+  },
   "world": {"slug": "test-home", "media_id": "inventory-capture"}
 }
 EOF
+
+checker=$temporary/checker
+cat > "$checker" <<'EOF'
+#!/bin/sh
+if [ "${TEST_POLICY_DENY:-0}" = 1 ]; then
+  exit 1
+fi
+cat <<'JSON'
+{"schema_version":1,"mode":"personal-use","decision":"allow","selected_artifacts":[{"id":"ventoy","kind":"bootloader","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","status":"personal-use-only"},{"id":"debian-live","kind":"catalog-entry","sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","status":"personal-use-only"}],"blockers":[],"warnings":[]}
+JSON
+EOF
+chmod +x "$checker"
 
 make_mock() {
     name=$1
@@ -109,6 +139,7 @@ fi'
 run_writer() {
     PATH="$test_path" TEST_LOG="$log" \
     USB_MEDIA_CATALOG="$catalog" \
+    DEVICE_OS_LICENSE_CHECKER="$checker" \
     DEVICE_OS_WRITE_EVIDENCE="$temporary/evidence.json" "$writer" \
         --image "$image" \
         --device /dev/disk9 \
@@ -143,10 +174,24 @@ EOF
 diff -u "$temporary/expected.log" "$log"
 
 : > "$log"
+if PATH="$test_path" TEST_LOG="$log" TEST_POLICY_DENY=1 \
+    USB_MEDIA_CATALOG="$catalog" DEVICE_OS_LICENSE_CHECKER="$checker" \
+    "$writer" --image "$image" --device /dev/disk9 \
+        --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then
+    echo "macos-writer-simulation: denied license policy was accepted" >&2
+    exit 1
+fi
+if [ -s "$log" ]; then
+    echo "macos-writer-simulation: policy refusal reached target inspection or write commands" >&2
+    exit 1
+fi
+
+: > "$log"
 cp "$image.manifest.json" "$temporary/valid-image-manifest.json"
 "$jq_bin" '.world.media_id = "dns-install"' \
     "$temporary/valid-image-manifest.json" > "$image.manifest.json"
 if PATH="$test_path" TEST_LOG="$log" USB_MEDIA_CATALOG="$catalog" \
+    DEVICE_OS_LICENSE_CHECKER="$checker" \
     DEVICE_OS_WRITE_EVIDENCE="$temporary/mismatched-manifest-evidence.json" \
     "$writer" --image "$image" --device /dev/disk9 \
         --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then
@@ -162,6 +207,7 @@ cp "$temporary/valid-image-manifest.json" "$image.manifest.json"
 : > "$log"
 if PATH="$test_path" TEST_LOG="$log" TEST_FAIL_BODY_COMPARE=1 \
     USB_MEDIA_CATALOG="$catalog" \
+    DEVICE_OS_LICENSE_CHECKER="$checker" \
     DEVICE_OS_WRITE_EVIDENCE="$temporary/body-failure-evidence.json" \
     "$writer" --image "$image" --device /dev/disk9 \
         --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then
@@ -181,6 +227,7 @@ fi
 : > "$log"
 if PATH="$test_path" TEST_LOG="$log" TEST_MBR_TYPE=238 \
     USB_MEDIA_CATALOG="$catalog" \
+    DEVICE_OS_LICENSE_CHECKER="$checker" \
     DEVICE_OS_WRITE_EVIDENCE="$temporary/gpt-evidence.json" \
     "$writer" --image "$image" --device /dev/disk9 \
         --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then

@@ -33,13 +33,18 @@ for file in \
     usb-media/verify-catalog \
     usb-media/render-ventoy-config \
     usb-media/calculate-capacity \
+    usb-media/check-license-policy \
     usb-media/build-image \
     usb-media/build-image-linux \
     usb-media/build-image-container \
     usb-media/inspect-targets \
     usb-media/write-usb-linux \
     usb-media/write-image-macos \
+    usb-media/render-distribution-record \
+    build/verify-distribution-contracts \
     management/dns-appliance-status-monitor/start \
+    tests/dns-license-simulation.sh \
+    tests/license-policy-simulation.sh \
     tests/media-catalog-simulation.sh \
     tests/image-builder-simulation.sh \
     tests/macos-writer-simulation.sh \
@@ -57,16 +62,24 @@ done
 for required in \
     installer/inputs/age-recipient.example \
     build/locks/sources.env \
+    build/distribution-policy.json \
+    schemas/component-redistribution-registry.schema.json \
+    schemas/component-review-record.schema.json \
+    schemas/dns-build-manifest.schema.json \
+    schemas/dns-final-review-record.schema.json \
     schemas/enrollment-record.schema.json \
+    schemas/license-check.schema.json \
     schemas/raw-image-manifest.schema.json \
     zones/home.arpa.zone \
     management/tailscale-policy.example.hujson \
     usb-media/composition.json \
+    usb-media/distribution-policy.json \
     usb-media/local-entries/dns-appliance.json \
     collections/device-os.json \
     usb-media/guides/dns-inventory.md \
     installer/inventory-wizard \
     ../docs/tracking/decisions/0010-resolve-media-through-declarative-catalog.md \
+    ../docs/tracking/decisions/0012-default-to-source-only-releases.md \
     management/dns-appliance-status-monitor/config.json \
     management/dns-appliance-status-monitor/server.py \
     ../agent/AGENTS.md \
@@ -79,6 +92,7 @@ for required in \
     ../world/schemas/usb-event.schema.json \
     ../world/schemas/usb-verification.schema.json \
     ../.github/workflows/ci.yml \
+    ../.github/workflows/release.yml \
     ../LICENSE \
     ../LICENSE_HISTORY.md \
     ../THIRD_PARTY_NOTICES.md \
@@ -122,6 +136,15 @@ grep -q 'resolved catalog revision does not match the checkout' \
 
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/schemas/enrollment-record.schema.json"
+for schema in \
+    component-redistribution-registry.schema.json \
+    component-review-record.schema.json \
+    dns-build-manifest.schema.json \
+    dns-final-review-record.schema.json \
+    license-check.schema.json; do
+    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
+        "$repo_root/schemas/$schema"
+done
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/schemas/raw-image-manifest.schema.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
@@ -157,6 +180,48 @@ grep -q '^            burn)$' "$repo_root/device-os"
 grep -q '^            burn-image-macos)$' "$repo_root/device-os"
 grep -q '^            build-image)$' "$repo_root/device-os"
 grep -q './device-os world burn' "$repo_root/../README.md"
+
+ci_workflow=$repo_root/../.github/workflows/ci.yml
+release_workflow=$repo_root/../.github/workflows/release.yml
+grep -q '^  contracts:$' "$ci_workflow"
+grep -q 'python3-jsonschema' "$ci_workflow"
+grep -q 'Validate JSON Schema contracts' "$ci_workflow"
+for contract in \
+    catalog/schemas/media-entry.schema.json \
+    catalog/schemas/bootloader.schema.json \
+    installer/schemas/component-redistribution-registry.schema.json \
+    installer/schemas/component-review-record.schema.json \
+    installer/schemas/dns-build-manifest.schema.json \
+    installer/schemas/dns-final-review-record.schema.json \
+    installer/schemas/license-check.schema.json \
+    installer/schemas/raw-image-manifest.schema.json \
+    tests/dns-license-simulation.sh \
+    tests/license-policy-simulation.sh; do
+    grep -q "$contract" "$ci_workflow" || {
+        echo "repository-contract: CI does not enforce $contract" >&2
+        exit 1
+    }
+done
+
+grep -q 'license check --mode source-release --json' "$release_workflow"
+# GitHub evaluates this expression; the repository check matches it literally.
+# shellcheck disable=SC2016
+grep -Fq 'path: ${{ runner.temp }}/dns-release-evidence/' "$release_workflow"
+grep -q 'prebuilt-distribution' "$release_workflow"
+grep -q 'human-only' "$release_workflow"
+grep -q 'source-only evidence contains generated media' "$release_workflow"
+grep -q 'This workflow does not publish a release' "$release_workflow"
+jq -e '
+  .source_release.enabled == true and
+  .generated_artifacts.enabled == false and
+  .prebuilt_release.enabled == false and
+  .prebuilt_release.required_github_environment == "prebuilt-distribution"
+' "$repo_root/usb-media/distribution-policy.json" >/dev/null
+if grep -q -E 'contents:[[:space:]]*write|gh release|create-release|action-gh-release' \
+    "$release_workflow"; then
+    echo "repository-contract: source-only workflow gained release publication authority" >&2
+    exit 1
+fi
 
 if grep -q -E 'legacy_dns|--dns-iso|--dns-manifest|burn\|write|burn-image-macos\|write-image-macos' \
     "$repo_root/device-os" "$repo_root/usb-media/write-usb-linux"; then

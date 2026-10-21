@@ -71,13 +71,21 @@ and compares all of them before live target inspection or any write.
 
 **Response:** treat the change as a new behavior contract. Define accepted fields, failure behavior, cleanup, and security boundary; implement it once in the shared resolver; reject unknown values; and add success plus rejection fixtures. Do not disguise executable behavior as a Catalog-only edit.
 
-## Catalog schema and executable validation can disagree
+## Catalog schema and executable validation can still drift
 
-**Symptom:** a JSON document satisfies `bin/verify-catalog` but would fail the published schema because of an extra property.
+**Symptom:** a future Catalog document passes one validation path but fails another despite the tracked records and current valid and invalid fixtures passing CI.
 
-**Cause:** the schemas use `additionalProperties: false`, while the jq verifier independently implements only the consumed subset and does not currently enforce every unknown-field rejection.
+**Cause:** CI now runs draft-2020-12 schema validation for tracked Catalog v2 records and explicit fixtures, but the schemas, jq verifier, and Installer consumer remain separate implementations. Cases not represented by current records or fixtures can still diverge.
 
-**Response:** change schema, verifier, Installer consumer, and fixtures together. Until parity is implemented, consumers interpret only documented fields and reviewers must not claim strict schema enforcement.
+**Response:** change schema, verifier, Installer consumer, and positive and rejection fixtures together. Treat CI schema validation as evidence for the exercised contract, not proof that independently maintained validators are equivalent for every possible document.
+
+## A successful personal build is not redistribution approval
+
+**Symptom:** a candidate has matching checksums, a complete SBOM, passing CI, or successful USB readback and is described as ready for public download.
+
+**Cause:** build integrity and physical verification answer different questions from exact-artifact license, notice, corresponding-source, and trademark review. DNS images also combine multiple components whose reviews do not replace a review of the final ISO.
+
+**Response:** keep the artifact personal-use-only. Public prebuilt distribution requires every exact artifact review, both DNS component and final gates, fulfilled digest-bound obligations, enabled repository policy, a successful prebuilt check, and protected `prebuilt-distribution` Environment approval by a human-only required reviewer. No lower evidence state promotes automatically.
 
 ## DNS installation intentionally fails before partitioning
 

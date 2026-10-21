@@ -9,6 +9,7 @@ monorepo_root=$(CDPATH='' cd -- "$repo_root/.." && pwd)
 composition=${DEVICE_MEDIA_COMPOSITION:-$script_dir/composition.json}
 output=${USB_MEDIA_CATALOG:-$repo_root/work/device-os/catalog.json}
 world_plan=${DEVICE_MEDIA_WORLD_PLAN:-}
+distribution_policy=$script_dir/distribution-policy.json
 
 fail() {
     echo "resolve-catalog: $*" >&2
@@ -19,6 +20,16 @@ for command in git jq; do
     command -v "$command" >/dev/null 2>&1 || fail "$command is required"
 done
 [ -r "$composition" ] || fail "composition is not readable: $composition"
+[ -r "$distribution_policy" ] || fail "distribution policy is not readable: $distribution_policy"
+
+jq -e '
+  (keys | sort) == ["generated_artifacts","prebuilt_release","schema_version","source_release"] and
+  .schema_version == 1 and
+  (.source_release | keys == ["enabled"] and (.enabled | type == "boolean")) and
+  (.generated_artifacts | keys == ["enabled"] and (.enabled | type == "boolean")) and
+  (.prebuilt_release | (keys | sort) == ["enabled","required_github_environment"] and
+    (.enabled | type == "boolean") and .required_github_environment == "prebuilt-distribution")
+' "$distribution_policy" >/dev/null || fail "distribution policy is malformed"
 
 jq -e '
   def safe_rel:
@@ -215,12 +226,14 @@ jq -n \
     --slurpfile bootloader "$bootloader" \
     --slurpfile entries "$temporary/entries.json" \
     --slurpfile world "$temporary/world.json" \
+    --slurpfile distribution_policy "$distribution_policy" \
     --arg revision "$revision" \
     --arg catalog_tree "$catalog_tree" '
   ($composition[0]) as $c |
   ($entries[0] | map(del(.schema_version))) as $selected |
   ({
-    schema_version: 1,
+    schema_version: 2,
+    distribution_policy: $distribution_policy[0],
     product: $c.product,
     catalog: {
       repository: $c.product.repository,

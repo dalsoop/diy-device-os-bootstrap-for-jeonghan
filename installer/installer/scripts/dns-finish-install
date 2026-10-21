@@ -72,6 +72,20 @@ install -m 0644 /cdrom/simple-cdd/tailscale-dependency-licenses.md \
     /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/Tailscale-Dependencies.md
 install -m 0644 /cdrom/simple-cdd/source.md \
     /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md
+install -m 0644 /cdrom/simple-cdd/source-snapshot.tar.gz \
+    /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.tar.gz
+install -m 0644 /cdrom/simple-cdd/distribution-policy.json \
+    /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/DISTRIBUTION_POLICY.json
+install -m 0644 /cdrom/simple-cdd/distribution-status.md \
+    /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/DISTRIBUTION_STATUS.md
+install -m 0644 /cdrom/simple-cdd/component-redistribution-registry.schema.json \
+    /target/usr/share/dns-appliance/component-redistribution-registry.schema.json
+install -m 0644 /cdrom/simple-cdd/component-review-record.schema.json \
+    /target/usr/share/dns-appliance/component-review-record.schema.json
+install -m 0644 /cdrom/simple-cdd/dns-build-manifest.schema.json \
+    /target/usr/share/dns-appliance/dns-build-manifest.schema.json
+install -m 0644 /cdrom/simple-cdd/dns-final-review-record.schema.json \
+    /target/usr/share/dns-appliance/dns-final-review-record.schema.json
 
 # Tailscale is installed from a checksum-pinned upstream static archive so the
 # appliance can be built and installed without package-repository access.

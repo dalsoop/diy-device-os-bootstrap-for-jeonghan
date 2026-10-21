@@ -55,6 +55,16 @@ Source validation, image build, VM boot, physical USB write, firmware boot, OS i
 
 A release candidate consists of exact source identities, source locks, manifests, checksums, package closure, SBOM, and observed gate results. Building it does not authorize publication, burning, or installation. If physical, network, or license evidence is incomplete, the candidate remains explicitly unqualified and generated images must not be represented as a finished release.
 
+## Use and redistribution policy
+
+The operator may prepare, build, and write personal media for the operator's own devices. Every current bootloader, public image, DNS component, and generated final artifact remains `personal-use-only`. Personal use, digest verification, successful CI, a completed build, SBOM generation, physical readback, or installation does not grant redistribution approval.
+
+The current public release mode is source-only. Public release output is the tracked source snapshot and platform-generated source archives. The build workflow may upload non-executable verification evidence for review, but that Actions artifact is not a public media release and cannot contain generated ISO, RAW, IMG, disk-image, or complete USB content.
+
+Review is exact-artifact work. A public bootloader or OS review is bound to its version, URL, and SHA-256 and records all license, notice, corresponding-source, and trademark evidence and obligations. The composite DNS ISO has two independent gates: every component must be reviewed, and the final ISO must have a separate review bound to the component registry and build manifest. Missing evidence, changed digests, unfulfilled files, or `NOASSERTION` deny a prebuilt release.
+
+Generated-artifact distribution is disabled. Future publication requires a separately reviewed policy change, a successful `prebuilt-release` decision, and approval through the protected GitHub Environment `prebuilt-distribution` with a human-only required reviewer. There is no automatic promotion from personal build, source release, CI, or physical verification into public prebuilt publication.
+
 ## Agent authority
 
 The agent may inspect repository state, validate and simulate the World, calculate capacity, inspect network and tunnel status, read DNS health, create a DNS plan, and perform a separately enabled DNS apply. It must not burn media, install an OS, authorize reinstall, enroll nodes, restore data, select arbitrary commands, select arbitrary filesystem paths, or call arbitrary URLs. A human remains the authority for physical erasure, installation, recovery, enrollment, and router changes.

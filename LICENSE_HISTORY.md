@@ -41,6 +41,16 @@ including it in a release.
   installation qualification.
 - Third-party operating systems, bootloaders, packages, container images, and
   installation media retain their upstream licenses and notices.
+- Personal self-build for the operator's own devices is allowed by repository
+  policy, but it is not approval to redistribute generated media.
+- The current public policy is source-only. Release automation may retain
+  non-executable checksums, manifests, package closure, component status, and
+  SBOM evidence, but it must not upload ISO, RAW, IMG, disk-image, or complete
+  USB content.
+- Future prebuilt publication requires both a successful exact-artifact
+  `prebuilt-release` check and approval through the protected GitHub Environment
+  `prebuilt-distribution` with a human-only required reviewer. Neither CI nor a
+  successful personal build promotes an artifact automatically.
 
 The first post-transition release is intentionally source-only. It establishes
 the GPL boundary and does not certify generated media or hardware behavior.

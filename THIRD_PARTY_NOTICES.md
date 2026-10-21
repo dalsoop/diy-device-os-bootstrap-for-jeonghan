@@ -5,13 +5,17 @@ owned by other projects. The repository's `GPL-3.0-only` license applies only
 to original project content; it does not replace any upstream license,
 copyright, trademark, source-availability requirement, or end-user agreement.
 
-This inventory is a navigation aid, not a substitute for the notices shipped
-inside an exact artifact. Versions and digests remain authoritative in the
-Catalog, source locks, resolved media plan, and build manifest.
+This inventory is a navigation aid, not a redistribution review and not a
+substitute for the notices shipped inside an exact artifact. The links below
+are guidance for a future human review. They do not set
+`redistribution-reviewed`, fulfill an obligation, or approve any generated
+media. Versions, immutable identities, and digests remain authoritative in the
+machine-readable Catalog, source locks, resolved media plan, component
+registry, build manifest, and final review record.
 
-## Reviewed upstream projects
+## Upstream guidance links
 
-| Component | Upstream licensing evidence | Source and notices |
+| Component | Guidance summary | Upstream source and notice links |
 | --- | --- | --- |
 | Ventoy | Ventoy-developed modules are described upstream as GPLv3+; the archive also contains separately licensed components | <https://github.com/ventoy/Ventoy/tree/master/License> and <https://github.com/ventoy/Ventoy> |
 | Debian installation and live media | Debian media contains packages under many DFSG-compatible licenses; no single SPDX expression describes the complete image | <https://www.debian.org/CD/vendors/info> and <https://sources.debian.org/> |
@@ -21,12 +25,13 @@ Catalog, source locks, resolved media plan, and build manifest.
 | Pop!_OS | The ISO is a distribution of independently licensed Ubuntu, System76, firmware, and other components | <https://github.com/pop-os/pop/blob/master/LICENSING.md> and <https://github.com/pop-os> |
 | TrueNAS SCALE | The image contains independently licensed open-source components and may present edition- or component-specific terms | <https://github.com/truenas> and the notices delivered with the exact image |
 
-The complete Tailscale BSD-3-Clause text reviewed for the pinned client source
-is stored at `third_party/licenses/Tailscale-BSD-3-Clause.txt`. The DNS builder
-also fetches and verifies the dependency-license report from the exact pinned
-Tailscale tag, includes it in the ISO, and installs it beside the project
-notices. GNU GPL version 3 text used by this project and the GPL-licensed
-upstream components is stored at `LICENSE`.
+The complete Tailscale BSD-3-Clause text associated with the pinned client
+source is stored at `third_party/licenses/Tailscale-BSD-3-Clause.txt`. The DNS
+builder also fetches and verifies the dependency-license report from the exact
+pinned Tailscale tag, includes it in the ISO, and installs it beside the project
+notices. These inclusions preserve useful material but do not by themselves
+approve redistribution. GNU GPL version 3 text used by this project and the
+GPL-licensed upstream components is stored at `LICENSE`.
 
 ## Generated media and systems
 
@@ -41,7 +46,10 @@ redistributed multiboot USB satisfies every upstream term. Do not distribute a
 generated USB, ISO, appliance image, or installed-system image until the exact
 selected artifacts have passed a separate license review and every required
 notice and corresponding-source obligation has been fulfilled. Personal use
-does not turn this inventory into redistribution approval.
+does not turn this inventory into redistribution approval. The current
+machine-readable records remain `personal-use-only`; only an exact-artifact
+review record can change that status, and no build or validation command can
+create or promote such approval automatically.
 
 The generated SPDX SBOM uses `NOASSERTION` when the build cannot establish one
 license expression for an artifact or Debian package. `NOASSERTION` means the

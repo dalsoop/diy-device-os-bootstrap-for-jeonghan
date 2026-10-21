@@ -57,6 +57,14 @@ DEVICE_MEDIA_WORLD_PLAN=$temporary/world.json USB_MEDIA_CATALOG=$temporary/world
     "$repo_root/usb-media/resolve-catalog" >/dev/null
 "$verify" "$temporary/world-catalog.json" >/dev/null
 jq -e '
+  .schema_version == 2 and
+  .distribution_policy.schema_version == 1 and
+  .distribution_policy.source_release.enabled == true and
+  .distribution_policy.generated_artifacts.enabled == false and
+  .distribution_policy.prebuilt_release.enabled == false and
+  .distribution_policy.prebuilt_release.required_github_environment == "prebuilt-distribution" and
+  .bootloader.redistribution.status == "personal-use-only" and
+  (all(.entries[]; .redistribution.status == "personal-use-only")) and
   [.entries[].id] == ["dns-appliance"] and
   .world.world.slug == "jeonghan-home" and
   .world.media.id == "dns-install" and
@@ -123,6 +131,15 @@ expect_rejected "$temporary/bad-digest.json"
 jq '.entries[1].profile_adapter = "shared-dangerous-default"' "$catalog" > "$temporary/unknown-adapter.json"
 expect_rejected "$temporary/unknown-adapter.json"
 
+jq '.distribution_policy.prebuilt_release.enabled = "no"' "$catalog" > "$temporary/malformed-policy.json"
+expect_rejected "$temporary/malformed-policy.json"
+
+jq '.distribution_policy.unknown = true' "$catalog" > "$temporary/unknown-policy-field.json"
+expect_rejected "$temporary/unknown-policy-field.json"
+
+jq '.entries[0].redistribution.status = "unknown"' "$catalog" > "$temporary/unknown-distribution-status.json"
+expect_rejected "$temporary/unknown-distribution-status.json"
+
 jq '.entries += [{
   id: "example-live",
   group: "tools",
@@ -138,7 +155,8 @@ jq '.entries += [{
     filename: "example-live-1.0.iso",
     url: "https://downloads.example.test/example-live-1.0.iso",
     sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-  }
+  },
+  redistribution: {status: "personal-use-only"}
 }]' "$catalog" > "$temporary/extended.json"
 "$verify" "$temporary/extended.json" >/dev/null
 "$render" "$temporary/extended.json" |

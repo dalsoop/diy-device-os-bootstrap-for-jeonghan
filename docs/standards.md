@@ -31,6 +31,15 @@
 - Python dependencies for the agent gateway MUST remain exactly pinned in `agent/requirements.lock`. The status monitor MUST remain Python-standard-library-only so it can run from assembled media without Internet access.
 - Catalog checksum updates MUST include authoritative vendor provenance in pull-request evidence. Re-hashing the same downloaded file is not independent verification.
 
+## Redistribution and release gates
+
+- Personal self-build and media writing MAY be used for the operator's own devices, but `personal-use-only` MUST NOT be represented as redistribution approval.
+- Public releases are source-only by default. Release automation MAY retain non-executable verification evidence, but MUST NOT upload ISO, RAW, IMG, disk-image, or complete USB content.
+- Every reviewed public artifact MUST bind the review to its exact version, URL, and SHA-256 and record license, notice, corresponding-source, and trademark evidence plus obligation dispositions. A version, URL, or digest change invalidates the prior review.
+- A DNS ISO requires both reviewed component closure and a separate final-artifact review bound to the ISO digest, component registry, build manifest, SBOM, and fulfilled obligation files. Neither review substitutes for the other, and `NOASSERTION` blocks public prebuilt distribution.
+- No validator, build, CI, or release command MAY create or promote `redistribution-reviewed` status. A successful lower evidence state MUST NOT be promoted automatically.
+- Future prebuilt publication MUST require both a successful `prebuilt-release` check and the protected GitHub Environment `prebuilt-distribution`, configured with a human-only required reviewer. The repository policy enabling generated-artifact distribution MUST change through a separate reviewed pull request.
+
 ## Destructive execution
 
 - Planning, validation, simulation, capacity calculation, and Catalog verification MUST NOT write block devices or internal disks.
@@ -49,7 +58,7 @@
 
 ## Verification gates
 
-Before merge, run the repository's `contracts` job surface: SPDX/license checks, shell syntax, ShellCheck, Python and Ruby syntax, World contract simulation, Catalog verification and fixtures, Installer simulations, and Agent Gateway simulation. A failure in any required command blocks merge; removing or weakening a check is itself a security-sensitive change.
+Before merge, run the repository's `contracts` job surface: SPDX/license checks, shell syntax, ShellCheck, Python and Ruby syntax, World contract simulation, Catalog verification and fixtures, draft-2020-12 JSON Schema validation with valid and rejected fixtures, DNS license simulation, license-policy simulation, all other Installer simulations, and Agent Gateway simulation. A failure in any required command blocks merge; removing or weakening a check is itself a security-sensitive change.
 
 Before an image candidate, additionally verify immutable build locks, build twice on the designated amd64 Debian 13 builder when reproducibility is being claimed, and retain manifests, package closure, checksums, and SBOM.
 

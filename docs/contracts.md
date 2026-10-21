@@ -25,6 +25,9 @@ Stable IDs use lowercase ASCII letters, digits, and hyphens. Configured reposito
 | `available`, `plan`, `capacity`, `simulate`, `prepare`, `burn` | Installer reference collection rather than the user World | Same shapes as corresponding World commands | Contributor surface; must not be represented as the user's desired state |
 | `include <id>`, `exclude <id>` | Public Catalog ID | Updated reference collection and human confirmation | Nonzero for absent/invalid ID; changes contributor reference selection only |
 | `burn-image-macos` | Absolute MBR raw-image path with adjacent manifest, resolved reference Catalog, whole `/dev/diskN`, exact target phrase | Two-phase write and readback result | Destructive only when image bytes and provenance match the resolved selection, image and device sizes match, and the target is external, writable, non-root, non-virtual, and MBR-compatible |
+| `license check --mode personal-use --json` | Current resolved media and versioned distribution policy | Schema-version-1 allow/deny decision with every selected artifact and unreviewed warnings | Nonzero only for malformed or denied policy input; performs no network, build, write, or publication |
+| `license check --mode source-release --json` | Clean tracked source snapshot and enabled source-release policy | Allows only the source snapshot; non-executable CI evidence is outside public release output | Nonzero for dirty tracked source or disabled source-release policy; accepts no generated-media attachment |
+| `license check --mode prebuilt-release ... --json` | Absolute resolved Catalog, exact artifact/manifest/review bindings, and absolute release staging root | Read-only license, policy, digest, component, final-review, SBOM, and obligation decision | Nonzero for disabled policy, missing or unreviewed artifacts, digest mismatch, `NOASSERTION`, unsupported inspection, or unfulfilled obligations; GitHub Environment approval is separate and cannot be supplied to the CLI |
 
 `targets` lists only live removable physical media and prints the current exact
 confirmation. The macOS phrase is `ERASE <device> <media-name> <USB-serial>
@@ -46,9 +49,11 @@ The current `jeonghan-home` contract declares `inventory-capture=[debian-live]` 
 
 `catalog/catalog/index.json` uses `schema_version: 1` and is the closed-world registry. Every referenced JSON file exists, every controlled JSON file is registered, and IDs and paths are unique. `catalog/bin/verify-catalog` exits zero only when the complete registry and semantic contract pass; it emits no media and changes no repository state.
 
-A public media entry provides schema version, stable ID, group, release version, optional architecture, safe `images/*.iso` destination, menu alias, non-empty Korean and English descriptions, interactive/live boot behavior, `profile_adapter: none`, and a `locked-download` source. The source contains a basename-only filename, HTTPS URL, and lowercase 64-character SHA-256. A bootloader similarly provides stable identity, implementation, version, safe archive root, and locked source.
+A public media entry uses schema version 2 and provides stable ID, group, release version, optional architecture, safe `images/*.iso` destination, menu alias, non-empty Korean and English descriptions, interactive/live boot behavior, `profile_adapter: none`, a `locked-download` source, and mandatory redistribution metadata. The source contains a basename-only filename, HTTPS URL, and lowercase 64-character SHA-256. A bootloader also uses schema version 2 and provides stable identity, implementation, version, safe archive root, locked source, and redistribution metadata.
 
-Published schemas reject extra properties. The executable jq validator currently does not reject every extra property, so consumers use only documented fields and must not treat schema strictness as runtime-enforced parity.
+`personal-use-only` contains only its status. `redistribution-reviewed` binds the review to the record's exact version, source URL, and source SHA-256 and requires a reviewer, review date, all four evidence kinds, and exactly one disposition for each license-text, notices, corresponding-source, and trademark obligation. Changing the version, URL, or digest invalidates the review. Current records are personal-use-only.
+
+Published schemas reject extra properties. CI validates every tracked Catalog record and explicit valid and invalid fixtures against the schemas. The executable jq validator and Installer consumer remain independent implementations, so schema coverage does not prove complete semantic parity for documents outside the tracked and simulated cases.
 
 ## Installer composition and resolved media plan
 
@@ -108,6 +113,16 @@ In guided mode, Debian Installer's debconf frontend asks for role and wired phys
 A build does not authorize media or internal-disk writing. Its manifest is paired with the DNS runtime artifact during capacity and burn. `check-readiness` uses the same mode environment and rejects a mismatched ISO manifest. Guided mode removes the separate capture/rebuild round trip; it does not establish VM or physical installation proof.
 
 Capture, the inventory wizard and the install gate use the same read-only `disk-identity` adapter, bundled beside the capture tools and the ISO gate. Kernel model/serial attributes are preferred; SATA serials may come from `ata_id --export` on the exact candidate block device. Failed, empty or ambiguous identity evidence is rejected, and the serial is re-read before disk preparation.
+
+## DNS redistribution records
+
+The DNS component registry is schema version 1 and contains exactly the Debian package closure, Technitium OCI archive, Tailscale archive, Tailscale dependency report, and repository source snapshot. Each component binds a stable ID and immutable version to the SHA-256 of the exact bytes or closure manifest used by the build. Technitium additionally binds its OCI manifest digest. Current component redistribution states are personal-use-only.
+
+A reviewed component record binds reviewer evidence and obligation dispositions to the exact component ID, version, digest, and, for Technitium, OCI source identity. The build manifest preserves the final ISO digest, component registry digest, policy digest, component statuses, SBOM digest, exact source locks, and repository source identity. Build tooling records evidence but cannot create reviewed status.
+
+A DNS final review record is separate from component review. It binds the final ISO SHA-256 to the exact component registry and build manifest digests and records all four evidence and obligation classes. Prebuilt evaluation requires both fully reviewed components and this final record, verifies the bound SBOM and staged obligation files, and rejects `NOASSERTION`. Missing or mismatched evidence fails closed.
+
+The repository-wide distribution policy enables source release and disables generated-artifact and prebuilt release. Even after a future successful CLI decision, publication must independently pass the protected GitHub Environment `prebuilt-distribution` with a human-only required reviewer. The CLI has no Environment-approval input and performs no upload.
 
 ## Post-install management interfaces
 

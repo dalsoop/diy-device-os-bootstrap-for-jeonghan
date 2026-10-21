@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install -y jq ruby shellcheck
+        run: sudo apt-get update && sudo apt-get install -y jq python3-jsonschema ruby shellcheck
       - name: Check project license notices
         shell: bash
         run: |
@@ -70,6 +70,133 @@ jobs:
         run: |
           catalog/bin/verify-catalog
           catalog/tests/catalog-contract.sh
+      - name: Validate JSON Schema contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 - <<'PY'
+          import copy
+          import json
+          from pathlib import Path
+
+          from jsonschema import Draft202012Validator
+
+          root = Path.cwd()
+
+          def load(path):
+              with (root / path).open(encoding="utf-8") as source:
+                  return json.load(source)
+
+          def validator(path):
+              schema = load(path)
+              Draft202012Validator.check_schema(schema)
+              return Draft202012Validator(schema)
+
+          def require_valid(name, selected_validator, instance):
+              errors = sorted(selected_validator.iter_errors(instance), key=lambda error: list(error.path))
+              if errors:
+                  raise SystemExit(f"valid fixture failed {name}: {errors[0].message}")
+
+          def require_invalid(name, selected_validator, instance):
+              if selected_validator.is_valid(instance):
+                  raise SystemExit(f"invalid fixture passed {name}")
+
+          catalog_index = validator("catalog/schemas/catalog-index.schema.json")
+          media_entry = validator("catalog/schemas/media-entry.schema.json")
+          bootloader = validator("catalog/schemas/bootloader.schema.json")
+          component_registry = validator("installer/schemas/component-redistribution-registry.schema.json")
+          component_review = validator("installer/schemas/component-review-record.schema.json")
+          build_manifest = validator("installer/schemas/dns-build-manifest.schema.json")
+          final_review = validator("installer/schemas/dns-final-review-record.schema.json")
+          license_check = validator("installer/schemas/license-check.schema.json")
+          raw_manifest = validator("installer/schemas/raw-image-manifest.schema.json")
+
+          require_valid("Catalog index", catalog_index, load("catalog/catalog/index.json"))
+          for path in sorted((root / "catalog/catalog/entries").glob("*.json")):
+              require_valid(f"Catalog v2 entry {path.name}", media_entry, json.loads(path.read_text()))
+          for path in sorted((root / "catalog/catalog/bootloaders").glob("*.json")):
+              require_valid(f"Catalog v2 bootloader {path.name}", bootloader, json.loads(path.read_text()))
+
+          invalid_media = load("catalog/catalog/entries/debian-live.json")
+          invalid_media["redistribution"] = {"status": "unknown"}
+          require_invalid("Catalog v2 unknown redistribution", media_entry, invalid_media)
+          invalid_bootloader = load("catalog/catalog/bootloaders/ventoy.json")
+          invalid_bootloader["unexpected"] = True
+          require_invalid("Catalog v2 additional property", bootloader, invalid_bootloader)
+
+          digest = "a" * 64
+          evidence = [
+              {"kind": kind, "url": f"https://example.invalid/{kind}"}
+              for kind in ("license", "notices", "corresponding-source", "trademark")
+          ]
+          obligations = [
+              {"kind": kind, "disposition": "not-required"}
+              for kind in ("license-text", "notices", "corresponding-source", "trademark")
+          ]
+          components = [
+              {"id": "debian-package-closure", "version": "13.7.0@20261011T000000Z", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
+              {"id": "technitium-oci", "version": "15.6.1", "digest": {"algorithm": "sha256", "value": digest}, "source_identity": {"kind": "oci-digest", "value": f"sha256:{digest}"}, "redistribution": {"status": "personal-use-only"}},
+              {"id": "tailscale-archive", "version": "1.104.1", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
+              {"id": "tailscale-dependency-report", "version": "1.104.1", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
+              {"id": "repository-source-snapshot", "version": "b" * 40, "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
+          ]
+          registry_fixture = {"schema_version": 1, "artifact_id": "dns-appliance", "components": components}
+          review_fixture = {
+              "schema_version": 1, "status": "redistribution-reviewed", "component_id": "technitium-oci",
+              "component_version": "15.6.1", "artifact_sha256": digest,
+              "source_identity": {"kind": "oci-digest", "value": f"sha256:{digest}"},
+              "reviewed_at": "2026-10-17", "reviewer": "schema-fixture", "evidence": evidence,
+              "obligations": obligations,
+          }
+          build_fixture = {
+              "schema_version": 1, "artifact_id": "dns-appliance", "build_id": "schema-fixture", "install_mode": "guided",
+              "iso": "dns-appliance.iso", "iso_sha256": digest, "distribution_status": "personal-use-only",
+              "component_registry": "component-redistribution-registry.json", "component_registry_sha256": digest,
+              "distribution_policy_sha256": digest,
+              "components": [{"id": component["id"], "status": "personal-use-only"} for component in components],
+              "sbom": "sbom.spdx.json", "sbom_sha256": digest, "debian_point_release": "13.7.0",
+              "debian_snapshot": "20261011T000000Z", "technitium_version": "15.6.1",
+              "technitium_image_digest": f"sha256:{digest}", "technitium_archive_sha256": digest,
+              "tailscale_version": "1.104.1", "tailscale_archive_sha256": digest,
+              "source_revision": "b" * 40,
+              "source_repository": "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan",
+              "source_archive": f"https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/archive/{'b' * 40}.tar.gz",
+          }
+          final_fixture = {
+              "schema_version": 1, "artifact": {"id": "dns-appliance", "sha256": digest},
+              "inputs": {"component_registry_sha256": digest, "build_manifest_sha256": digest},
+              "reviewed_at": "2026-10-17", "reviewer": "schema-fixture", "evidence": evidence,
+              "obligations": obligations,
+          }
+          decision_fixture = {
+              "schema_version": 1, "mode": "personal-use", "decision": "allow",
+              "selected_artifacts": [{"id": "ventoy", "kind": "bootloader", "sha256": digest, "status": "personal-use-only"}],
+              "blockers": [], "warnings": [],
+          }
+          raw_fixture = {
+              "schema_version": 2, "kind": "device-os-raw-image",
+              "image": {"filename": "device.raw", "bytes": 4294967296, "sha256": digest},
+              "catalog": {"sha256": digest, "revision": "b" * 40, "tree": "c" * 40},
+              "license": {"mode": "personal-use", "decision": "allow", "distribution_policy_sha256": digest, "selected_artifacts": decision_fixture["selected_artifacts"]},
+              "world": {"slug": "jeonghan-home", "media_id": "inventory-capture"},
+          }
+
+          fixtures = [
+              ("component registry", component_registry, registry_fixture, "components"),
+              ("component review", component_review, review_fixture, "reviewer"),
+              ("DNS build manifest", build_manifest, build_fixture, "sbom_sha256"),
+              ("DNS final review", final_review, final_fixture, "obligations"),
+              ("license decision", license_check, decision_fixture, "decision"),
+              ("raw-image manifest", raw_manifest, raw_fixture, "license"),
+          ]
+          for name, selected_validator, valid_fixture, rejected_key in fixtures:
+              require_valid(name, selected_validator, valid_fixture)
+              invalid_fixture = copy.deepcopy(valid_fixture)
+              del invalid_fixture[rejected_key]
+              require_invalid(f"{name} missing {rejected_key}", selected_validator, invalid_fixture)
+
+          print("JSON Schema contracts: passed")
+          PY
       - name: Resolve embedded Catalog
         working-directory: installer
         run: usb-media/resolve-catalog
@@ -79,6 +206,8 @@ jobs:
           tests/install-gate-simulation.sh
           tests/management-simulation.sh
           tests/tailscale-enrollment-simulation.sh
+          tests/dns-license-simulation.sh
+          tests/license-policy-simulation.sh
           tests/media-catalog-simulation.sh
           tests/image-builder-simulation.sh
           tests/macos-writer-simulation.sh

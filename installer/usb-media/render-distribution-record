@@ -11,8 +11,8 @@ fail() {
     exit 1
 }
 
-[ -f "$decision" ] && [ ! -L "$decision" ] || fail "license decision must be a regular, non-symlink file"
-[ -f "$policy" ] && [ ! -L "$policy" ] || fail "distribution policy must be a regular, non-symlink file"
+{ [ -f "$decision" ] && [ ! -L "$decision" ]; } || fail "license decision must be a regular, non-symlink file"
+{ [ -f "$policy" ] && [ ! -L "$policy" ]; } || fail "distribution policy must be a regular, non-symlink file"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
 
 jq -e '

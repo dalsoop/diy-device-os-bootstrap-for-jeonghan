@@ -238,7 +238,7 @@ validate_dns_build_manifest() {
       def status: . == "personal-use-only" or . == "redistribution-reviewed";
       def component_status($id):
         exact_keys(["id","status"]) and .id == $id and (.status | status);
-      ["schema_version","artifact_id","build_id","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
+      ["schema_version","artifact_id","build_id","install_mode","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
       ($schema[0]["$id"] | endswith("/installer/schemas/dns-build-manifest.schema.json")) and
       $schema[0].additionalProperties == false and
       (($schema[0].required | sort) == ($fields | sort)) and
@@ -430,7 +430,7 @@ check_dns_runtime() {
     else
         manifest_ok=1
         expected=$(jq -r '.iso_sha256 // empty' "$manifest" 2>/dev/null || true)
-        [ -n "$actual" ] && [ "$actual" = "$expected" ] ||
+        { [ -n "$actual" ] && [ "$actual" = "$expected" ]; } ||
             block review-digest-mismatch "$id bytes do not match the runtime build manifest" "$id"
     fi
     if [ -n "$manifest" ]; then

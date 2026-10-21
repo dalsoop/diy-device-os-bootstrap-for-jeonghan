@@ -176,8 +176,8 @@ while IFS= read -r entry; do
         runtime-artifact)
             source_file=${runtime_artifacts[$id]:-}
             manifest=${runtime_manifests[$id]:-}
-            [ -f "$source_file" ] && [ ! -L "$source_file" ] || fail "missing or symlinked --runtime-artifact $id=/absolute/path"
-            [ -f "$manifest" ] && [ ! -L "$manifest" ] || fail "missing or symlinked --runtime-manifest $id=/absolute/path"
+            { [ -f "$source_file" ] && [ ! -L "$source_file" ]; } || fail "missing or symlinked --runtime-artifact $id=/absolute/path"
+            { [ -f "$manifest" ] && [ ! -L "$manifest" ]; } || fail "missing or symlinked --runtime-manifest $id=/absolute/path"
             digest_field=$(jq -er '.source.manifest_digest_field' <<<"$entry")
             expected=$(jq -er --arg field "$digest_field" \
                 '.[$field] | select(type == "string" and test("^[a-f0-9]{64}$"))' "$manifest")
@@ -189,8 +189,8 @@ while IFS= read -r entry; do
                 companion_dir=$(dirname -- "$manifest")
                 registry=$companion_dir/$(jq -er '.source.component_registry_filename' <<<"$entry")
                 sbom=$companion_dir/$(jq -er '.source.sbom_filename' <<<"$entry")
-                [ -f "$registry" ] && [ ! -L "$registry" ] || fail "DNS component registry is missing or symlinked"
-                [ -f "$sbom" ] && [ ! -L "$sbom" ] || fail "DNS SPDX SBOM is missing or symlinked"
+                { [ -f "$registry" ] && [ ! -L "$registry" ]; } || fail "DNS component registry is missing or symlinked"
+                { [ -f "$sbom" ] && [ ! -L "$sbom" ]; } || fail "DNS SPDX SBOM is missing or symlinked"
                 "$repo_root/build/verify-distribution-contracts" --registry "$registry" >/dev/null
                 registry_digest=$(sha256sum "$registry" | awk '{print $1}')
                 sbom_digest=$(sha256sum "$sbom" | awk '{print $1}')
@@ -201,7 +201,7 @@ while IFS= read -r entry; do
                     --arg policy_digest "$dns_policy_digest" \
                     --slurpfile registry "$registry" '
                   def exact_keys($expected): (keys | sort) == ($expected | sort);
-                  ["schema_version","artifact_id","build_id","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
+                  ["schema_version","artifact_id","build_id","install_mode","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
                   exact_keys($fields) and .schema_version == 1 and .artifact_id == "dns-appliance" and
                   (.distribution_status == "personal-use-only" or .distribution_status == "redistribution-reviewed") and
                   .component_registry == "component-redistribution-registry.json" and
@@ -217,7 +217,7 @@ while IFS= read -r entry; do
                     fail "DNS entry and build manifest distribution statuses differ"
                 if [ "$manifest_status" = redistribution-reviewed ]; then
                     review=$companion_dir/$(jq -er '.final_review.record_filename' <<<"$entry")
-                    [ -f "$review" ] && [ ! -L "$review" ] || fail "reviewed DNS artifact requires the exact final review"
+                    { [ -f "$review" ] && [ ! -L "$review" ]; } || fail "reviewed DNS artifact requires the exact final review"
                     "$repo_root/build/verify-distribution-contracts" \
                         --registry "$registry" --final-review "$review" \
                         --build-manifest "$manifest" --sbom "$sbom" >/dev/null

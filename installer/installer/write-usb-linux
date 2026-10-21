@@ -76,7 +76,7 @@ policy_sha=$(sha256sum "$repo_root/build/distribution-policy.json" | awk '{print
 jq -e --arg registry_sha "$registry_sha" --arg sbom_sha "$sbom_sha" --arg policy_sha "$policy_sha" \
     --slurpfile registry "$registry" '
   def exact_keys($expected): (keys | sort) == ($expected | sort);
-  ["schema_version","artifact_id","build_id","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
+  ["schema_version","artifact_id","build_id","install_mode","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
   exact_keys($fields) and .schema_version == 1 and .artifact_id == "dns-appliance" and
   (.distribution_status == "personal-use-only" or .distribution_status == "redistribution-reviewed") and
   .component_registry == "component-redistribution-registry.json" and .component_registry_sha256 == $registry_sha and
@@ -88,7 +88,7 @@ jq -e '.spdxVersion == "SPDX-2.3" and .dataLicense == "CC0-1.0" and (.packages |
     "$sbom" >/dev/null || { echo "write-usb-linux: DNS SPDX SBOM is invalid" >&2; exit 1; }
 distribution_status=$(jq -er '.distribution_status' "$manifest")
 if [ "$distribution_status" = redistribution-reviewed ]; then
-    [ -f "$review" ] && [ ! -L "$review" ] || { echo "write-usb-linux: reviewed DNS image requires exact final review" >&2; exit 1; }
+    { [ -f "$review" ] && [ ! -L "$review" ]; } || { echo "write-usb-linux: reviewed DNS image requires exact final review" >&2; exit 1; }
     "$repo_root/build/verify-distribution-contracts" \
         --registry "$registry" --final-review "$review" \
         --build-manifest "$manifest" --sbom "$sbom" >/dev/null

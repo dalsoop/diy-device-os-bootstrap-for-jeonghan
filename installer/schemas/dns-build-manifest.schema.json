@@ -8,6 +8,7 @@
     "schema_version",
     "artifact_id",
     "build_id",
+    "install_mode",
     "iso",
     "iso_sha256",
     "distribution_status",

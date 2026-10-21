@@ -208,6 +208,7 @@ jq -n \
       schema_version: 1,
       artifact_id: "dns-appliance",
       build_id: "dns-test-build",
+      install_mode: "guided",
       iso: "dns-test.iso",
       iso_sha256: ("4"*64),
       distribution_status: "redistribution-reviewed",

@@ -150,3 +150,11 @@ and compares all of them before live target inspection or any write.
 **Cause:** Debian Installer's BusyBox awk omits exponentiation, and file-preseed executes before the normal offline component and network hardware detection stages. Host-side simulations do not reproduce either property.
 
 **Response:** network arithmetic uses repeated multiplication. `prepare-installer` initializes the CD retriever, loads the offline components, and configures `ethdetect` before identity collection. Each failure stops before the identity prompt or partitioning. Qualify these steps with the signed installer's BusyBox and actual BIOS/UEFI boots; desktop awk and fake NIC fixtures are insufficient evidence.
+
+## Debian Installer cannot read exFAT enrollment media
+
+**Symptom:** the role gate locates `DNS-ENROLL` but its read-only mount fails with `Invalid argument`; `modprobe exfat` reports no module.
+
+**Cause:** the signed Debian 13 installer kernel's available udebs include FAT/VFAT, not exFAT. An installed Debian system's exFAT support does not establish installer support.
+
+**Response:** both USB builders format only the enrollment partition as FAT32 with the corresponding partition type. Preparation explicitly requests `fat-modules` and loads `vfat` before the gate mounts enrollment read-only. Ventoy's main data partition remains exFAT. Existing completed media generations are immutable and are never rewritten to claim this layout.

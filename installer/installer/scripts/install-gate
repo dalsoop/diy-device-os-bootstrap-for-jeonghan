@@ -244,7 +244,7 @@ check_reinstall_permission() {
         [ -n "$enrollment_device" ] || fail "DNS-ENROLL partition is missing"
         enrollment_dir=$state_dir/enrollment
         mkdir -p "$enrollment_dir"
-        mount -o ro,nodev,nosuid,noexec "$enrollment_device" "$enrollment_dir" ||
+        mount -t vfat -o ro,nodev,nosuid,noexec "$enrollment_device" "$enrollment_dir" ||
             fail "cannot mount DNS-ENROLL read-only"
         mounted_enrollment=true
     fi

@@ -10,7 +10,8 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 # file-preseed runs before Debian's normal component/network detection step.
 # Load the offline components and detect the NIC before asking for its identity.
 db_set debconf/language ko
-anna-install simple-cdd-profiles
+anna-install simple-cdd-profiles fat-modules
 anna cdrom-retriever default
+modprobe vfat
 udpkg --configure ethdetect
 exec /bin/sh "$script_dir/install-gate" identify

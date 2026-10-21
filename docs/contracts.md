@@ -68,7 +68,7 @@ Schema version 1 reports each selected entry's size and source, verified total, 
 
 The data partition label is `DEVICE-OS`. It contains staged images, bundles, Ventoy configuration, resolved media metadata and digest, image checksums, guides, tools, project license, license history, third-party notices, source revision/archive information, and `manifests/LICENSES.SHA256`.
 
-When the DNS adapter is selected, a separate `DNS-ENROLL` partition stores public enrollment evidence, encrypted recovery generations, active pointers, and reinstall authorizations. It is transport, not the long-lived secret store.
+When the DNS adapter is selected, a separate FAT32 `DNS-ENROLL` partition stores public enrollment evidence, encrypted recovery generations, active pointers, and reinstall authorizations. FAT32 is readable by the signed Debian Installer kernel's FAT modules; exFAT is unsupported at this stage. Files must remain below FAT32's 4 GiB per-file limit. It is transport, not the long-lived secret store. The Ventoy `DEVICE-OS` data partition remains exFAT.
 
 A completed personal World generation contains immutable `world.yaml`, `world.lock.json`, `media-manifest.json`, `verification.json`, and `event.json`. The event recorder seals `{YYYYMMDDHHmmss}-{world-slug}` before invoking the target-specific writer, requires schema-version-1 redacted evidence with passed readback, then atomically renames the staged directory into `world/worlds/`. It excludes images, caches, credentials, private keys, raw serials, MAC addresses, UUIDs, and recovery material.
 

@@ -222,6 +222,10 @@ udpkg() {
     printf 'hardware %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
     [ "${DNS_TEST_PREPARE_FAILURE:-}" != hardware ]
 }
+modprobe() {
+    printf 'filesystem %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
+    [ "${DNS_TEST_PREPARE_FAILURE:-}" != filesystem ]
+}
 EOF
 cat > "$prepare_fixture/bin/anna-install" <<'EOF'
 #!/bin/sh
@@ -233,11 +237,11 @@ export PATH
 export DNS_INSTALLER_DEBCONF_MODULE=$prepare_fixture/confmodule
 export DNS_TEST_PREPARE_LOG=$prepare_fixture/log
 /bin/sh "$prepare_fixture/prepare-installer"
-printf '%s\n' 'debconf debconf/language ko' 'queue simple-cdd-profiles' \
-    'components cdrom-retriever default' 'hardware --configure ethdetect' \
+printf '%s\n' 'debconf debconf/language ko' 'queue simple-cdd-profiles fat-modules' \
+    'components cdrom-retriever default' 'filesystem vfat' 'hardware --configure ethdetect' \
     'gate identify' > "$prepare_fixture/expected"
 cmp "$prepare_fixture/expected" "$prepare_fixture/log"
-for prepare_failure in components hardware; do
+for prepare_failure in components filesystem hardware; do
     : > "$prepare_fixture/log"
     if DNS_TEST_PREPARE_FAILURE=$prepare_failure /bin/sh "$prepare_fixture/prepare-installer"; then
         echo 'image-builder-simulation: failed preparation accepted' >&2; exit 1

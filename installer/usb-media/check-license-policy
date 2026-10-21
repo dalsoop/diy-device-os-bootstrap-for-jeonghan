@@ -7,7 +7,10 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 monorepo_root=$(CDPATH='' cd -- "$repo_root/.." && pwd)
 policy=${DEVICE_OS_DISTRIBUTION_POLICY:-$script_dir/distribution-policy.json}
+# The image builders and writers pass their already-resolved catalog through
+# USB_MEDIA_CATALOG in every mode; only an explicit --catalog is prebuilt-only.
 catalog=${USB_MEDIA_CATALOG:-}
+catalog_flag=0
 mode=
 json_output=0
 release_root=
@@ -132,7 +135,7 @@ assigned_path() {
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --mode) [ "$#" -ge 2 ] || usage; mode=$2; shift 2 ;;
-        --catalog) [ "$#" -ge 2 ] || usage; catalog=$2; shift 2 ;;
+        --catalog) [ "$#" -ge 2 ] || usage; catalog=$2; catalog_flag=1; shift 2 ;;
         --artifact) [ "$#" -ge 2 ] || usage; assignment artifact "$2"; shift 2 ;;
         --manifest) [ "$#" -ge 2 ] || usage; assignment manifest "$2"; shift 2 ;;
         --review) [ "$#" -ge 2 ] || usage; assignment review "$2"; shift 2 ;;
@@ -144,7 +147,7 @@ done
 
 case "$mode" in personal-use|source-release|prebuilt-release) ;; *) usage ;; esac
 if [ "$mode" != prebuilt-release ] &&
-    { [ -n "$catalog" ] || [ -s "$artifact_map" ] ||
+    { [ "$catalog_flag" -eq 1 ] || [ -s "$artifact_map" ] ||
       [ -s "$manifest_map" ] || [ -s "$review_map" ] ||
       [ -n "$release_root" ]; }; then
     usage

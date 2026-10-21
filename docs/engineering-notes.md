@@ -215,6 +215,14 @@ and compares all of them before live target inspection or any write.
 
 **Response:** `install-gate select-disk` sets `grub-installer/bootdev` to the same confirmed disk it gives partman.
 
+## Mock license checkers hid a denied raw build
+
+**Symptom:** `world build-image` prints the `check-license-policy` usage text, then "personal-use license policy denied raw image creation".
+
+**Cause:** the image builders and writers pass their resolved catalog to the checker in `USB_MEDIA_CATALOG`. The checker treated any catalog outside `prebuilt-release` as a usage error. The writer and builder simulations replace the checker with mocks, so the real call was never exercised.
+
+**Response:** only an explicit `--catalog` is prebuilt-only. `license-policy-simulation.sh` now runs the real checker with the environment catalog. After a policy change, build one real raw image before a VM run.
+
 ## The text installer font holds only its translations' glyphs
 
 **Symptom:** guided Korean screens render some syllables as boxes, for example `각`, `께`, `량`, `삭` and `함`.

@@ -15,7 +15,7 @@ db_set() { :; }
 db_fset() { :; }
 db_input() { :; }
 db_go() { [ "${DNS_TEST_CANCEL:-false}" = false ]; }
-db_stop() { :; }
+db_stop() { echo 'shared installer frontend must remain connected' >&2; return 1; }
 db_x_loadtemplatefile() { :; }
 db_subst() {
     if [ "$2" = confirmation ]; then printf '%s\n' "$3" > "$DNS_TEST_CONFIRMATION"; fi
@@ -387,6 +387,13 @@ root=$(make_guided_fixture guided-block-serial)
 mv "$root/sys/class/block/sda/device/serial" "$root/sys/class/block/sda/serial"
 identify_guided "$root"
 expect_success guided_supports_kernel_block_serial_attribute "$root"
+
+root=$(make_guided_fixture guided-padded-identity)
+printf '  TEST SSD   \n' > "$root/sys/class/block/sda/device/model"
+printf 'TEST-DISK-01         \n' > "$root/sys/class/block/sda/device/serial"
+identify_guided "$root"
+grep -qx 'ERASE dns01 /dev/sda TEST-DISK-01 1073741824' "$root/run/erase-confirmation"
+expect_success guided_padding_does_not_enter_erase_confirmation "$root"
 
 root=$(make_guided_fixture guided-second-unreadable)
 make_disk "$root" sdc 0 'OTHER SSD' 'OTHER-DISK-02' 4194304

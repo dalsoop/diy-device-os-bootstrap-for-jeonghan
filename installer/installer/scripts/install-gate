@@ -605,7 +605,8 @@ capture_guided() {
     [ "$RET" = "$confirmation" ] || fail "exact target-specific erase confirmation required"
     printf '%s\n' "$confirmation" > "$state_dir/erase-confirmation"
     chmod 0600 "$state_dir/erase-confirmation"
-    db_stop
+    # The preseed early hook shares Debian Installer's frontend. STOP would
+    # disconnect main-menu after this child returns and leave a blank screen.
 }
 
 case "$install_mode" in

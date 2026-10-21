@@ -37,5 +37,8 @@ case "$field" in
         ;;
     *) exit 2 ;;
 esac
-[ -n "$(printf '%s' "$value" | tr -d '[:space:]')" ] || exit 1
+# NVMe serials and SCSI models can be padded to a fixed-width kernel field.
+# Keep meaningful interior characters, but never ask a human to count padding.
+value=$(printf '%s' "$value" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+[ -n "$value" ] || exit 1
 printf '%s\n' "$value"

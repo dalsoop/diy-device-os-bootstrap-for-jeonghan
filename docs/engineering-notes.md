@@ -174,3 +174,19 @@ and compares all of them before live target inspection or any write.
 **Cause:** the signed Debian 13 installer kernel's available udebs include FAT/VFAT, not exFAT. An installed Debian system's exFAT support does not establish installer support.
 
 **Response:** both USB builders format only the enrollment partition as FAT32 with the corresponding partition type. Preparation explicitly requests `fat-modules` and loads `vfat` before the gate mounts enrollment read-only. Ventoy's main data partition remains exFAT. Existing completed media generations are immutable and are never rewritten to claim this layout.
+
+## The offline DVD must carry installer-time target packages
+
+**Symptom:** both BIOS and UEFI installs stop in base system installation with "zstd 패키지를 설치할 수 없습니다"; VT4 shows `in-target` failing on `zstd` and `base-installer/kernel/failed-package-install`.
+
+**Cause:** Debian 13's base-installer and grub-installer install packages into the target that are neither in debootstrap's base set nor dependencies of the appliance package list: `zstd` for the initramfs, `efibootmgr` for UEFI NVRAM entries, and `shim-signed`, `grub-efi-amd64-signed` and `mokutil` for Secure Boot. A mirror-only debian-cd image omits them, and the installer has no network fallback.
+
+**Response:** list them in `dns.packages`. A package change needs a full `build-image`; `refresh-guided-iso` only replaces guided files. Confirm with `debian-packages.txt` before booting a VM, then qualify by a complete BIOS and UEFI install.
+
+## The text installer font holds only its translations' glyphs
+
+**Symptom:** guided Korean screens render some syllables as boxes, for example `각`, `께`, `량`, `삭` and `함`.
+
+**Cause:** the signed installer's `/usr/lib/unifont.bgf` is reduced to the characters used by Debian Installer translations (3,428 glyphs, 473 Hangul syllables in 13.7). Glyphs used only by our templates are absent.
+
+**Response:** write `guided.templates` Korean text with glyphs present in that font, for example "지워집니다" instead of "삭제합니다" and "크기" instead of "용량". When changing Korean text, extract `install.amd/initrd.gz` from the built ISO and check every non-ASCII template character against the BGF index before a VM run.

@@ -3,6 +3,7 @@ ca-certificates
 cockpit
 cockpit-system
 curl
+efibootmgr
 bind9-dnsutils
 exfatprogs
 jq
@@ -20,3 +21,7 @@ sudo
 systemd-timesyncd
 unzip
 uuid-runtime
+grub-efi-amd64-signed
+mokutil
+shim-signed
+zstd

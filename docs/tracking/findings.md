@@ -136,3 +136,8 @@ on branches without a pull request. The workflow does not yet connect the
 required GitHub check to the designated M5 validation infrastructure. Closing
 this requires a reviewed runner/workflow integration; the required check and
 branch protection have not been changed or bypassed.
+
+**Operator decision (2026-10-22):** this repository is exempt. Its required
+`contracts` check may keep running on GitHub-hosted `ubuntu-24.04` for pull
+requests and `main`. Image builds, VM qualification, and physical media work
+stay on `m5m1`/`m5m2`. Moving the check to an M5 runner remains optional.

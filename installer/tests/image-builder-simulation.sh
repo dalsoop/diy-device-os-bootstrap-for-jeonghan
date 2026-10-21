@@ -206,7 +206,7 @@ if "$repo_root/installer/disable-boot-timeouts" "$temporary" "$temporary" 1 "$te
 fi
 
 prepare_fixture=$temporary/prepare
-mkdir -p "$prepare_fixture"
+mkdir -p "$prepare_fixture/bin"
 cp "$repo_root/installer/scripts/prepare-installer" "$prepare_fixture/prepare-installer"
 cat > "$prepare_fixture/install-gate" <<'EOF'
 #!/bin/sh
@@ -214,7 +214,6 @@ printf 'gate %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
 EOF
 cat > "$prepare_fixture/confmodule" <<'EOF'
 db_set() { printf 'debconf %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"; }
-anna-install() { printf 'queue %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"; }
 anna() {
     printf 'components %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
     [ "${DNS_TEST_PREPARE_FAILURE:-}" != components ]
@@ -224,6 +223,13 @@ udpkg() {
     [ "${DNS_TEST_PREPARE_FAILURE:-}" != hardware ]
 }
 EOF
+cat > "$prepare_fixture/bin/anna-install" <<'EOF'
+#!/bin/sh
+printf 'queue %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
+EOF
+chmod 0755 "$prepare_fixture/bin/anna-install"
+PATH="$prepare_fixture/bin:$PATH"
+export PATH
 export DNS_INSTALLER_DEBCONF_MODULE=$prepare_fixture/confmodule
 export DNS_TEST_PREPARE_LOG=$prepare_fixture/log
 /bin/sh "$prepare_fixture/prepare-installer"

@@ -12,7 +12,7 @@ trap 'rm -rf "$test_root"' EXIT HUP INT TERM
 mkdir -p "$test_root/bin"
 cat > "$test_root/bin/confmodule" <<'EOF'
 db_set() { :; }
-db_fset() { :; }
+db_fset() { printf 'FLAG %s\n' "$*" >> "$DNS_TEST_DEBCONF_LOG"; }
 db_input() { :; }
 db_go() { [ "${DNS_TEST_CANCEL:-false}" = false ]; }
 db_stop() { echo 'shared installer frontend must remain connected' >&2; return 1; }
@@ -343,6 +343,9 @@ expect_identify_failure() {
 
 root=$(make_guided_fixture guided-valid)
 identify_guided "$root"
+for question in choose_interface get_hostname get_domain get_ipaddress get_netmask get_gateway get_nameservers confirm_static; do
+    grep -qx "FLAG netcfg/$question seen true" "$root/debconf.log"
+done
 expect_success guided_capture_then_install_exact_target "$root"
 
 make_sata_fixture() {

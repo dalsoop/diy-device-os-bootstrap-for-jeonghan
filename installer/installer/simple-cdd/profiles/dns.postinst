@@ -115,9 +115,9 @@ EOF
 rm -f /target/etc/resolv.conf
 printf 'search %s\nnameserver %s\n' "$DOMAIN" "$DNS_SERVERS" > /target/etc/resolv.conf
 
-install -d -m 0700 /target/home/operator/.ssh
-install -m 0600 /cdrom/simple-cdd/operator-authorized-keys /target/home/operator/.ssh/authorized_keys
-in-target chown -R operator:operator /home/operator/.ssh
+install -d -m 0700 /target/home/dns-operator/.ssh
+install -m 0600 /cdrom/simple-cdd/operator-authorized-keys /target/home/dns-operator/.ssh/authorized_keys
+in-target chown -R dns-operator:dns-operator /home/dns-operator/.ssh
 
 install -d -m 0755 /target/etc/ssh/sshd_config.d
 install -m 0644 /cdrom/simple-cdd/sshd-hardening.conf \

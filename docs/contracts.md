@@ -76,6 +76,9 @@ The recorder holds one checkout-local lock across each physical write. Failed, c
 
 ## DNS enrollment record
 
+Appliance SSH and Cockpit use the `dns-operator` account. The encrypted
+`secrets/operator-password` filename remains the recovery credential key.
+
 `public.json` uses schema version 1 and records generation UUID, hostname, role, fixed address, hardware identity, installer build and image digest, public SSH and certificate fingerprints, service health, and completion time. It never contains a password, token, or private key.
 
 A generation is complete only when `public.json`, `recovery.tar.age`, the sanitized install log, and `COMPLETE` exist and the role's `ACTIVE` pointer names that generation. Reinstall authorization names the same active generation and matching system UUID hash; an authorization for an older generation is invalid.

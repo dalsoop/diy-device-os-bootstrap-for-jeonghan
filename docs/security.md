@@ -14,7 +14,7 @@ The management host is the control plane. DNS appliances serve DNS and narrowly 
 
 1. The operator connects from an approved management source using the private key matching the public key embedded in the image.
 2. SSH verifies the enrolled host-key fingerprint. A changed or unknown fingerprint stops access; it must not be bypassed with host-key checking disabled.
-3. The `operator` account may use passwordless sudo. Possession of its SSH private key is therefore equivalent to root and the key remains only on the management host.
+3. The `dns-operator` account may use passwordless sudo. Possession of its SSH private key is therefore equivalent to root and the key remains only on the management host.
 
 Cockpit uses a per-node generated operator password recovered from the age-encrypted enrollment archive. Failure to recover or authenticate that password must not be worked around by enabling SSH password authentication.
 

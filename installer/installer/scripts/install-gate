@@ -54,6 +54,7 @@ read_disk_identity() {
 set_debconf() {
     if command -v db_set >/dev/null 2>&1; then
         db_set "$@"
+        db_fset "$1" seen true
     else
         "$debconf_set_command" "$@"
     fi

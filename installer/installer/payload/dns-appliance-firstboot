@@ -99,7 +99,7 @@ if [ -s "$credentials_archived" ]; then
 else
     generate_secret "$operator_password" password
     generate_secret "$technitium_password" password
-    printf 'operator:%s\n' "$(cat "$operator_password")" | chpasswd
+    printf 'dns-operator:%s\n' "$(cat "$operator_password")" | chpasswd
 fi
 
 if ! /usr/bin/podman image exists "$TECHNITIUM_IMAGE:$TECHNITIUM_VERSION"; then

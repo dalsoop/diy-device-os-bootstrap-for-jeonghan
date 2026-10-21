@@ -1,5 +1,21 @@
 # Engineering Notes
 
+## Guided answers must preserve the shared installer frontend
+
+**Symptom:** the guided confirmation disappears into a blank screen, or Debian asks again for the role's preselected network values.
+
+**Cause:** the preseed hook shares the enclosing cdebconf frontend. Sending `STOP` disconnects main-menu, while setting an answer without its `seen` flag leaves ordinary questions interactive.
+
+**Response:** return without stopping the shared frontend and mark programmatically supplied network answers seen. Role, wired interface, and exact erase consent remain deliberate questions. Qualify this through the actual main-menu flow, not only mocked debconf functions.
+
+## Debian reserves the operator account name
+
+**Symptom:** user-setup rejects the preseeded `operator` username as reserved.
+
+**Cause:** Debian's base system already reserves that name. A syntactically valid preseed does not prove account creation will succeed.
+
+**Response:** use `dns-operator` consistently for installation, SSH allowlisting, home ownership, sudo, first-boot password assignment and management SSH. The encrypted `operator-password` filename remains unchanged. Verify actual account creation and key-based login after internal boot.
+
 ## Installer media can masquerade as the internal target
 
 **Symptom:** the installer reports EFI formatting trouble, or the USB later contains a 1 GiB EFI partition, Linux partition, and swap instead of the expected Ventoy layout.

@@ -199,8 +199,27 @@ expected="ERASE $device $media_name $serial $device_bytes"
 [ "$confirmation" = "$expected" ] ||
     fail "exact confirmation required: $expected"
 
+# SHA-256 of the 1 MiB prefix (prefix) or of everything after it (body), read
+# in 1 MiB blocks. A byte-wise cmp of the raw device made a 30 GB readback take
+# longer than the write; sequential hashing runs at the USB read speed. The
+# target is exactly the image size, so a body read ends at the same byte.
+region_sha256() {
+    local value
+    case "$2" in
+        prefix) value=$(dd if="$1" bs=1m count=1 2>/dev/null | shasum -a 256 | awk 'NR == 1 { print $1 }') ||
+            fail "cannot read the $2 of $1" ;;
+        body) value=$(dd if="$1" bs=1m skip=1 2>/dev/null | shasum -a 256 | awk 'NR == 1 { print $1 }') ||
+            fail "cannot read the $2 of $1" ;;
+    esac
+    [[ "$value" =~ ^[a-f0-9]{64}$ ]] || fail "cannot hash the $2 of $1"
+    printf '%s\n' "$value"
+}
+
 preflight_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 emit_write_evidence pending
+
+image_body_sha256=$(region_sha256 "$image" body)
+image_prefix_sha256=$(region_sha256 "$image" prefix)
 
 echo "target: $device"
 echo "media: $media_name"
@@ -216,14 +235,16 @@ dd if=/dev/zero of="$raw_device" bs=1m count=1 conv=notrunc
 sync
 dd if="$image" of="$raw_device" bs=1m skip=1 seek=1 conv=notrunc
 sync
-cmp -i "$prefix_bytes:$prefix_bytes" -n "$body_bytes" "$image" "$raw_device"
+[ "$(region_sha256 "$raw_device" body)" = "$image_body_sha256" ] ||
+    fail "readback of the image body ($body_bytes bytes) does not match"
 
 # Expose the verified image only after its body is proven. macOS may then mount
 # an exFAT volume and update ordinary filesystem metadata, so verify the MBR and
 # boot prefix independently before immediately unmounting and ejecting.
 dd if="$image" of="$raw_device" bs=1m count=1 conv=notrunc
 sync
-cmp -n "$prefix_bytes" "$image" "$raw_device"
+[ "$(region_sha256 "$raw_device" prefix)" = "$image_prefix_sha256" ] ||
+    fail "readback of the first $prefix_bytes bytes does not match"
 diskutil unmountDisk "$device"
 diskutil eject "$device"
 

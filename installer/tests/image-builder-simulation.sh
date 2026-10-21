@@ -205,4 +205,40 @@ if "$repo_root/installer/disable-boot-timeouts" "$temporary" "$temporary" 1 "$te
     echo 'image-builder-simulation: missing boot tree accepted' >&2; exit 1
 fi
 
-echo "image builder, boot menus and signed Debian installer fetch simulations: passed"
+prepare_fixture=$temporary/prepare
+mkdir -p "$prepare_fixture"
+cp "$repo_root/installer/scripts/prepare-installer" "$prepare_fixture/prepare-installer"
+cat > "$prepare_fixture/install-gate" <<'EOF'
+#!/bin/sh
+printf 'gate %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
+EOF
+cat > "$prepare_fixture/confmodule" <<'EOF'
+db_set() { printf 'debconf %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"; }
+anna-install() { printf 'queue %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"; }
+anna() {
+    printf 'components %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
+    [ "${DNS_TEST_PREPARE_FAILURE:-}" != components ]
+}
+udpkg() {
+    printf 'hardware %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
+    [ "${DNS_TEST_PREPARE_FAILURE:-}" != hardware ]
+}
+EOF
+export DNS_INSTALLER_DEBCONF_MODULE=$prepare_fixture/confmodule
+export DNS_TEST_PREPARE_LOG=$prepare_fixture/log
+/bin/sh "$prepare_fixture/prepare-installer"
+printf '%s\n' 'debconf debconf/language ko' 'queue simple-cdd-profiles' \
+    'components cdrom-retriever default' 'hardware --configure ethdetect' \
+    'gate identify' > "$prepare_fixture/expected"
+cmp "$prepare_fixture/expected" "$prepare_fixture/log"
+for prepare_failure in components hardware; do
+    : > "$prepare_fixture/log"
+    if DNS_TEST_PREPARE_FAILURE=$prepare_failure /bin/sh "$prepare_fixture/prepare-installer"; then
+        echo 'image-builder-simulation: failed preparation accepted' >&2; exit 1
+    fi
+    if grep -q '^gate ' "$prepare_fixture/log"; then
+        echo 'image-builder-simulation: identity prompt reached after preparation failure' >&2; exit 1
+    fi
+done
+
+echo "image builder, offline preparation, boot menus and signed Debian installer fetch simulations: passed"

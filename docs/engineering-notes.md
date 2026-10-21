@@ -142,3 +142,11 @@ and compares all of them before live target inspection or any write.
 **Cause:** these packages are absent from the minimal appliance mirror, but Debian 13's debian-cd reads their metadata unconditionally while generating image task lists.
 
 **Response:** include both through the required `dns-build` build-only profile. Only `dns` is automatically selected on the target, so this metadata does not request a desktop installation. Keep the required package and mirror-completeness checks enabled.
+
+## Early guided prompts precede the network drivers
+
+**Symptom:** the real installer rejects a valid network profile with `Math support is not compiled in`, or finds only the loopback interface.
+
+**Cause:** Debian Installer's BusyBox awk omits exponentiation, and file-preseed executes before the normal offline component and network hardware detection stages. Host-side simulations do not reproduce either property.
+
+**Response:** network arithmetic uses repeated multiplication. `prepare-installer` initializes the CD retriever, loads the offline components, and configures `ethdetect` before identity collection. Each failure stops before the identity prompt or partitioning. Qualify these steps with the signed installer's BusyBox and actual BIOS/UEFI boots; desktop awk and fake NIC fixtures are insufficient evidence.

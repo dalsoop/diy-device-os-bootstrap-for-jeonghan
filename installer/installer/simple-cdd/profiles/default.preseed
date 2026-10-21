@@ -6,7 +6,7 @@ d-i console-setup/ask_detect boolean false
 
 # install-gate identifies the role before networking and the disk immediately
 # before partitioning. Either command failing returns to the installer menu.
-d-i preseed/early_command string anna-install simple-cdd-profiles; /bin/sh /cdrom/simple-cdd/install-gate identify
+d-i preseed/early_command string /bin/sh /cdrom/simple-cdd/prepare-installer
 d-i partman/early_command string /bin/sh /cdrom/simple-cdd/install-gate select-disk
 
 d-i netcfg/disable_autoconfig boolean true

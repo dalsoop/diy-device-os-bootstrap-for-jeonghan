@@ -104,7 +104,10 @@ grep -q 'tailscale-dependency-licenses.md' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/installer/build-image"
 grep -q '/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md' \
-    "$repo_root/installer/simple-cdd/profiles/dns.postinst"
+    "$repo_root/installer/scripts/dns-finish-install"
+grep -q 'preseed/late_command string /bin/sh /cdrom/simple-cdd/dns-finish-install' \
+    "$repo_root/installer/simple-cdd/profiles/default.preseed"
+[ ! -e "$repo_root/installer/simple-cdd/profiles/dns.postinst" ]
 grep -q 'debian-installer/locale string ko_KR.UTF-8' \
     "$repo_root/installer/simple-cdd/profiles/default.preseed"
 grep -q 'built ISO is missing /simple-cdd/' "$repo_root/installer/build-image"

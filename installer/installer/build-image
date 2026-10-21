@@ -220,7 +220,7 @@ awk '
     toupper($1) == "TIMEOUT" && $2 != "0" {bad=1}
     END {exit bad ? 1 : 0}
 ' "$iso_verify_dir"/isolinux/*.cfg || fail "built ISO enables automatic BIOS boot"
-for embedded in install-gate prepare-installer default.preseed disk-identity guided.templates install-mode dns01.conf dns02.conf dns03.conf \
+for embedded in install-gate prepare-installer dns-finish-install default.preseed disk-identity guided.templates install-mode dns01.conf dns02.conf dns03.conf \
     operator-authorized-keys age-recipient sources.env \
     enrollment-record.schema.json source.md; do
     xorriso -osirrox on -indev "$iso" \
@@ -231,6 +231,11 @@ cmp -s "$script_dir/scripts/install-gate" "$iso_verify_dir/install-gate" ||
     fail "built ISO contains a stale install-gate"
 cmp -s "$script_dir/scripts/prepare-installer" "$iso_verify_dir/prepare-installer" ||
     fail "built ISO contains a stale installer preparation step"
+cmp -s "$script_dir/scripts/dns-finish-install" "$iso_verify_dir/dns-finish-install" ||
+    fail "built ISO contains a stale appliance setup step"
+if xorriso -indev "$iso" -find /simple-cdd -name '*.postinst' 2>/dev/null | grep -q .; then
+    fail "built ISO contains a simple-cdd postinst; appliance setup must run as preseed/late_command"
+fi
 cmp -s "$builder_dir/profiles/default.preseed" "$iso_verify_dir/default.preseed" ||
     fail "built ISO contains stale installer answers"
 cmp -s "$script_dir/disk-identity" "$iso_verify_dir/disk-identity" ||

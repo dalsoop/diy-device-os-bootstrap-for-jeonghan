@@ -16,6 +16,7 @@ generated/tailscale-dependency-licenses.md
 generated/source.md
 ../scripts/install-gate
 ../scripts/prepare-installer
+../scripts/dns-finish-install
 ../disk-identity
 ../scripts/guided.templates
 ../payload/nftables.conf

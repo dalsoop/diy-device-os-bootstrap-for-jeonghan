@@ -8,6 +8,10 @@ d-i console-setup/ask_detect boolean false
 # before partitioning. Either command failing returns to the installer menu.
 d-i preseed/early_command string /bin/sh /cdrom/simple-cdd/prepare-installer
 d-i partman/early_command string /bin/sh /cdrom/simple-cdd/install-gate select-disk
+# Appliance setup needs both /cdrom and /target, so it runs here rather than
+# as a simple-cdd postinst (those run inside the target chroot). A failure
+# stops the installer with an error instead of finishing a bare system.
+d-i preseed/late_command string /bin/sh /cdrom/simple-cdd/dns-finish-install
 
 d-i netcfg/disable_autoconfig boolean true
 d-i netcfg/wireless_wep string

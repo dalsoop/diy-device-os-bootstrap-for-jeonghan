@@ -12,7 +12,9 @@ fail() {
 
 [ "$#" -eq 2 ] || fail "usage: refresh-guided-iso BASE.iso OUTPUT.iso"
 base_iso=$(CDPATH='' cd -- "$(dirname -- "$1")" && pwd)/$(basename -- "$1")
-[ -f "$base_iso" ] && [ -r "$base_iso" ] || fail "base ISO is not readable"
+if [ ! -f "$base_iso" ] || [ ! -r "$base_iso" ]; then
+    fail "base ISO is not readable"
+fi
 [ -d "$(dirname -- "$2")" ] || mkdir -p "$(dirname -- "$2")"
 output_iso=$(CDPATH='' cd -- "$(dirname -- "$2")" && pwd)/$(basename -- "$2")
 [ "$base_iso" != "$output_iso" ] || fail "output must not replace the base ISO"
@@ -90,6 +92,8 @@ awk '
     toupper($1) == "TIMEOUT" && $2 != "0" {bad=1}
     END {exit bad ? 1 : 0}
 ' "$verify_dir"/isolinux/*.cfg || fail "refreshed ISO enables automatic BIOS boot"
+"$script_dir/check-installer-glyphs" --iso "$temporary_iso" ||
+    fail "the installer font of the refreshed ISO cannot draw guided.templates"
 
 mv "$temporary_iso" "$output_iso"
 printf 'candidate ISO: %s\n' "$output_iso"

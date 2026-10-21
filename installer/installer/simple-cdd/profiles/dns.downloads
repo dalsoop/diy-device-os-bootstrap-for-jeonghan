@@ -1,0 +1,9 @@
+# Packages carried on the offline DVD but not installed by simple-cdd.
+# debian-installer chooses among them per machine (see
+# installer/installer-target-packages). They cannot go into dns.packages:
+# simple-cdd installs that list in one apt transaction on every target, and
+# grub-pc conflicts with grub-efi-amd64.
+grub-pc
+grub-efi-amd64
+# partman installs dosfstools only when an EFI system partition exists.
+dosfstools

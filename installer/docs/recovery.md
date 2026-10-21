@@ -2,7 +2,7 @@
 
 ## Enrollment secrets
 
-Each node creates unique `operator` and Technitium administrator passwords plus
+Each node creates unique `dns-operator` and Technitium administrator passwords plus
 a local static API token. Plaintext secrets exist on the node only until the
 recovery archive is committed. The USB stores `recovery.tar.age` for secrets,
 but also stores plaintext `public.json`, sanitized install logs, completion

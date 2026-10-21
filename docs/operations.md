@@ -94,6 +94,44 @@ installer/management/network-preflight --offline --json 10.0.0.1/16 | jq
 
 The offline form marks outbound DNS and HTTPS readiness unknown. Internet is required to fetch public artifacts and enroll Tailscale, but the already-built DNS installer boots and installs offline. A passing Internet probe does not establish LAN routing, node health, or DNS readiness.
 
+## One USB: guided Debian OS and DNS installation
+
+The guided image is a candidate until BIOS and UEFI installation and a disposable `dns01` pilot pass. Build and validate on the designated M5 host, using its amd64 Debian 13 environment:
+
+```sh
+DNS_APPLIANCE_INSTALL_MODE=guided installer/installer/build-image
+DNS_APPLIANCE_INSTALL_MODE=guided installer/installer/check-readiness
+```
+
+Only operator SSH public keys and the public age recipient enter the image. Keep the corresponding private keys outside the checkout on the management host. The default network profiles retain the planned `10.0.0.0/16` LAN and `10.0.5.1` through `.3`; do not deploy them on a `192.168.0.0/24` LAN without a coordinated network/profile change.
+
+For changes limited to the guided Debian Installer flow (`install-gate`,
+`prepare-installer`, `disk-identity`, guided templates, or the shared preseed),
+reuse a previously built guided ISO as a disposable VM base. On the M5 builder,
+refresh only those files and boot the result directly in the disposable VM:
+
+```sh
+sh installer/installer/refresh-guided-iso \
+  installer/installer/simple-cdd/images/BASE_GUIDED.iso \
+  installer/artifacts/guided-iteration.iso
+```
+
+This replays the base ISO's BIOS/UEFI boot metadata, replaces the five installer
+files, checks the embedded bytes and boot-menu timeouts, and prints the new
+candidate hash. It skips Simple-CDD package resolution, image assembly, and the
+30 GB USB image build. The result deliberately has no production build manifest
+and cannot be used for a World USB burn; it is only for disposable VM checks.
+Changes to Debian packages, generated payload, network profiles, credentials,
+or any other ISO content still require `build-image` to create a release
+candidate. After the guided flow passes, run the full build and its manifest
+checks once for the exact committed source before preparing production media.
+
+Use the resulting ISO and matching build manifest with the existing `dns-install` World media assembly. Boot the USB deliberately, select the role and connected wired NIC, review the network and internal disk, and type the exact erase phrase shown. Debian and DNS install in that pass; the USB need not return to the management host for an inventory rebuild. An ambiguous, mounted, removable, USB-backed or unreadable internal target blocks installation. Never bypass a rejection by editing a hardware hash.
+
+Keep the USB connected through first boot until encrypted enrollment completes. Qualify and recover `dns01` before repeating for `dns02` and `dns03`. Tailscale enrollment and cluster bootstrap still run from the management host after OS installation. An active role needs its existing generation-bound reinstall token plus a fresh on-target erase confirmation.
+
+The original reviewed-inventory path below remains available with the default `reviewed` mode.
+
 ## First pass: capture hardware inventory
 
 Prepare only the `inventory-capture` selection. On Linux, burn it directly:
@@ -249,6 +287,12 @@ TAILSCALE_OAUTH_CLIENT_SECRET_FILE=/secure/tailscale/client-secret \
 ```
 
 Confirm each node's hostname, `tag:dns-appliance`, Tailscale address, peer reachability, `accept-dns=false`, and absence of routes, exit-node behavior, Tailscale SSH, Serve, and Funnel.
+
+For remote DNS, use the three enrolled nodes' Tailscale IPv4 addresses as tailnet nameservers, not their `10.0.5.x` LAN addresses. No subnet routing is required. First allow the intended client identities to reach `tag:dns-appliance` on both UDP and TCP 53 in the tailnet policy. The appliance recursion ACL includes `100.64.0.0/10`; nftables accepts DNS on `tailscale0` and rejects that source range on other network interfaces.
+
+Before changing tailnet DNS, run `dig @<node-tailscale-ip> home.arpa SOA` and `dig @<node-tailscale-ip> example.com A` from an approved remote client for each node, then repeat both with `+tcp`. Check that an unauthorized peer cannot query them. These live checks require installed, enrolled appliances and are separate from source simulations.
+
+Choose restricted nameservers for `home.arpa` when only internal names should use the appliances. To send public lookups through them as well, configure global nameservers and enable the tailnet DNS override on clients. Keep all three appliances on `--accept-dns=false` to avoid making their own resolver depend on this client configuration. All three nameservers must serve the same intended data; listing them does not establish strict primary/secondary query order. Technitium web administration still uses the LAN listener or a verified SSH tunnel to loopback.
 
 ## DNS change and router cutover
 

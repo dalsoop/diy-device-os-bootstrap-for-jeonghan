@@ -68,13 +68,16 @@ Schema version 1 reports each selected entry's size and source, verified total, 
 
 The data partition label is `DEVICE-OS`. It contains staged images, bundles, Ventoy configuration, resolved media metadata and digest, image checksums, guides, tools, project license, license history, third-party notices, source revision/archive information, and `manifests/LICENSES.SHA256`.
 
-When the DNS adapter is selected, a separate `DNS-ENROLL` partition stores public enrollment evidence, encrypted recovery generations, active pointers, and reinstall authorizations. It is transport, not the long-lived secret store.
+When the DNS adapter is selected, a separate FAT32 `DNS-ENROLL` partition stores public enrollment evidence, encrypted recovery generations, active pointers, and reinstall authorizations. FAT32 is readable by the signed Debian Installer kernel's FAT modules; exFAT is unsupported at this stage. Files must remain below FAT32's 4 GiB per-file limit. It is transport, not the long-lived secret store. The Ventoy `DEVICE-OS` data partition remains exFAT.
 
 A completed personal World generation contains immutable `world.yaml`, `world.lock.json`, `media-manifest.json`, `verification.json`, and `event.json`. The event recorder seals `{YYYYMMDDHHmmss}-{world-slug}` before invoking the target-specific writer, requires schema-version-1 redacted evidence with passed readback, then atomically renames the staged directory into `world/worlds/`. It excludes images, caches, credentials, private keys, raw serials, MAC addresses, UUIDs, and recovery material.
 
 The recorder holds one checkout-local lock across each physical write. Failed, cancelled, and recovered interrupted attempts never create a generation; they publish schema-version-1 records under `world/events/YYYY/{event-id}.json`. A successful event lives inside its generation. Simulations, plans, builds, and capacity checks create no event. Git commits and pushes remain an explicit pull-request workflow rather than a side effect of the root writer.
 
 ## DNS enrollment record
+
+Appliance SSH and Cockpit use the `dns-operator` account. The encrypted
+`secrets/operator-password` filename remains the recovery credential key.
 
 `public.json` uses schema version 1 and records generation UUID, hostname, role, fixed address, hardware identity, installer build and image digest, public SSH and certificate fingerprints, service health, and completion time. It never contains a password, token, or private key.
 
@@ -94,10 +97,17 @@ Restore requires an explicit target URL and `RESTORE <exact-url>`, decrypts and 
 | --- | --- | --- | --- |
 | `installer/build/verify-locks` | Reviewed `build/locks/sources.env` | Prints `source locks: valid`; changes nothing | Nonzero for moving or malformed Debian/Tailscale URLs, malformed versions, timestamps, hashes, or OCI digests |
 | `installer/installer/fetch-locked-sources` | Network access and optional ignored cache path | Downloads Technitium OCI, Tailscale archive, and dependency-license report to temporary files; atomically promotes only verified content; prints checksums | Nonzero for missing tools, network/TLS failure, remote or cached digest mismatch, or license-report mismatch; partial files are removed |
+| `sh installer/installer/refresh-guided-iso <base.iso> <output.iso>` | Existing guided ISO and current checkout's guided preseed/scripts/templates; Linux with xorriso | Disposable iteration ISO with five guided files refreshed; verifies embedded bytes, BIOS/UEFI menus and disabled automatic boot; prints SHA-256; no release manifest | Nonzero for non-guided base, missing tools/files, output collision, failed ISO replay, stale embedded file, or enabled boot timeout; candidate cannot satisfy World runtime-artifact manifest checks |
 | `installer/installer/capture-inventory <role> <address> <interface> <whole-disk>` | One fixed DNS role, address, existing NIC, and whole block device on the target HP | Writes a shell-format inventory record to stdout with hashed hardware identities and `destructive_install_enabled=false`; does not modify the disk | Exit 2 for wrong arguments/role; nonzero for absent NIC/disk, a partition instead of whole disk, unreadable/empty identity, or missing SHA-256 tool |
-| `installer/installer/build-image` | Clean committed source; amd64 Debian 13; exact Simple-CDD version; verified caches; three inventories; exactly one enabled role; operator public keys; age recipient | Builds ISO under `installer/installer/simple-cdd/images/`; verifies critical embedded files; writes checksums, build manifest, package lists, package hashes, and SPDX SBOM under the configured artifact directory | Nonzero for unsupported host, dirty source, missing/malformed public input, anything other than one enabled role, lock/cache mismatch, build failure, stale embedded content, or missing artifact |
+| `installer/installer/build-image` | Clean committed source; amd64 Debian 13; exact Simple-CDD version; verified caches; reviewed mode: three inventories and exactly one enabled role; guided mode: three disabled network profiles; operator public keys; age recipient | Builds ISO under `installer/installer/simple-cdd/images/`; verifies critical embedded files; writes checksums, build manifest, package lists, package hashes, and SPDX SBOM under the configured artifact directory | Nonzero for unsupported host, dirty source, missing/malformed public input, anything other than one enabled role, lock/cache mismatch, build failure, stale embedded content, or missing artifact |
 
-`build-image` requires exactly one enabled role but does not authorize media or internal-disk writing. Its manifest is the contract paired with the DNS runtime artifact during capacity and burn.
+`DNS_APPLIANCE_INSTALL_MODE=reviewed` is the default and requires exactly one enabled embedded inventory. `guided` uses disabled network profiles from `inventory/nodes/*.conf.example` (or `DNS_APPLIANCE_INVENTORY_DIR/*.conf`). Both modes install Debian OS and the offline DNS payload together. The embedded `install-mode` and manifest `install_mode` name the selected mode; missing mode means legacy `reviewed`, and unknown modes fail.
+
+In guided mode, Debian Installer's debconf frontend asks for role and wired physical NIC, captures local DMI/NIC/disk hashes into `/run/dns-appliance/inventory`, and displays the address, gateway, disk model, serial and exact byte count. It requires `ERASE <role> /dev/<disk> <serial> <bytes>`. Capture never writes the internal disk. The `select-disk` phase rechecks the captured hardware, disk path and exact size, single eligible internal disk, installer ancestry, mounted state, confirmation and active-generation reinstall authorization before signature clearing. An additional internal disk blocks guided installation even when its identity differs. Runtime inventory and confirmation are volatile and are never embedded or committed.
+
+A build does not authorize media or internal-disk writing. Its manifest is paired with the DNS runtime artifact during capacity and burn. `check-readiness` uses the same mode environment and rejects a mismatched ISO manifest. Guided mode removes the separate capture/rebuild round trip; it does not establish VM or physical installation proof.
+
+Capture, the inventory wizard and the install gate use the same read-only `disk-identity` adapter, bundled beside the capture tools and the ISO gate. Kernel model/serial attributes are preferred; SATA serials may come from `ata_id --export` on the exact candidate block device. Failed, empty or ambiguous identity evidence is rejected, and the serial is re-read before disk preparation.
 
 ## Post-install management interfaces
 
@@ -137,3 +147,7 @@ The gateway is accessed through MCP stdio locally or a management-host forced SS
 | `dns_apply` | Fixed role, full lowercase 40-character approved commit, exact `APPLY home.arpa TO <role> AT <commit>` | Delegated apply result | Always discoverable but rejects calls unless host policy is enabled; requires applier token and trusted CA plus all `dnsctl` gates |
 
 There is no gateway interface for USB burn, OS installation, restore, reinstall authorization, enrollment, router mutation, arbitrary shell, arbitrary path, arbitrary URL, or raw credential input.
+
+`install-gate validate-profile <file> <role>` validates unique fields, required values, IPv4 ranges, prefix/netmask agreement, LAN membership, gateway reachability, management subnet containment and safe domain fields without reading hardware or writing disks. Image build, readiness and guided capture share this validator.
+
+`fetch-debian-installer` fetches the locked Debian snapshot Release/signature and installer checksums, verifies Debian archive signatures and the entire digest chain, then atomically promotes the six required amd64 text/graphical installer files into the ignored cache. Existing mismatched components fail rather than being silently replaced. Temporary verification/download files are removed after success or failure. This is an input preparation operation, never disk-write authority.

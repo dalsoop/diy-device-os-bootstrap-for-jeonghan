@@ -99,7 +99,7 @@ if [ -s "$credentials_archived" ]; then
 else
     generate_secret "$operator_password" password
     generate_secret "$technitium_password" password
-    printf 'operator:%s\n' "$(cat "$operator_password")" | chpasswd
+    printf 'dns-operator:%s\n' "$(cat "$operator_password")" | chpasswd
 fi
 
 if ! /usr/bin/podman image exists "$TECHNITIUM_IMAGE:$TECHNITIUM_VERSION"; then
@@ -125,7 +125,8 @@ write_technitium_env() {
         printf 'DNS_SERVER_WEB_SERVICE_USE_SELF_SIGNED_CERT=true\n'
         printf 'DNS_SERVER_WEB_SERVICE_HTTP_TO_TLS_REDIRECT=true\n'
         printf 'DNS_SERVER_RECURSION=UseSpecifiedNetworkACL\n'
-        printf 'DNS_SERVER_RECURSION_NETWORK_ACL=127.0.0.0/8,%s\n' "$LAN_CIDR"
+        # nftables restricts CGNAT sources to the authenticated tailscale0 interface.
+        printf 'DNS_SERVER_RECURSION_NETWORK_ACL=127.0.0.0/8,%s,100.64.0.0/10\n' "$LAN_CIDR"
         printf 'DNS_SERVER_LOG_USING_LOCAL_TIME=false\n'
         printf 'DNS_SERVER_LOG_FOLDER_PATH=/var/log/technitium/dns\n'
         printf 'DNS_SERVER_LOG_MAX_LOG_FILE_DAYS=30\n'

@@ -116,7 +116,7 @@ DEVICE-OS/                     exFAT label used by Ventoy's bundled formatter
 ├── README_KO.txt
 └── README_EN.txt
 
-DNS-ENROLL/                 present only with the DNS profile
+DNS-ENROLL/                 FAT32, present only with the DNS profile
 ├── installer.json
 ├── records/
 └── reinstall/

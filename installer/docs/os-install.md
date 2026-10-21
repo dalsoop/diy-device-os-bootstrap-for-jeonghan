@@ -120,7 +120,7 @@ installer before partitioning.
 The resulting host has:
 
 - the role hostname and static address;
-- a first-boot-generated `operator` password plus the supplied SSH public key;
+- a first-boot-generated `dns-operator` password plus the supplied SSH public key;
 - root SSH login and SSH password authentication disabled;
 - Cockpit on TCP 9090;
 - digest-pinned Technitium DNS in a Podman systemd service;
@@ -148,6 +148,6 @@ DNS_CLUSTER_ACCESS_OUTPUT=/secure/cluster-access.json.age \
   installer/management/cluster-bootstrap
 ```
 
-Cockpit is then available as `operator` at `https://10.0.5.1:9090` through
+Cockpit is then available as `dns-operator` at `https://10.0.5.1:9090` through
 `https://10.0.5.3:9090`; retrieve each generated password from the imported
 recovery directory and verify the recorded certificate fingerprint first.

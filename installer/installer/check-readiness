@@ -6,6 +6,12 @@ set -euo pipefail
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$repo_root/inventory/local}
+install_mode=${DNS_APPLIANCE_INSTALL_MODE:-reviewed}
+case "$install_mode" in
+    reviewed) ;;
+    guided) inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$repo_root/inventory/nodes} ;;
+    *) echo 'check-readiness: unknown install mode' >&2; exit 2 ;;
+esac
 authorized_keys=${DNS_APPLIANCE_AUTHORIZED_KEYS:-$script_dir/inputs/operator-authorized-keys}
 age_recipient=${DNS_APPLIANCE_AGE_RECIPIENT:-$script_dir/inputs/age-recipient}
 cache_dir=${DNS_APPLIANCE_CACHE_DIR:-$repo_root/cache}
@@ -23,6 +29,9 @@ enabled_count=0
 inventory_complete=1
 for role in dns01 dns02 dns03; do
     file=$inventory_dir/$role.conf
+    if [ "$install_mode" = guided ] && [ ! -r "$file" ]; then
+        file=$inventory_dir/$role.conf.example
+    fi
     if [ ! -r "$file" ]; then
         inventory_complete=0
         block "missing captured inventory for $role"
@@ -32,6 +41,10 @@ for role in dns01 dns02 dns03; do
         inventory_complete=0
         block "captured inventory has the wrong role for $role"
     fi
+    if ! /bin/sh "$script_dir/scripts/install-gate" validate-profile "$file" "$role" 2>/dev/null; then
+        inventory_complete=0
+        block "$role has an invalid network profile"
+    fi
     enabled=$(awk -F= '$1 == "destructive_install_enabled" { print $2 }' "$file")
     case "$enabled" in
         true) enabled_count=$((enabled_count + 1)) ;;
@@ -39,8 +52,14 @@ for role in dns01 dns02 dns03; do
         *) inventory_complete=0; block "$role has an invalid destructive-install flag" ;;
     esac
 done
-[ "$inventory_complete" -eq 1 ] && pass "three hardware inventories are present"
-if [ "$enabled_count" -eq 1 ]; then
+[ "$inventory_complete" -eq 1 ] && pass "three role profiles are present"
+if [ "$install_mode" = guided ]; then
+    if [ "$enabled_count" -eq 0 ]; then
+        pass "guided mode requires fresh on-target inventory and erase confirmation"
+    else
+        block "guided network profiles must not enable destructive installation"
+    fi
+elif [ "$enabled_count" -eq 1 ]; then
     pass "exactly one DNS role is erase-enabled"
 else
     block "exactly one DNS role must be erase-enabled; found $enabled_count"
@@ -78,6 +97,8 @@ done
 
 manifest=$artifact_dir/build-manifest.json
 if [ -r "$manifest" ]; then
+    manifest_mode=$(jq -r '.install_mode // "reviewed"' "$manifest")
+    [ "$manifest_mode" = "$install_mode" ] || block "DNS installer manifest has the wrong install mode"
     iso_name=$(jq -er '.iso' "$manifest" 2>/dev/null || true)
     iso=$script_dir/simple-cdd/images/$iso_name
     expected=$(jq -er '.iso_sha256' "$manifest" 2>/dev/null || true)

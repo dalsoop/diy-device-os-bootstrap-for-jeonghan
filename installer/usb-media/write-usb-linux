@@ -316,7 +316,8 @@ if [ "$reserve_mib" -gt 0 ]; then
     total_sectors=$((device_bytes / sector_size))
     [ $((total_sectors - start)) -gt 131072 ] || fail "reserved enrollment space was not created"
     printf 'start=%s, type=c\n' "$start" | sfdisk --append "$device"
-    blockdev --rereadpt "$device"
+    # sfdisk already refreshes the kernel table. A second full reread races
+    # filesystem probes; verify the resulting partition identity instead.
     udevadm settle
     ensure_image_partition_nodes
     if [ "$image_build" -eq 1 ]; then
@@ -330,6 +331,8 @@ if [ "$reserve_mib" -gt 0 ]; then
             awk -v start="$start" '$2 == "part" && $3 == start { print $1; exit }')
     fi
     [ -b "$enroll_partition" ] || fail "$enrollment_label partition was not found"
+    [ "$(blockdev --getsize64 "$enroll_partition")" = "$(((total_sectors - start) * sector_size))" ] ||
+        fail "$enrollment_label partition size does not match the reserved space"
     mkfs.vfat -F 32 -n "$enrollment_label" "$enroll_partition"
 fi
 

@@ -17,7 +17,7 @@ The current release state is a source-validated prototype, not a physically qual
 | Cross-platform exact-size raw-image builder and macOS MBR-last writer | Yes | Manifest-bound 15,833,497,600-byte physical write and full MBR-last raw readback | Mount and inspect filesystems and payload, then qualify BIOS and UEFI boot |
 | Append-only World event and generation publication after verified write | Yes | Inspected physical macOS generation after full raw readback | Merge the generation through the protected pull-request path and repeat on Linux when needed |
 | Offline Korean DNS appliance image with immutable locks | Yes | Source validation and ISO embedded-file readback logic; exactly-one-role build gate | Capture the three real inventories, then complete two clean amd64 Debian 13 builds and artifact comparison |
-| Exact HP/NIC/internal-disk install gate with mapper ancestry resolution | Yes | Isolated rejection and disk-preparation simulation | VM BIOS/UEFI install and disposable physical `dns01` rerun |
+| Exact HP/NIC/internal-disk install gate with mapper ancestry resolution | Yes | Guided VM BIOS and UEFI install from the exact-size raw image (`0f0664e`, Secure Boot off) | Disposable physical `dns01` rerun |
 | Retry-safe encrypted first-boot enrollment | Yes | Source contract | Power-loss and real exFAT fault injection |
 | Three-node Technitium cluster bootstrap | Yes | Fixture/source checks | Live three-node cluster and primary-loss drill |
 | DNS health, plan, and gated apply | Yes | Isolated simulation | Approved live canary apply and rollback; immutable reviewed-plan binding remains unbuilt |
@@ -42,5 +42,7 @@ There is no source-code blocker to the first three steps. They require the suppo
 ## Guided OS + DNS candidate (2026-10-21)
 
 The guided path now captures identities and exact target-specific consent inside Debian Installer, then uses the existing guarded Debian OS + offline DNS installation path. On M5, 41 reviewed/guided source simulations passed, including cancellation, incorrect consent, changed hardware/size, multiple disks, USB/removable/mounted targets and active-role rejection. Image build, real debconf presentation, BIOS/UEFI full installation and physical HP qualification remain unproven. The previously completed physical USB generation remains inventory-only and does not install the OS.
+
+Update: commit `0f0664e` passed one disposable VM install per firmware from the exact-size Ventoy raw image (`installer/evidence/2026-10-21-guided-vm-qualification.md`): guided answers typed into the real dialogs, internal-disk boot, DNS over UDP and TCP, and encrypted enrollment with no plaintext secrets. Secure Boot was off. This is not physical, firmware or Secure Boot evidence.
 
 The M5 source contract suite passed, including World, Catalog, media, inventory wizard, management, Tailscale and Agent Gateway simulations. Signed Debian installer fetch rejection fixtures also pass. The first real image build exposed Simple-CDD 0.6.9 requesting a removed i386 installer; the candidate now uses signed/checksummed amd64-only custom-installer inputs and still needs a successful image build.

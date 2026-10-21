@@ -181,7 +181,31 @@ and compares all of them before live target inspection or any write.
 
 **Cause:** Debian 13's base-installer and grub-installer install packages into the target that are neither in debootstrap's base set nor dependencies of the appliance package list: `zstd` for the initramfs, `efibootmgr` for UEFI NVRAM entries, and `shim-signed`, `grub-efi-amd64-signed` and `mokutil` for Secure Boot. A mirror-only debian-cd image omits them, and the installer has no network fallback.
 
-**Response:** list them in `dns.packages`. A package change needs a full `build-image`; `refresh-guided-iso` only replaces guided files. Confirm with `debian-packages.txt` before booting a VM, then qualify by a complete BIOS and UEFI install.
+**Response:** list firmware-neutral ones in `dns.packages` and firmware-specific ones (`grub-pc`, `grub-efi-amd64`, the Secure Boot chain, `dosfstools`) in `dns.downloads`; `installer/installer-target-packages` records the full set and `build-image` fails when any is missing from the DVD. A package change needs a full `build-image`; `refresh-guided-iso` only replaces guided files.
+
+## The Secure Boot chain must not be preinstalled on BIOS targets
+
+**Symptom:** the BIOS install fails at "GRUB 부트로더 설치"; VT4 shows `dpkg: error processing package grub-efi-amd64-signed (--purge): this is a protected package`.
+
+**Cause:** simple-cdd installs `dns.packages` on every target. On BIOS, grub-installer purges the grub-efi packages before installing grub-pc, and the protected signed image cannot be purged.
+
+**Response:** carry `shim-signed`, `grub-efi-amd64-signed` and `mokutil` in `dns.downloads` only; grub-installer installs them on UEFI targets.
+
+## simple-cdd postinst scripts run inside the target chroot
+
+**Symptom:** the install finishes, but the system has no operator SSH key, no Technitium and no first-boot enrollment. The installer syslog shows `finish-install: warning: /usr/lib/finish-install.d/14simple-cdd returned error code 1`.
+
+**Cause:** simple-cdd 0.6.9 runs `<profile>.postinst` through `in-target`, where `/cdrom` and `/target` do not exist, and treats its failure as a warning.
+
+**Response:** appliance setup is `scripts/dns-finish-install`, run as `preseed/late_command` in the installer environment, which stops the install on failure. `build-image` rejects any `*.postinst` on the ISO.
+
+## GRUB asks for the BIOS boot device when the USB is attached
+
+**Symptom:** a BIOS install stops at "grub-pc 설정 중입니다 … 부트로더를 설치할 장치".
+
+**Cause:** the installer USB is a second disk, so grub-installer cannot choose the boot device.
+
+**Response:** `install-gate select-disk` sets `grub-installer/bootdev` to the same confirmed disk it gives partman.
 
 ## The text installer font holds only its translations' glyphs
 

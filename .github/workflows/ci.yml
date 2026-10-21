@@ -55,6 +55,7 @@ jobs:
         run: |
           python3 -c 'compile(open("installer/management/dns-appliance-status-monitor/server.py", encoding="utf-8").read(), "server.py", "exec")'
           python3 -c 'compile(open("agent/server.py", encoding="utf-8").read(), "server.py", "exec")'
+          python3 -c 'compile(open("installer/installer/lib/installer_glyphs.py", encoding="utf-8").read(), "installer_glyphs.py", "exec")'
       - name: Check Ruby syntax
         run: |
           ruby -c world/bin/resolve-world

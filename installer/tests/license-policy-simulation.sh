@@ -37,6 +37,15 @@ printf '%s\n' "$personal" | jq -e '
 
 # Both Linux writers must refuse policy/evidence before target inspection.
 USB_MEDIA_CATALOG="$temporary/writer-catalog.json" "$repo_root/usb-media/resolve-catalog" >/dev/null
+
+# The builders and writers call the real checker with their resolved catalog in
+# USB_MEDIA_CATALOG; personal use must accept that, but not an explicit --catalog.
+USB_MEDIA_CATALOG="$temporary/writer-catalog.json" $checker --mode personal-use --json |
+    jq -e '.mode == "personal-use" and .decision == "allow"' >/dev/null ||
+    fail "personal-use rejected the caller's resolved catalog"
+if $checker --mode personal-use --catalog "$temporary/writer-catalog.json" --json >/dev/null 2>&1; then
+    fail "personal-use accepted an explicit --catalog"
+fi
 mock_bin=$temporary/bin
 mkdir -p "$mock_bin"
 cat > "$mock_bin/uname" <<'EOF'

@@ -1,6 +1,7 @@
 generated/dns01.conf
 generated/dns02.conf
 generated/dns03.conf
+generated/install-mode
 generated/operator-authorized-keys
 generated/age-recipient
 generated/technitium.oci.tar
@@ -21,6 +22,10 @@ generated/component-review-record.schema.json
 generated/dns-build-manifest.schema.json
 generated/dns-final-review-record.schema.json
 ../scripts/install-gate
+../scripts/prepare-installer
+../scripts/dns-finish-install
+../disk-identity
+../scripts/guided.templates
 ../payload/nftables.conf
 ../payload/sshd-hardening.conf
 ../payload/operator-sudoers

@@ -32,6 +32,7 @@
     "schema_version": { "const": 1 },
     "artifact_id": { "const": "dns-appliance" },
     "build_id": { "type": "string", "minLength": 1 },
+    "install_mode": { "enum": ["reviewed", "guided"] },
     "iso": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*\\.iso$" },
     "iso_sha256": { "$ref": "#/$defs/sha256" },
     "distribution_status": { "enum": ["personal-use-only", "redistribution-reviewed"] },

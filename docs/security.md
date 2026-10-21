@@ -14,7 +14,7 @@ The management host is the control plane. DNS appliances serve DNS and narrowly 
 
 1. The operator connects from an approved management source using the private key matching the public key embedded in the image.
 2. SSH verifies the enrolled host-key fingerprint. A changed or unknown fingerprint stops access; it must not be bypassed with host-key checking disabled.
-3. The `operator` account may use passwordless sudo. Possession of its SSH private key is therefore equivalent to root and the key remains only on the management host.
+3. The `dns-operator` account may use passwordless sudo. Possession of its SSH private key is therefore equivalent to root and the key remains only on the management host.
 
 Cockpit uses a per-node generated operator password recovered from the age-encrypted enrollment archive. Failure to recover or authenticate that password must not be worked around by enabling SSH password authentication.
 
@@ -93,6 +93,14 @@ Installation writes public enrollment evidence, sanitized install logs, `COMPLET
 
 DNS UDP/TCP 53 is allowed from the approved LAN. SSH, Cockpit, metrics, and Technitium administration are limited to management sources; cluster traffic is limited to fixed peers. IPv6 follows an explicit reviewed policy, and an accidental wildcard listener is a failed verification.
 
+Technitium recursion permits loopback, the configured LAN, and Tailscale IPv4 addresses (`100.64.0.0/10`). The firewall drops that source range outside `tailscale0` before established-connection or LAN rules; Tailscale authenticates peers, and the reviewed tailnet policy controls which peers may query UDP/TCP 53. This is a recursive resolver for those approved clients, not a public resolver. The Technitium web listener remains on loopback and the appliance LAN address; a tailnet firewall allowance alone does not make that listener available at a Tailscale address.
+
 Tailscale appliances accept no DNS configuration, advertise no subnet route, provide no exit node, and expose no Tailscale SSH, Serve, or Funnel. The agent path uses a forced command on the management host rather than opening appliance or router ports.
 
 If a wrong disk becomes writable, all media operations stop. The affected media is preserved, target-resolution logic and simulations are corrected, and disposable physical qualification repeats before any production node is enabled.
+
+## Guided installation consent
+
+Guided media embed disabled role network profiles, not enabled hardware inventories. The Debian Installer frontend captures identities locally and requires an exact role/disk/serial/byte-count erase phrase. No internal-disk write occurs in capture; partition preparation repeats exact identity and size checks and rejects additional eligible internal disks. Volatile confirmation is invalid after reboot or hardware replacement. Existing active-generation reinstall authorization remains mandatory. This consent is distinct from USB burn confirmation and does not authorize router or network cutover.
+
+Mounted filesystem and swap checks resolve mapper/partition ancestry; active block-device holders also block preparation. Image acceptance checks the generated BIOS and UEFI menus for disabled automatic timeouts. Simple-CDD numeric `BOOT_TIMEOUT=0` must not be used because it means immediate UEFI boot.

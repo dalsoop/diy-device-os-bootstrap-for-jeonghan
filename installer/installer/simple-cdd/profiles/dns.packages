@@ -3,7 +3,8 @@ ca-certificates
 cockpit
 cockpit-system
 curl
-dnsutils
+efibootmgr
+bind9-dnsutils
 exfatprogs
 jq
 kmod
@@ -20,3 +21,4 @@ sudo
 systemd-timesyncd
 unzip
 uuid-runtime
+zstd

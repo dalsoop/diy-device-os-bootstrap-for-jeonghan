@@ -1,5 +1,24 @@
 # Findings
 
+## Three-node DNS rollout lacks live inputs and topology evidence
+
+On 2026-10-21, `device-os world readiness` reported no captured inventory for
+`dns01`, `dns02`, or `dns03`, no single erase-enabled role, no valid operator
+SSH public-key input or age recovery recipient, missing locked Technitium and
+Tailscale build inputs, and no DNS installer ISO/build manifest. The offline
+network preflight observed a management gateway of `192.168.0.1`, while the
+planned `10.0.0.1/16` router and `10.0.5.1` through `10.0.5.3` nodes were
+unreachable. A passing offline-install topology calculation does not establish
+live node reachability or Internet readiness.
+
+Source fixes and simulations can proceed, but image creation and physical
+rollout cannot be qualified from these inputs. Capture each HP machine with the
+non-destructive inventory media, provide public installation/recovery inputs
+through ignored local paths, verify locked dependencies, and qualify the
+intended network before building and testing BIOS/UEFI installation. Enable only
+the `dns01` pilot after current target-specific authorization; the remaining
+nodes and router DNS cutover depend on that pilot's evidence.
+
 ## The first physical DNS pilot selected its installer USB
 
 Under the original Ventoy boot path, the installer resolved `/dev/mapper/Ventoy` without following its sysfs slave and partition ancestry. The 30.8 GB SanDisk installer USB later showed the intended DNS target layout and an invalid EFI filesystem, proving that the removable installer became writable. This can destroy installation media and could select the wrong disk.
@@ -119,3 +138,22 @@ The current mitigation is the fixed command allowlist, protected credential-file
 `restore-node` always invokes the selected Technitium HTTPS origin with certificate verification disabled while sending a bearer token and decrypted backup. Exact URL confirmation prevents accidental target substitution by the operator but does not authenticate that endpoint.
 
 The command is restricted to isolated restore drills and is not production-qualified. Closing this requires a trusted-CA or pinned-fingerprint input, endpoint validation, failure tests for an untrusted certificate, and a successful isolated restore with verification enabled.
+
+## Hosted CI conflicts with the M5-only validation policy
+
+On 2026-10-21, `.github/workflows/ci.yml` still selects GitHub-hosted
+`ubuntu-24.04` for the required `contracts` job on pull requests and pushes to
+`main`. The operator requires builds, tests, and lint gates to run only on
+`m5m1` or `m5m2`. Opening a pull request would therefore start validation on a
+disallowed host, even though source validation has passed separately on `m5m1`.
+
+The pending Tailscale DNS correction and newly verified USB generation remain
+on branches without a pull request. The workflow does not yet connect the
+required GitHub check to the designated M5 validation infrastructure. Closing
+this requires a reviewed runner/workflow integration; the required check and
+branch protection have not been changed or bypassed.
+
+**Operator decision (2026-10-22):** this repository is exempt. Its required
+`contracts` check may keep running on GitHub-hosted `ubuntu-24.04` for pull
+requests and `main`. Image builds, VM qualification, and physical media work
+stay on `m5m1`/`m5m2`. Moving the check to an M5 runner remains optional.

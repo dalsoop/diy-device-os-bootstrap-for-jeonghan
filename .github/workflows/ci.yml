@@ -55,6 +55,7 @@ jobs:
         run: |
           python3 -c 'compile(open("installer/management/dns-appliance-status-monitor/server.py", encoding="utf-8").read(), "server.py", "exec")'
           python3 -c 'compile(open("agent/server.py", encoding="utf-8").read(), "server.py", "exec")'
+          python3 -c 'compile(open("installer/installer/lib/installer_glyphs.py", encoding="utf-8").read(), "installer_glyphs.py", "exec")'
       - name: Check Ruby syntax
         run: |
           ruby -c world/bin/resolve-world
@@ -210,6 +211,7 @@ jobs:
           tests/media-catalog-simulation.sh
           tests/image-builder-simulation.sh
           tests/macos-writer-simulation.sh
+          tests/inventory-wizard-simulation.sh
           tests/repository-contract.sh
       - name: Run Agent Gateway simulation
         run: /tmp/device-os-agent-ci/bin/python agent/tests/gateway_simulation.py

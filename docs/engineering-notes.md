@@ -1,5 +1,21 @@
 # Engineering Notes
 
+## Guided answers must preserve the shared installer frontend
+
+**Symptom:** the guided confirmation disappears into a blank screen, or Debian asks again for the role's preselected network values.
+
+**Cause:** the preseed hook shares the enclosing cdebconf frontend. Sending `STOP` disconnects main-menu, while setting an answer without its `seen` flag leaves ordinary questions interactive.
+
+**Response:** return without stopping the shared frontend and mark programmatically supplied network answers seen. Role, wired interface, and exact erase consent remain deliberate questions. Qualify this through the actual main-menu flow, not only mocked debconf functions.
+
+## Debian reserves the operator account name
+
+**Symptom:** user-setup rejects the preseeded `operator` username as reserved.
+
+**Cause:** Debian's base system already reserves that name. A syntactically valid preseed does not prove account creation will succeed.
+
+**Response:** use `dns-operator` consistently for installation, SSH allowlisting, home ownership, sudo, first-boot password assignment and management SSH. The encrypted `operator-password` filename remains unchanged. Verify actual account creation and key-based login after internal boot.
+
 ## Installer media can masquerade as the internal target
 
 **Symptom:** the installer reports EFI formatting trouble, or the USB later contains a 1 GiB EFI partition, Linux partition, and swap instead of the expected Ventoy layout.
@@ -110,3 +126,99 @@ and compares all of them before live target inspection or any write.
 **Cause:** the router may still treat the LAN as `10.0.0.0/24`; sharing the first octet does not make `10.0.5.0/24` directly reachable.
 
 **Response:** preserve a wired recovery client and old router values, then configure a `10.0.0.0/16` LAN or an explicit route. Prove node reachability before changing DHCP DNS advertisement.
+
+## Simple-CDD requests a removed trixie i386 installer
+
+**Symptom:** an amd64 Debian 13 build fails with HTTP 404 while fetching `installer-i386/current/images/SHA256SUMS`.
+
+**Cause:** Simple-CDD 0.6.9 unconditionally requests i386 installer boot files for an amd64 build, although trixie removed the i386 installer.
+
+**Response:** `fetch-debian-installer` verifies the dated snapshot Release using Debian archive signatures, verifies its referenced SHA-256 list, and verifies the six required amd64 text/graphical installer components. The builder passes this verified cache through Simple-CDD custom-installer support and disables only 32-bit UEFI support. BIOS and 64-bit UEFI remain qualification requirements. Never bypass signature or digest checks, use an unverified daily installer, or weaken a required source gate to make the build proceed.
+
+## Zero timeout has different BIOS and UEFI meanings
+
+**Symptom:** an ISO configured with Simple-CDD `BOOT_TIMEOUT=0` boots its UEFI default immediately.
+
+**Cause:** BIOS ISOLINUX zero means wait, while Simple-CDD also emits GRUB `set timeout=0`, which means immediate boot.
+
+**Response:** leave the Simple-CDD timeout override empty. Debian's included speech submenu also sets a 30-second BIOS timeout, so the required `disable-boot-timeouts` disc-finish hook disables every BIOS timer and any GRUB timer in the build tree before filesystem checksums are created. Image acceptance independently extracts both boot menus and rejects automatic timeouts. VM BIOS and UEFI menu waiting must still be observed before installation qualification.
+
+## An offline package profile needs real package names and enough space
+
+**Symptom:** Simple-CDD cannot find `dnsutils`, or its single-image package check fails after building a CD-sized tree.
+
+**Cause:** Debian 13 provides `dnsutils` through the real `bind9-dnsutils` package, while Simple-CDD checks package filenames rather than virtual provides. Its default CD size is also too small for the appliance's offline package closure and application payload.
+
+**Response:** request `bind9-dnsutils` explicitly and select one DVD-sized ISO. Keep Simple-CDD's required-package check enabled; a populated download mirror alone does not prove that the ISO contains the packages needed for an offline installation.
+
+## SATA disks do not expose the NVMe serial attribute
+
+**Symptom:** Debian Installer sees a SATA SSD but the install gate reports an unreadable disk identity.
+
+**Cause:** the real Debian 13 kernel exposes SATA SCSI VPD pages rather than `/sys/class/block/sda/device/serial`. This was reproduced with the signed installer kernel and a disposable QEMU SATA disk.
+
+**Response:** inventory and installation share `disk-identity`. It reads kernel serial attributes where present, then uses Debian Installer's read-only `ata_id --export` probe on the exact SATA block device. Missing, duplicated, failed or changed serial evidence still blocks installation; a model, device name or generic WWID never substitutes for a serial.
+
+## debian-cd needs task metadata for a headless image
+
+**Symptom:** `update_tasks` cannot find `task-desktop` or `tasksel-data`, then fails to open `debian-tasks.desc`.
+
+**Cause:** these packages are absent from the minimal appliance mirror, but Debian 13's debian-cd reads their metadata unconditionally while generating image task lists.
+
+**Response:** include both through the required `dns-build` build-only profile. Only `dns` is automatically selected on the target, so this metadata does not request a desktop installation. Keep the required package and mirror-completeness checks enabled.
+
+## Early guided prompts precede the network drivers
+
+**Symptom:** the real installer rejects a valid network profile with `Math support is not compiled in`, or finds only the loopback interface.
+
+**Cause:** Debian Installer's BusyBox awk omits exponentiation, and file-preseed executes before the normal offline component and network hardware detection stages. Host-side simulations do not reproduce either property.
+
+**Response:** network arithmetic uses repeated multiplication. `prepare-installer` initializes the CD retriever, loads the offline components, and configures `ethdetect` before identity collection. Each failure stops before the identity prompt or partitioning. Qualify these steps with the signed installer's BusyBox and actual BIOS/UEFI boots; desktop awk and fake NIC fixtures are insufficient evidence.
+
+## Debian Installer cannot read exFAT enrollment media
+
+**Symptom:** the role gate locates `DNS-ENROLL` but its read-only mount fails with `Invalid argument`; `modprobe exfat` reports no module.
+
+**Cause:** the signed Debian 13 installer kernel's available udebs include FAT/VFAT, not exFAT. An installed Debian system's exFAT support does not establish installer support.
+
+**Response:** both USB builders format only the enrollment partition as FAT32 with the corresponding partition type. Preparation explicitly requests `fat-modules` and loads `vfat` before the gate mounts enrollment read-only. Ventoy's main data partition remains exFAT. Existing completed media generations are immutable and are never rewritten to claim this layout.
+
+## The offline DVD must carry installer-time target packages
+
+**Symptom:** both BIOS and UEFI installs stop in base system installation with "zstd 패키지를 설치할 수 없습니다"; VT4 shows `in-target` failing on `zstd` and `base-installer/kernel/failed-package-install`.
+
+**Cause:** Debian 13's base-installer and grub-installer install packages into the target that are neither in debootstrap's base set nor dependencies of the appliance package list: `zstd` for the initramfs, `efibootmgr` for UEFI NVRAM entries, and `shim-signed`, `grub-efi-amd64-signed` and `mokutil` for Secure Boot. A mirror-only debian-cd image omits them, and the installer has no network fallback.
+
+**Response:** list firmware-neutral ones in `dns.packages` and firmware-specific ones (`grub-pc`, `grub-efi-amd64`, the Secure Boot chain, `dosfstools`) in `dns.downloads`; `installer/installer-target-packages` records the full set and `build-image` fails when any is missing from the DVD. A package change needs a full `build-image`; `refresh-guided-iso` only replaces guided files.
+
+## The Secure Boot chain must not be preinstalled on BIOS targets
+
+**Symptom:** the BIOS install fails at "GRUB 부트로더 설치"; VT4 shows `dpkg: error processing package grub-efi-amd64-signed (--purge): this is a protected package`.
+
+**Cause:** simple-cdd installs `dns.packages` on every target. On BIOS, grub-installer purges the grub-efi packages before installing grub-pc, and the protected signed image cannot be purged.
+
+**Response:** carry `shim-signed`, `grub-efi-amd64-signed` and `mokutil` in `dns.downloads` only; grub-installer installs them on UEFI targets.
+
+## simple-cdd postinst scripts run inside the target chroot
+
+**Symptom:** the install finishes, but the system has no operator SSH key, no Technitium and no first-boot enrollment. The installer syslog shows `finish-install: warning: /usr/lib/finish-install.d/14simple-cdd returned error code 1`.
+
+**Cause:** simple-cdd 0.6.9 runs `<profile>.postinst` through `in-target`, where `/cdrom` and `/target` do not exist, and treats its failure as a warning.
+
+**Response:** appliance setup is `scripts/dns-finish-install`, run as `preseed/late_command` in the installer environment, which stops the install on failure. `build-image` rejects any `*.postinst` on the ISO.
+
+## GRUB asks for the BIOS boot device when the USB is attached
+
+**Symptom:** a BIOS install stops at "grub-pc 설정 중입니다 … 부트로더를 설치할 장치".
+
+**Cause:** the installer USB is a second disk, so grub-installer cannot choose the boot device.
+
+**Response:** `install-gate select-disk` sets `grub-installer/bootdev` to the same confirmed disk it gives partman.
+
+## The text installer font holds only its translations' glyphs
+
+**Symptom:** guided Korean screens render some syllables as boxes, for example `각`, `께`, `량`, `삭` and `함`.
+
+**Cause:** the signed installer's `/usr/lib/unifont.bgf` is reduced to the characters used by Debian Installer translations (3,428 glyphs, 473 Hangul syllables in 13.7). Glyphs used only by our templates are absent.
+
+**Response:** write `guided.templates` Korean text with glyphs present in that font, for example "지워집니다" instead of "삭제합니다" and "크기" instead of "용량". When changing Korean text, extract `install.amd/initrd.gz` from the built ISO and check every non-ASCII template character against the BGF index before a VM run.

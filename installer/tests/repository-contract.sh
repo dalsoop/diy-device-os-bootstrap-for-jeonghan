@@ -14,6 +14,7 @@ for file in \
     installer/payload/dns-appliance-backup \
     installer/payload/dns-appliance-technitium-run \
     installer/fetch-locked-sources \
+    installer/disk-identity \
     installer/write-usb-linux \
     management/cluster-bootstrap \
     management/dnsctl \
@@ -76,6 +77,7 @@ for required in \
     usb-media/local-entries/dns-appliance.json \
     collections/device-os.json \
     usb-media/guides/dns-inventory.md \
+    installer/inventory-wizard \
     ../docs/tracking/decisions/0010-resolve-media-through-declarative-catalog.md \
     ../docs/tracking/decisions/0012-default-to-source-only-releases.md \
     management/dns-appliance-status-monitor/config.json \
@@ -116,7 +118,10 @@ grep -q 'tailscale-dependency-licenses.md' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/installer/build-image"
 grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/installer/build-image"
 grep -q '/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md' \
-    "$repo_root/installer/simple-cdd/profiles/dns.postinst"
+    "$repo_root/installer/scripts/dns-finish-install"
+grep -q 'preseed/late_command string /bin/sh /cdrom/simple-cdd/dns-finish-install' \
+    "$repo_root/installer/simple-cdd/profiles/default.preseed"
+[ ! -e "$repo_root/installer/simple-cdd/profiles/dns.postinst" ]
 grep -q 'debian-installer/locale string ko_KR.UTF-8' \
     "$repo_root/installer/simple-cdd/profiles/default.preseed"
 grep -q 'built ISO is missing /simple-cdd/' "$repo_root/installer/build-image"

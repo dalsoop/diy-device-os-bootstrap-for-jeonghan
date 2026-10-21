@@ -189,4 +189,20 @@ fi
 [ -z "$(find "$temporary/verified-installer" "$temporary/bad-signature" \
     "$temporary/bad-component" "$temporary/bad-checksums" -name '.verify.*' -print)" ]
 
-echo "image builder and signed Debian installer fetch simulations: passed"
+boot_tree=$temporary/boot-tree
+mkdir -p "$boot_tree/boot1/isolinux" "$boot_tree/CD1/boot/grub"
+printf 'timeout 0\ninclude spkgtk.cfg\n' > "$boot_tree/boot1/isolinux/isolinux.cfg"
+printf 'label installspk\nTIMEOUT 300\nmenu timeoutrow 16\n' > "$boot_tree/boot1/isolinux/spkgtk.cfg"
+printf 'set timeout=0\nmenuentry install\n' > "$boot_tree/CD1/boot/grub/grub.cfg"
+"$repo_root/installer/disable-boot-timeouts" "$temporary" "$temporary" 1 "$boot_tree/CD1" amd64
+grep -q '^TIMEOUT 0$' "$boot_tree/boot1/isolinux/spkgtk.cfg"
+grep -q '^menu timeoutrow 16$' "$boot_tree/boot1/isolinux/spkgtk.cfg"
+grep -q '^set timeout=-1$' "$boot_tree/CD1/boot/grub/grub.cfg"
+if "$repo_root/installer/disable-boot-timeouts" "$temporary" "$temporary" 2 "$boot_tree/CD1" amd64; then
+    echo 'image-builder-simulation: unexpected disc accepted' >&2; exit 1
+fi
+if "$repo_root/installer/disable-boot-timeouts" "$temporary" "$temporary" 1 "$temporary/missing" amd64; then
+    echo 'image-builder-simulation: missing boot tree accepted' >&2; exit 1
+fi
+
+echo "image builder, boot menus and signed Debian installer fetch simulations: passed"

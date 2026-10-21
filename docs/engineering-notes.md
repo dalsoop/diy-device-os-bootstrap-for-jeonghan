@@ -117,7 +117,7 @@ and compares all of them before live target inspection or any write.
 
 **Cause:** BIOS ISOLINUX zero means wait, while Simple-CDD also emits GRUB `set timeout=0`, which means immediate boot.
 
-**Response:** leave the Simple-CDD timeout override empty to preserve Debian no-timeout defaults; image acceptance extracts both boot menus and rejects automatic timeouts. VM BIOS and UEFI menu waiting must still be observed before installation qualification.
+**Response:** leave the Simple-CDD timeout override empty. Debian's included speech submenu also sets a 30-second BIOS timeout, so the required `disable-boot-timeouts` disc-finish hook disables every BIOS timer and any GRUB timer in the build tree before filesystem checksums are created. Image acceptance independently extracts both boot menus and rejects automatic timeouts. VM BIOS and UEFI menu waiting must still be observed before installation qualification.
 
 ## An offline package profile needs real package names and enough space
 

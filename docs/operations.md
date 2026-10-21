@@ -105,6 +105,27 @@ DNS_APPLIANCE_INSTALL_MODE=guided installer/installer/check-readiness
 
 Only operator SSH public keys and the public age recipient enter the image. Keep the corresponding private keys outside the checkout on the management host. The default network profiles retain the planned `10.0.0.0/16` LAN and `10.0.5.1` through `.3`; do not deploy them on a `192.168.0.0/24` LAN without a coordinated network/profile change.
 
+For changes limited to the guided Debian Installer flow (`install-gate`,
+`prepare-installer`, `disk-identity`, guided templates, or the shared preseed),
+reuse a previously built guided ISO as a disposable VM base. On the M5 builder,
+refresh only those files and boot the result directly in the disposable VM:
+
+```sh
+sh installer/installer/refresh-guided-iso \
+  installer/installer/simple-cdd/images/BASE_GUIDED.iso \
+  installer/artifacts/guided-iteration.iso
+```
+
+This replays the base ISO's BIOS/UEFI boot metadata, replaces the five installer
+files, checks the embedded bytes and boot-menu timeouts, and prints the new
+candidate hash. It skips Simple-CDD package resolution, image assembly, and the
+30 GB USB image build. The result deliberately has no production build manifest
+and cannot be used for a World USB burn; it is only for disposable VM checks.
+Changes to Debian packages, generated payload, network profiles, credentials,
+or any other ISO content still require `build-image` to create a release
+candidate. After the guided flow passes, run the full build and its manifest
+checks once for the exact committed source before preparing production media.
+
 Use the resulting ISO and matching build manifest with the existing `dns-install` World media assembly. Boot the USB deliberately, select the role and connected wired NIC, review the network and internal disk, and type the exact erase phrase shown. Debian and DNS install in that pass; the USB need not return to the management host for an inventory rebuild. An ambiguous, mounted, removable, USB-backed or unreadable internal target blocks installation. Never bypass a rejection by editing a hardware hash.
 
 Keep the USB connected through first boot until encrypted enrollment completes. Qualify and recover `dns01` before repeating for `dns02` and `dns03`. Tailscale enrollment and cluster bootstrap still run from the management host after OS installation. An active role needs its existing generation-bound reinstall token plus a fresh on-target erase confirmation.

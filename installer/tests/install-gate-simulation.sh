@@ -194,6 +194,7 @@ expect_success() {
         grep -q '^TARGET_DISK_PREPARED=true$' "$root/run/install.env" &&
         grep -q '^NIC_MAC=00:11:22:33:44:55$' "$root/run/install.env" &&
         grep -q '^partman-auto/disk /dev/sda$' "$root/debconf.log" &&
+        grep -q '^grub-installer/bootdev /dev/sda$' "$root/debconf.log" &&
         [ "$(wc -l < "$root/disk.log" | tr -d ' ')" -eq 2 ] &&
         grep -q "of=$root/dev/sda bs=512 count=131072" "$root/disk.log" &&
         grep -q "of=$root/dev/sda bs=512 seek=1966080 count=131072" "$root/disk.log" &&

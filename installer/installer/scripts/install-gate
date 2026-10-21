@@ -486,6 +486,9 @@ match_disk() {
         printf 'TARGET_DISK_PREPARED=true\n'
     } >> "$state_file"
     set_debconf partman-auto/disk "$matched_disk"
+    # With the USB stick attached, grub-pc otherwise asks where to install the
+    # BIOS boot loader. UEFI installs ignore this and use the ESP.
+    set_debconf grub-installer/bootdev "$matched_disk"
 }
 
 # Guided mode collects an exact inventory on the target; it never clears a disk.

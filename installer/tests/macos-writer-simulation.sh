@@ -87,8 +87,23 @@ make_mock() {
 make_mock uname 'echo Darwin'
 make_mock id 'echo 0'
 make_mock stat 'echo 2097152'
+# A file argument hashes that file; stdin is a mock dd read whose arguments name
+# the region. TEST_FAIL_BODY_COMPARE corrupts the device body readback.
 # shellcheck disable=SC2016
-make_mock shasum 'echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  $3"'
+make_mock shasum '
+if [ "$#" -ge 3 ]; then
+  echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  $3"
+  exit 0
+fi
+read_args=$(cat)
+case "$read_args" in
+  *"if=/dev/rdisk9 bs=1m skip=1"*)
+    if [ "${TEST_FAIL_BODY_COMPARE:-0}" = 1 ]; then
+      echo "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  -"
+      exit 0
+    fi ;;
+esac
+echo "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  -"'
 # shellcheck disable=SC2016
 make_mock plutil '
 case "$2" in
@@ -125,16 +140,14 @@ case "$1" in
 esac'
 # shellcheck disable=SC2016
 make_mock dd '
-printf "dd %s\n" "$*" >> "$TEST_LOG"'
+printf "dd %s\n" "$*" >> "$TEST_LOG"
+case " $* " in *" of="*) ;; *) printf "%s\n" "$*" ;; esac'
 # shellcheck disable=SC2016
 make_mock sync '
 echo sync >> "$TEST_LOG"'
 # shellcheck disable=SC2016
 make_mock cmp '
-printf "cmp %s\n" "$*" >> "$TEST_LOG"
-if [ "${TEST_FAIL_BODY_COMPARE:-0}" = 1 ] && [ "$1" = -i ]; then
-  exit 1
-fi'
+printf "cmp %s\n" "$*" >> "$TEST_LOG"'
 
 run_writer() {
     PATH="$test_path" TEST_LOG="$log" \
@@ -159,15 +172,17 @@ run_writer >/dev/null
 ' "$temporary/evidence.json" >/dev/null
 cat > "$temporary/expected.log" <<EOF
 diskutil info -plist /dev/disk9
+dd if=$image bs=1m skip=1
+dd if=$image bs=1m count=1
 diskutil unmountDisk /dev/disk9
 dd if=/dev/zero of=/dev/rdisk9 bs=1m count=1 conv=notrunc
 sync
 dd if=$image of=/dev/rdisk9 bs=1m skip=1 seek=1 conv=notrunc
 sync
-cmp -i 1048576:1048576 -n 1048576 $image /dev/rdisk9
+dd if=/dev/rdisk9 bs=1m skip=1
 dd if=$image of=/dev/rdisk9 bs=1m count=1 conv=notrunc
 sync
-cmp -n 1048576 $image /dev/rdisk9
+dd if=/dev/rdisk9 bs=1m count=1
 diskutil unmountDisk /dev/disk9
 diskutil eject /dev/disk9
 EOF

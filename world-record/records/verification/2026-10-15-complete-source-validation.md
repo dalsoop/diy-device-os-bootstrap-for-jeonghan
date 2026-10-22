@@ -19,10 +19,10 @@ Commit: recorded by CI and pull request after this evidence file is committed.
 
 ## Not proved by this run
 
-- No ISO was built because the validation host is not the designated amd64
-  Debian 13 build host.
-- No systemd unit was executed or verified by `systemd-analyze` on the macOS
-  validation host.
+- No ISO was built because this run used the operator workstation, not the
+  designated amd64 Debian 13 build host.
+- No systemd unit was executed or verified by `systemd-analyze` on the
+  operator workstation.
 - No physical USB was written.
 - No BIOS, UEFI, Secure Boot, power-loss, HP hardware, Cockpit login,
   Technitium cluster, backup/restore, or router DHCP test was performed.

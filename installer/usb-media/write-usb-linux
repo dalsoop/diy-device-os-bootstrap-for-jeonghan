@@ -141,8 +141,8 @@ git -C "$monorepo_root" diff --quiet -- ||
     fail "tracked source changes are not committed"
 git -C "$monorepo_root" diff --cached --quiet -- ||
     fail "staged source changes are not committed"
-for legal_file in LICENSE LICENSE_HISTORY.md THIRD_PARTY_NOTICES.md \
-    third_party/licenses/Tailscale-BSD-3-Clause.txt; do
+for legal_file in LICENSE docs/licenses/LICENSE_HISTORY.md docs/licenses/THIRD_PARTY_NOTICES.md \
+    docs/licenses/Tailscale-BSD-3-Clause.txt; do
     [ -r "$monorepo_root/$legal_file" ] || fail "missing legal file: $legal_file"
 done
 
@@ -445,11 +445,11 @@ install -d -m 0755 "$mount_dir/manifests" "$mount_dir/ventoy" \
     "$mount_dir/licenses"
 install -m 0644 "$monorepo_root/LICENSE" \
     "$mount_dir/licenses/DIY-DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt"
-install -m 0644 "$monorepo_root/LICENSE_HISTORY.md" \
+install -m 0644 "$monorepo_root/docs/licenses/LICENSE_HISTORY.md" \
     "$mount_dir/licenses/LICENSE_HISTORY.md"
-install -m 0644 "$monorepo_root/THIRD_PARTY_NOTICES.md" \
+install -m 0644 "$monorepo_root/docs/licenses/THIRD_PARTY_NOTICES.md" \
     "$mount_dir/licenses/THIRD_PARTY_NOTICES.md"
-install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt" \
+install -m 0644 "$monorepo_root/docs/licenses/Tailscale-BSD-3-Clause.txt" \
     "$mount_dir/licenses/Tailscale-BSD-3-Clause.txt"
 install -m 0644 "$script_dir/distribution-policy.json" \
     "$mount_dir/licenses/distribution-policy.json"

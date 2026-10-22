@@ -94,9 +94,9 @@ for required in \
     ../.github/workflows/ci.yml \
     ../.github/workflows/release.yml \
     ../LICENSE \
-    ../LICENSE_HISTORY.md \
-    ../THIRD_PARTY_NOTICES.md \
-    ../third_party/licenses/Tailscale-BSD-3-Clause.txt; do
+    ../docs/licenses/LICENSE_HISTORY.md \
+    ../docs/licenses/THIRD_PARTY_NOTICES.md \
+    ../docs/licenses/Tailscale-BSD-3-Clause.txt; do
     [ -r "$repo_root/$required" ] || {
         echo "repository-contract: missing $required" >&2
         exit 1

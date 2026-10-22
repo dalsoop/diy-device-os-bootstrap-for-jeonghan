@@ -174,5 +174,5 @@ existing World with new devices and media; do not weaken target checks.
 Except where a file-specific or upstream notice states otherwise, original
 content is licensed under GPL-3.0-only. Third-party operating systems,
 bootloaders, packages, and container images retain their upstream terms. See
-[LICENSE_HISTORY.md](LICENSE_HISTORY.md) and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[LICENSE_HISTORY.md](docs/licenses/LICENSE_HISTORY.md) and
+[THIRD_PARTY_NOTICES.md](docs/licenses/THIRD_PARTY_NOTICES.md).

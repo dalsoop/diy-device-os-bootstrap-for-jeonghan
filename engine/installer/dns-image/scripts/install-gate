@@ -15,6 +15,7 @@ debconf_set_command=${DNS_INSTALLER_DEBCONF_SET:-debconf-set}
 device_root=${DNS_INSTALLER_DEVICE_ROOT:-/dev}
 zero_command=${DNS_INSTALLER_ZERO_COMMAND:-dd}
 blockdev_command=${DNS_INSTALLER_BLOCKDEV_COMMAND:-blockdev}
+sync_command=${DNS_INSTALLER_SYNC_COMMAND:-sync}
 state_file=$state_dir/install.env
 inventory_dir=$media_dir
 install_mode=reviewed
@@ -291,20 +292,20 @@ block_name_from_source() {
                 block_name=${mapper_path##*/}
             done
             [ "$mapper_matches" -eq 1 ] ||
-                fail "installer mapper $mapper_name resolved to $mapper_matches block devices"
+                fail "device mapper $mapper_name resolved to $mapper_matches block devices"
             printf '%s\n' "$block_name"
             ;;
         /dev/*)
             block_name=${source#/dev/}
             case "$block_name" in
-                */*) fail "unsupported installer-media source $source" ;;
+                */*) fail "unsupported device source $source" ;;
             esac
             [ -e "$sys_root/class/block/$block_name" ] ||
-                fail "installer-media block device $block_name is unresolved"
+                fail "block device $block_name from $source is unresolved"
             printf '%s\n' "$block_name"
             ;;
         *)
-            fail "unsupported /cdrom source $source"
+            fail "unsupported device source $source"
             ;;
     esac
 }
@@ -345,7 +346,7 @@ physical_parent_disk() {
 
         case "$block_name" in
             loop*|dm-*|md*)
-                fail "installer-media block device $block_name has no resolvable physical parent"
+                fail "block device $block_name has no resolvable physical parent"
                 ;;
         esac
         printf '%s\n' "$block_name"
@@ -419,13 +420,14 @@ prepare_target_disk() {
     fi
     command -v "$zero_command" >/dev/null 2>&1 || fail "$zero_command is required"
     command -v "$blockdev_command" >/dev/null 2>&1 || fail "$blockdev_command is required"
+    command -v "$sync_command" >/dev/null 2>&1 || fail "$sync_command is required"
 
     "$zero_command" if=/dev/zero of="$target" bs=512 count="$edge_sectors" ||
         fail "cannot clear leading signatures from $target"
     "$zero_command" if=/dev/zero of="$target" bs=512 \
         seek=$((sectors - edge_sectors)) count="$edge_sectors" ||
         fail "cannot clear trailing signatures from $target"
-    sync
+    "$sync_command" || fail "cannot synchronize target preparation"
     "$blockdev_command" --rereadpt "$target" ||
         fail "cannot refresh the partition table for $target"
 }

@@ -95,6 +95,14 @@ and compares all of them before live target inspection or any write.
 
 **Response:** inspect from a trusted live environment and compare the observed machine with the captured local inventory. Recapture only after an intentional hardware change. Never edit a serial, UUID, MAC, or hash merely to make the gate pass.
 
+## The expected target is rejected as active
+
+**Symptom:** the install gate rejects the expected target as mounted, active swap, or held, or reports an unsupported device source, although `/dev/sda` is not listed directly in `/proc/mounts`.
+
+**Cause:** a target partition can be mounted or used as swap through a device-mapper node, or retained by an unmounted holder. A mount or swap source that the gate cannot resolve to exactly one physical parent, such as a `/dev/disk` alias, a multi-slave device, or a loop or MD device, fails closed even when it is not on the target.
+
+**Response:** inspect `/proc/mounts`, `/proc/swaps`, and the sysfs `holders` directories of the target and its partitions. Deactivate the legitimate consumer; never bypass the ancestry, swap, or holder check.
+
 ## First boot reuses bootstrap credentials on retry
 
 **Symptom:** a repeated first boot appears to reuse generated credentials.

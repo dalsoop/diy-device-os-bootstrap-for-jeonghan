@@ -32,7 +32,7 @@ Routine DNS commands read a role-specific bearer token from a protected file and
 4. The gateway validates a fixed tool name and typed arguments, uses fixed credential-file paths and an explicit environment allowlist, and delegates to reviewed commands.
 5. Any unknown tool, free-form command, arbitrary path or URL, invalid role, unavailable executable, or delegated command failure is rejected. Output above 64 KiB is truncated, not rejected, and the gateway does not scan delegated output for credentials.
 
-The `dns_apply` tool is always discoverable but rejects every call unless the host administrator sets the explicit apply policy and provisions a separate applier-token file plus trusted CA file. An enabled call still requires the target-specific phrase, exact checked-out commit, clean tracked zone file, and the delegated command's own checks.
+The `dns_apply` tool is always discoverable but rejects every call unless the host administrator sets the explicit apply policy and provisions a separate applier-token file plus trusted CA file. An enabled call still requires a plan saved by `dns_plan`, a target-specific phrase naming that plan's SHA-256, and the delegated command's own checks, which reject target, commit, zone-file, and live-zone drift since that plan and replays.
 
 ### Tailscale appliance enrollment
 
@@ -58,7 +58,7 @@ A USB write accepts only a whole removable non-root device with a readable seria
 
 The DNS installer accepts only one enabled role matching HP product identity, system identity, NIC MAC, internal disk model and serial, and minimum size. It resolves mapper and partition ancestry to reject the installer USB. Removable, mounted, unresolved, installer-backed, zero-candidate, and multiple-candidate states fail before signature clearing or partitioning. A completed node also requires a token bound to its active generation and system UUID hash.
 
-The isolated restore drill requires `RESTORE <exact-url>` and then canary verification. Production restore remains prohibited until the command authenticates TLS with a trusted CA or pinned fingerprint. DNS apply requires literal `APPLY`, the caller-supplied current commit, and a clean tracked zone. Confirmation never substitutes for target and state validation.
+The isolated restore drill requires `RESTORE <exact-url>` and then canary verification. Production restore remains prohibited until the command authenticates TLS with a trusted CA or pinned fingerprint. DNS apply requires literal `APPLY` and the SHA-256 of one saved plan, and rejects target, commit, zone-file, and live-zone drift and replays. Confirmation never substitutes for target and state validation.
 
 ## Credential lifecycle
 
@@ -85,7 +85,7 @@ Routine expiration is not imposed by this repository on externally owned long-li
 
 Git commits, pull-request review, and required CI checks are the durable record for desired state, source locks, and configuration changes. World burn commands serialize physical attempts and record exact source identity, artifact digests, redacted target model and size, write/readback outcome, and timestamps without committing raw serials. Successful evidence is stored inside its immutable generation; failed and cancelled attempts use the separate append-only event tree under `burn-history/logs/usb/failed/`. The root writer never commits or pushes Git state.
 
-`dnsctl` appends redacted JSONL for completed plan operations and apply API outcomes. Confirmation, commit, dirty-zone, and transport failures can currently exit before an audit event; the log therefore does not prove that a saved plan was reviewed or a pull request approved.
+`dnsctl` appends redacted JSONL for completed plan operations and apply API outcomes, with the saved plan's `plan_sha256`, and apply reads it to reject replays. Confirmation, hash, commit, dirty-zone, and transport failures can exit before an audit event; live-zone drift is recorded as `drifted`. The log does not prove that a plan was reviewed or a pull request approved.
 
 Installation writes public enrollment evidence, sanitized install logs, `COMPLETE`, and the active generation pointer. Cluster bootstrap, Tailscale enrollment, backup collection, reinstall authorization, restore, and router work do not share a common audit ledger; operators capture protected session records when durable evidence is required.
 
@@ -103,4 +103,4 @@ If a wrong disk becomes writable, all media operations stop. The affected media 
 
 Guided media embed disabled role network profiles, not enabled hardware inventories. The Debian Installer frontend captures identities locally and requires an exact role/disk/serial/byte-count erase phrase. No internal-disk write occurs in capture; partition preparation repeats exact identity and size checks and rejects additional eligible internal disks. Volatile confirmation is invalid after reboot or hardware replacement. Existing active-generation reinstall authorization remains mandatory. This consent is distinct from USB burn confirmation and does not authorize router or network cutover.
 
-Mounted filesystem and swap checks resolve mapper/partition ancestry; active block-device holders also block preparation. Image acceptance checks the generated BIOS and UEFI menus for disabled automatic timeouts. Simple-CDD numeric `BOOT_TIMEOUT=0` must not be used because it means immediate UEFI boot.
+Mounted filesystem and swap checks resolve mapper/partition ancestry, and a source that does not resolve to exactly one physical parent (a `/dev/disk` alias, a multi-slave device, or a loop or MD device) fails closed; active block-device holders also block preparation. Image acceptance checks the generated BIOS and UEFI menus for disabled automatic timeouts. Simple-CDD numeric `BOOT_TIMEOUT=0` must not be used because it means immediate UEFI boot.

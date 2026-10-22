@@ -1,7 +1,6 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "writer": "macos-mbr-last",
-  "device_path": "/dev/disk4",
   "target": {
     "display_name": "ProductCode",
     "bytes": 15833497600

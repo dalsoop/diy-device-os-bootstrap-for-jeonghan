@@ -7,7 +7,6 @@
   "required": [
     "schema_version",
     "writer",
-    "device_path",
     "target",
     "preflight_at",
     "completed_at",
@@ -18,10 +17,17 @@
     "catalog_tree"
   ],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": { "const": 2 },
     "writer": { "enum": ["linux-ventoy", "macos-mbr-last"] },
-    "device_path": { "type": "string", "minLength": 1 },
-    "target": { "$ref": "usb-event.schema.json#/$defs/target" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["display_name", "bytes"],
+      "properties": {
+        "display_name": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 1 }
+      }
+    },
     "preflight_at": { "type": "string", "format": "date-time" },
     "completed_at": { "type": "string", "format": "date-time" },
     "readback": {

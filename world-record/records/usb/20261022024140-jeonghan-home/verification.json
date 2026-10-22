@@ -1,7 +1,6 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "writer": "macos-mbr-last",
-  "device_path": "/dev/disk4",
   "target": {
     "display_name": "SanDisk 3.2Gen1",
     "bytes": 30784094208

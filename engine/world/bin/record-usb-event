@@ -104,13 +104,19 @@ def event_time
   end
 end
 
+PUBLISHED_SCHEMA_VERSION = 2
+
+def published_record(record)
+  record.reject { |key, _value| key == "device_path" }.merge("schema_version" => PUBLISHED_SCHEMA_VERSION)
+end
+
 def publish_failed_event(events_root, event, pending_path)
   year = event.fetch("started_at")[0, 4]
   fail_event("event year is invalid") unless year&.match?(/\A[0-9]{4}\z/)
   fail_event("event identity is invalid") unless event.fetch("event_id").match?(/\A[0-9]{14}-[a-z0-9-]+-[0-9a-f]{8}\z/)
   destination = File.join(events_root, year, "#{event.fetch("event_id")}.json")
   fail_event("event record already exists") if File.exist?(destination)
-  atomic_json(destination, event)
+  atomic_json(destination, published_record(event))
   chown_tree(destination)
   FileUtils.rm_f(pending_path)
 end
@@ -310,8 +316,8 @@ File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
     FileUtils.cp(world_source, File.join(stage, "world.yaml"))
     atomic_json(File.join(stage, "world.lock.json"), world_plan)
     atomic_json(File.join(stage, "media-manifest.json"), catalog)
-    atomic_json(File.join(stage, "verification.json"), verification)
-    atomic_json(File.join(stage, "event.json"), event)
+    atomic_json(File.join(stage, "verification.json"), published_record(verification))
+    atomic_json(File.join(stage, "event.json"), published_record(event))
     chown_tree(stage)
     File.rename(stage, generation_path)
     FileUtils.rm_f(pending_path)

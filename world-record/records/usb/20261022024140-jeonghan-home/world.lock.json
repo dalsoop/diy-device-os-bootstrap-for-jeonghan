@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "source": {
-    "playbook": "world/world-playbook.yaml",
-    "world": "world/drafts/jeonghan-home/world.yaml"
+    "playbook": "world-record/world-playbook.yaml",
+    "world": "world-record/config/home.yaml"
   },
   "world": {
     "name": "Jeonghan Home",

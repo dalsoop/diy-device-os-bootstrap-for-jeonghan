@@ -9,12 +9,12 @@ evidence only: it is not a physical write, HP firmware boot, physical install
 or Secure Boot result.
 
 - Source commit: `0f0664e2bc1d2821bde6a5055c8c2ff1951b355c` (clean checkout, full guided build)
-- Host: `m5m1` (QEMU q35, TCG, 2 vCPU, 2 GiB)
+- Host: the VM host (QEMU q35, TCG, 2 vCPU, 2 GiB)
 - ISO SHA-256: `d5d36a8966cbc794a01f86736c31e31f948a31b606065b6d1de3fb64f5beb1fd`
 - Build manifest SHA-256: `1b10695509274d7856f7cdf72e507b2527a7d38fb3ae2194d33b67337bd9d893` (`source_revision` and `iso_sha256` match)
 - Raw image: 30,784,094,208 bytes, SHA-256 `71dfca12be9e448e94c5734104de8feeb0ded14fda53f83b8be18e80e4e2e890`
 - Build gates: all 45 installer target packages on the offline DVD; no installer glyph missing
-- Public inputs: real operator SSH public key (`SHA256:qovlUmIoxKJLybPzlzhBz7lwjYbihLnHIrzIq3+BJuA`) and real age recipient; no private key on `m5m1`
+- Public inputs: real operator SSH public key (`SHA256:qovlUmIoxKJLybPzlzhBz7lwjYbihLnHIrzIq3+BJuA`) and real age recipient; no private key on the VM host
 - Role: `dns01` (10.0.5.1/16, gateway 10.0.0.1)
 - `secure_boot: off`
 

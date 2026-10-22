@@ -6,8 +6,22 @@ require "fileutils"
 require "json"
 require "open3"
 require "tmpdir"
+require "yaml"
 
 runner = File.realpath(File.join(__dir__, "../bin/record-usb-event"))
+playbook_path = File.realpath(File.join(__dir__, "../../../world-record/world-playbook.yaml"))
+playbook = YAML.safe_load_file(playbook_path, permitted_classes: [], aliases: false)
+playbook_generations_root = playbook.dig("spec", "generations", "root")
+failed_records_root = "records/usb-failed"
+
+EVENT_KEYS = %w[
+  schema_version event_id generation_candidate generation_id world_slug media_id writer
+  repository_revision catalog_tree status started_at finished_at exit_code failure_code target readback
+].freeze
+VERIFICATION_KEYS = %w[
+  schema_version writer target preflight_at completed_at readback
+  event_id generation_id repository_revision catalog_tree
+].freeze
 
 def assert(condition, message)
   raise message unless condition
@@ -61,7 +75,7 @@ Dir.mktmpdir("usb-event-simulation") do |temporary|
     evidence = {
       schema_version: 1,
       writer: ENV.fetch("FAKE_WRITER_MODE"),
-      device_path: device,
+      device_path: ENV.fetch("FAKE_WRITER_EVIDENCE_DEVICE", device),
       target: {
         display_name: ENV.fetch("FAKE_WRITER_NAME"),
         bytes: Integer(ENV.fetch("FAKE_WRITER_BYTES"), 10)
@@ -117,6 +131,13 @@ Dir.mktmpdir("usb-event-simulation") do |temporary|
     end
     event = JSON.parse(File.read(File.join(generation, "event.json")))
     assert(event["status"] == "succeeded", "successful event was not recorded")
+    assert(event.keys == EVENT_KEYS, "published event does not have the v2 shape: #{event.keys}")
+    assert(event["schema_version"] == 2, "published event is not schema version 2")
+    verification = JSON.parse(File.read(File.join(generation, "verification.json")))
+    assert(verification.keys.sort == VERIFICATION_KEYS.sort,
+           "published verification does not have the v2 shape: #{verification.keys}")
+    assert(verification["schema_version"] == 2, "published verification is not schema version 2")
+    assert(verification["readback"]["status"] == "passed", "published verification readback is wrong")
   end
 
   collision_environment = common.merge(
@@ -173,9 +194,83 @@ Dir.mktmpdir("usb-event-simulation") do |temporary|
   failed = JSON.parse(File.read(failed_events.first))
   assert(failed["status"] == "failed", "failed event status is wrong")
   assert(failed["failure_code"] == "writer-exit-nonzero", "failed event reason is wrong")
+  assert(failed.keys == EVENT_KEYS, "failed event does not have the v2 shape: #{failed.keys}")
+  assert(failed["schema_version"] == 2, "failed event is not schema version 2")
+
+  _stdout, _stderr, status = Open3.capture3(
+    common.merge(
+      "DEVICE_OS_EVENT_TIME" => "2026-10-17T02:00:04+09:00",
+      "FAKE_WRITER_NAME" => "Mismatched USB",
+      "FAKE_WRITER_BYTES" => "15833497600",
+      "FAKE_WRITER_EVIDENCE_DEVICE" => "/dev/test-other"
+    ),
+    runner,
+    "--world-plan", plan_path,
+    "--catalog", catalog_path,
+    "--writer", "linux-ventoy",
+    "--device", "/dev/test-d",
+    "--", writer, "--device", "/dev/test-d"
+  )
+  assert(!status.success?, "evidence for another device was accepted")
+  assert(!File.exist?(File.join(output, "records/usb/20261017020004-test-home")),
+         "evidence for another device published a generation")
+  mismatched = Dir.glob(File.join(output, "records/usb-failed/2026/20261017020004-*.json"))
+  assert(mismatched.length == 1, "evidence for another device did not create exactly one failed event")
+  mismatched_event = JSON.parse(File.read(mismatched.first))
+  assert(mismatched_event["failure_code"] == "invalid-write-evidence",
+         "evidence for another device was not rejected as invalid")
+  assert(mismatched_event.keys == EVENT_KEYS, "rejected event does not have the v2 shape")
 
   tracked_json = Dir.glob(File.join(output, "records/{usb-failed,usb}/**/*.json"), File::FNM_EXTGLOB)
   assert(tracked_json.none? { |path| File.read(path).match?(/serial/i) }, "event output contains a serial field")
+  assert(tracked_json.none? { |path| File.read(path).include?("device_path") || File.read(path).include?("/dev/test") },
+         "published records contain the device node")
+
+  assert(playbook_generations_root == "records/usb", "playbook generations.root is not records/usb")
+  assert(File.directory?(File.join(File.dirname(playbook_path), failed_records_root)),
+         "failed-write records folder is missing from the World record")
+  builtin_repo = File.join(temporary, "builtin-repo")
+  FileUtils.mkdir_p(File.join(builtin_repo, "world-record/config"))
+  File.write(File.join(builtin_repo, "world-record/config/home.yaml"), "kind: World\n")
+  builtin_environment = {
+    "DEVICE_OS_TEST_MODE" => "1",
+    "DEVICE_OS_EVENT_REPO_ROOT" => builtin_repo,
+    "FAKE_WRITER_MODE" => "linux-ventoy",
+    "FAKE_WRITER_BYTES" => "15833497600"
+  }
+  stdout, stderr, status = Open3.capture3(
+    builtin_environment.merge("DEVICE_OS_EVENT_TIME" => "2026-10-17T03:00:00+09:00", "FAKE_WRITER_NAME" => "Root USB"),
+    runner,
+    "--world-plan", plan_path,
+    "--catalog", catalog_path,
+    "--writer", "linux-ventoy",
+    "--device", "/dev/test-root",
+    "--", writer, "--device", "/dev/test-root"
+  )
+  assert(status.success?, "built-in location write failed: #{stdout} #{stderr}")
+  expected_generation = File.join(File.realpath(builtin_repo), "world-record", playbook_generations_root, "20261017030000-test-home")
+  assert(stdout.lines.include?("Generation path: #{expected_generation}\n"),
+         "recorder generation root does not equal the playbook generations.root: #{stdout}")
+  assert(File.file?(File.join(expected_generation, "event.json")), "built-in generation is missing event.json")
+
+  _stdout, _stderr, status = Open3.capture3(
+    builtin_environment.merge(
+      "DEVICE_OS_EVENT_TIME" => "2026-10-17T03:00:01+09:00",
+      "FAKE_WRITER_NAME" => "Root USB",
+      "FAKE_WRITER_STATUS" => "pending"
+    ),
+    runner,
+    "--world-plan", plan_path,
+    "--catalog", catalog_path,
+    "--writer", "linux-ventoy",
+    "--device", "/dev/test-root",
+    "--", writer, "--device", "/dev/test-root"
+  )
+  assert(!status.success?, "built-in location failed write succeeded")
+  builtin_failed = Dir.glob(File.join(builtin_repo, "world-record", failed_records_root, "2026/20261017030001-*.json"))
+  assert(builtin_failed.length == 1, "recorder failed-write root does not equal #{failed_records_root}")
+  published_roots = Dir.children(File.join(builtin_repo, "world-record/records")).sort
+  assert(published_roots == %w[usb usb-failed], "recorder published outside its record folders: #{published_roots}")
 
   puts "USB event simulations: passed"
 end

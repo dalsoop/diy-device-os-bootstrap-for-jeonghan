@@ -6,10 +6,10 @@ This record covers the destructive target-selection script only. The test uses
 an isolated temporary fake sysfs tree and never opens a real block device.
 
 - Source commit tested: `ee407b3`
-- Host: `m5m1`
+- Host: the VM host
 - Host architecture: `arm64`
 - Host OS version: macOS `27.0.1`
-- Test command: `tests/install-gate-simulation.sh`
+- Test command: `engine/installer/tests/install-gate-simulation.sh`
 
 ## Result
 
@@ -28,7 +28,7 @@ RESULT 9/9 install-gate simulations passed
 
 ## Remaining evidence gap
 
-No ISO was built or booted. QEMU installation on `m5m1` is currently blocked
-because that host has not accepted the Xcode license. BIOS, UEFI, offline package
+No ISO was built or booted. QEMU installation on the VM host is currently
+blocked because that host has not accepted the Xcode license. BIOS, UEFI, offline package
 installation, reboot, SSH, Cockpit, DNS, USB enrollment, and physical `dns01`
 behavior remain unverified.

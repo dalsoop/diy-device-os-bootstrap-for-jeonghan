@@ -7,6 +7,70 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 monorepo_root=$(CDPATH='' cd -- "$repo_root/../.." && pwd)
 
+# Documentation rule: repository text names roles, never specific machines or
+# personal environments. The patterns are generic; the role accounts below are
+# the only allowed /home/ entries.
+allowed_home_accounts='dns-operator builder'
+
+documentation_scan() {
+    scan_label=$1
+    shift
+    set +e
+    LC_ALL=C git -C "$checked_root" grep -I -n "$@" -- .
+    scan_status=$?
+    set -e
+    case $scan_status in
+        0)
+            echo "repository-contract: repository text names $scan_label" >&2
+            documentation_failed=1
+            ;;
+        1) ;;
+        *)
+            echo "repository-contract: documentation scan failed in $checked_root" >&2
+            exit 1
+            ;;
+    esac
+}
+
+documentation_check() {
+    checked_root=$1
+    documentation_failed=0
+    git -C "$checked_root" rev-parse --is-inside-work-tree >/dev/null || {
+        echo "repository-contract: documentation check needs a Git work tree" >&2
+        exit 1
+    }
+    # Host label: a whole word of one lowercase letter, digits, one lowercase
+    # letter, digits, with at least one letter outside a-f. Hex-only words are
+    # commit hashes and event IDs.
+    documentation_scan "a host label" -w -E '[g-z][0-9]+[a-z][0-9]+|[a-z][0-9]+[g-z][0-9]+'
+    documentation_scan "a machine generation" -w -E 'M[0-9]+'
+    documentation_scan "a personal /Users/ path" -E '/Users/[A-Za-z0-9._-]'
+    set +e
+    home_matches=$(LC_ALL=C git -C "$checked_root" grep -I -n -o -E '/home/[A-Za-z0-9._-]+' -- .)
+    scan_status=$?
+    set -e
+    [ "$scan_status" -le 1 ] || {
+        echo "repository-contract: documentation scan failed in $checked_root" >&2
+        exit 1
+    }
+    home_paths=$(printf '%s\n' "$home_matches" | awk -v allowed="$allowed_home_accounts" '
+        BEGIN { count = split(allowed, names, " "); for (i = 1; i <= count; i++) role[names[i]] = 1 }
+        $0 != "" { name = $0; sub(/.*\/home\//, "", name); if (!(name in role)) print }
+    ')
+    if [ -n "$home_paths" ]; then
+        printf '%s\n' "$home_paths"
+        echo "repository-contract: repository text names a personal /home/ path" >&2
+        documentation_failed=1
+    fi
+    return "$documentation_failed"
+}
+
+if [ "${1:-}" = "--documentation-only" ]; then
+    documentation_check "${2:-$monorepo_root}" || exit 1
+    echo "documentation check: passed"
+    exit 0
+fi
+
 "$repo_root/build/verify-locks" >/dev/null
 
 for file in \
@@ -50,6 +114,7 @@ for file in \
     engine/installer/tests/image-builder-simulation.sh \
     engine/installer/tests/macos-writer-simulation.sh \
     engine/installer/tests/management-simulation.sh \
+    engine/installer/tests/documentation-check-simulation.sh \
     engine/world/bin/resolve-world \
     engine/world/bin/record-usb-event \
     engine/world/tests/usb-event-simulation.rb \
@@ -197,7 +262,11 @@ for contract in \
     engine/installer/schemas/license-check.schema.json \
     engine/installer/schemas/raw-image-manifest.schema.json \
     tests/dns-license-simulation.sh \
-    tests/license-policy-simulation.sh; do
+    tests/license-policy-simulation.sh \
+    tests/documentation-check-simulation.sh \
+    engine/world/schemas/usb-event.schema.json \
+    engine/world/schemas/usb-verification.schema.json \
+    world-record/records/usb-failed; do
     grep -q "$contract" "$ci_workflow" || {
         echo "repository-contract: CI does not enforce $contract" >&2
         exit 1
@@ -236,5 +305,7 @@ if git -C "$monorepo_root" grep -I -n -i -E \
     echo "repository-contract: obsolete project name remains" >&2
     exit 1
 fi
+
+documentation_check "$monorepo_root" || exit 1
 
 echo "repository contracts: passed"

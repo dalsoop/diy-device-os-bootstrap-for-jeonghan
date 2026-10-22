@@ -10,7 +10,7 @@ installer dialogs. This is VM evidence only: it is not a physical write, HP
 firmware boot, physical install or Secure Boot result.
 
 - Source commit: `63cd0f4cc0a71311ed239fdfdfe8f3315135f2f6` (main `8998759` plus the license-checker fix; clean checkout, full guided build)
-- Host: `m5m1` (QEMU q35, TCG, 2 vCPU, 2 GiB)
+- Host: the VM host (QEMU q35, TCG, 2 vCPU, 2 GiB)
 - ISO SHA-256: `5e9ff81cf5568ab0eeeec8925497a76fdc035a00a2b38a1a1e532a3f492aa963`
 - Build manifest SHA-256: `757a15f43dc158d94c17f0ff89afc1190c02b44c54ea124d5c44a7595c76fe8b` (`source_revision` and `iso_sha256` match; `install_mode: guided`; `distribution_status: personal-use-only`)
 - Raw image: 30,784,094,208 bytes, SHA-256 `53c6bff1fa92345264d8389cb8cc6090fc09d84942eb49f9a5ede01cdb29869d`

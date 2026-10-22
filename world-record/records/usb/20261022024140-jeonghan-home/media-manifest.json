@@ -21,7 +21,7 @@
     "repository": "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan",
     "revision": "63cd0f4cc0a71311ed239fdfdfe8f3315135f2f6",
     "tree": "da76b69ad34e5937cb9bb35a83879573478bb7fb",
-    "path": "catalog",
+    "path": "engine/catalog",
     "collection": "collections/device-os.json"
   },
   "usb": {
@@ -90,11 +90,11 @@
         "kind": "runtime-artifact",
         "manifest_digest_field": "iso_sha256",
         "manifest_destination": "manifests/dns-build-manifest.json",
-        "manifest_schema": "installer/schemas/dns-build-manifest.schema.json",
+        "manifest_schema": "engine/installer/schemas/dns-build-manifest.schema.json",
         "component_registry_filename": "component-redistribution-registry.json",
         "component_registry_digest_field": "component_registry_sha256",
         "component_registry_destination": "manifests/dns-component-redistribution-registry.json",
-        "component_registry_schema": "installer/schemas/component-redistribution-registry.schema.json",
+        "component_registry_schema": "engine/installer/schemas/component-redistribution-registry.schema.json",
         "distribution_policy_digest_field": "distribution_policy_sha256",
         "sbom_filename": "sbom.spdx.json",
         "sbom_digest_field": "sbom_sha256",
@@ -104,7 +104,7 @@
         "required_for_status": "redistribution-reviewed",
         "record_filename": "dns-final-review-record.json",
         "record_destination": "manifests/dns-final-review-record.json",
-        "schema": "installer/schemas/dns-final-review-record.schema.json",
+        "schema": "engine/installer/schemas/dns-final-review-record.schema.json",
         "artifact_digest_field": "artifact.sha256",
         "component_registry_digest_field": "inputs.component_registry_sha256",
         "build_manifest_digest_field": "inputs.build_manifest_sha256"
@@ -125,7 +125,7 @@
       "destination": "tools/capture-inventory",
       "source": {
         "kind": "repository-file",
-        "path": "installer/capture-inventory"
+        "path": "dns-image/capture-inventory"
       }
     },
     {
@@ -133,7 +133,7 @@
       "destination": "tools/disk-identity",
       "source": {
         "kind": "repository-file",
-        "path": "installer/disk-identity"
+        "path": "dns-image/disk-identity"
       }
     },
     {
@@ -141,7 +141,7 @@
       "destination": "tools/dns-inventory",
       "source": {
         "kind": "repository-file",
-        "path": "installer/inventory-wizard"
+        "path": "dns-image/inventory-wizard"
       }
     },
     {
@@ -164,8 +164,8 @@
   "world": {
     "schema_version": 1,
     "source": {
-      "playbook": "world/world-playbook.yaml",
-      "world": "world/drafts/jeonghan-home/world.yaml"
+      "playbook": "world-record/world-playbook.yaml",
+      "world": "world-record/config/home.yaml"
     },
     "world": {
       "name": "Jeonghan Home",

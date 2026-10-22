@@ -20,7 +20,11 @@ requires all of the following:
    serial hash, and minimum byte size.
 3. The matched disk is not the physical parent of the device that supplied
    `/cdrom`, including a Ventoy device-mapper path.
-4. The target and its partitions are not mounted.
+4. The target and its partitions are not mounted directly or through a block
+   mapping, are not active swap, and have no sysfs holders. A mount or swap
+   source that does not resolve to exactly one physical parent, such as a
+   `/dev/disk` alias, a multi-slave device, or a loop or MD device, fails
+   closed.
 5. `destructive_install_enabled=true` is present in that node's local inventory.
 
 Only after all five checks pass does the gate clear the first and last 64 MiB

@@ -56,7 +56,7 @@ These rules apply to every tracked text file: documentation, decision records, v
 - World physical writes MUST be serialized. A successful write MUST publish exactly one immutable generation only after readback passes; a failed or cancelled write MUST publish only a redacted event record. Neither record may contain a raw serial, MAC address, UUID, credential, image, or recovery material.
 - The DNS installer MUST resolve mapper and partition ancestry to a physical parent and MUST reject installer media, USB-backed targets, mounted targets, removable disks, unresolved devices, and zero or multiple candidates before any signature clearing or partitioning.
 - General OS entries MUST remain interactive. Automatic boot timeout MUST remain disabled. Guarded unattended behavior MAY exist only in the DNS-local adapter behind exact hardware and reinstall gates.
-- Restore MUST bind confirmation to the exact target URL. DNS apply MUST bind confirmation to `APPLY`, the exact current commit, and a clean tracked zone file; these checks MUST NOT be replaced by agent-side assumptions.
+- Restore MUST bind confirmation to the exact target URL. DNS apply MUST bind confirmation to `APPLY` and the SHA-256 of one saved plan whose source commit is the current commit, whose target is the current endpoint, and whose zone file is tracked and clean; these checks MUST NOT be replaced by agent-side assumptions.
 
 ## Change shape
 

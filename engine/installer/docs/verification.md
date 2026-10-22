@@ -7,12 +7,17 @@ evidence.
 
 ## Automated source gates
 
-- `tests/install-gate-simulation.sh` passes all 17 cases, including direct
-  partition media, Ventoy's `/dev/mapper/Ventoy` ancestry, unresolved mappers,
-  fixed-bit USB targets, mounted targets, and zero writes on every rejection.
-- `tests/management-simulation.sh` passes all 8 cases, including explicit
-  offline Internet state, generated LAN/Tailscale recursion permissions,
-  public-client rejection, and the firewall's Tailscale source-address guard.
+- `tests/install-gate-simulation.sh` passes every reviewed and guided case,
+  including direct partition media, Ventoy's `/dev/mapper/Ventoy` ancestry,
+  unresolved, ambiguous, multi-slave, cyclic, loop, and MD ancestry, fixed-bit
+  USB targets, direct, mapper-backed, and `/dev/disk` alias mounts, active
+  swap, sysfs holders, the synchronization step, and zero writes on every
+  rejection.
+- `tests/management-simulation.sh` passes all 18 cases, including explicit
+  offline Internet state, saved immutable DNS plans, plan-bound apply with
+  hash, endpoint, commit, zone, drift, and replay rejection, generated
+  LAN/Tailscale recursion permissions, public-client rejection, and the
+  firewall's Tailscale source-address guard.
 - `tests/tailscale-enrollment-simulation.sh` passes without printing either
   OAuth or auth-key material.
 - `tests/media-catalog-simulation.sh` rejects duplicate identities, unknown

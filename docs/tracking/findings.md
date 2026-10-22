@@ -75,11 +75,11 @@ token internally. Direct low-level writer use may retain `--confirm` for tests
 and expert recovery, but ordinary documentation and agent interaction should
 not instruct the operator to execute the token.
 
-## DNS apply is not bound to the reviewed plan
+## DNS apply does not prove pull-request approval
 
-`dnsctl apply` checks literal confirmation, a caller-supplied commit equal to `HEAD`, and a clean tracked zone file. It does not consume an immutable `dnsctl plan` artifact, prove pull-request approval, or require unrelated tracked files to be clean. An operator can therefore apply state that was not the exact reviewed plan while still satisfying command checks.
+`dnsctl apply` consumes one immutable saved plan by SHA-256 and rejects target, commit, zone-file, and live-zone drift and replays. It still cannot prove that a person reviewed that plan or that a pull request was approved, because no approval source is designed, and it does not require unrelated tracked files to be clean. Operators must verify approval before apply.
 
-Operational plan comparison remains required. Closing this needs a product decision on approval authority plus a signed or content-addressed plan format, expiry/state rules, and apply-time current-state comparison.
+Replay protection depends on the local audit log; a different management host or a deleted log does not see earlier applies, although live-zone drift detection still rejects a plan whose current hash no longer matches. Plans carry no expiry. Closing this needs a product decision on approval authority plus a signed approval record and expiry rules.
 
 ## Catalog schemas and executable validation can drift
 

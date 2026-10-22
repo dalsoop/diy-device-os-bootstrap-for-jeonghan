@@ -3,18 +3,22 @@
 `install-gate-simulation.sh` runs the destructive-selection gate against an
 isolated fake sysfs tree. It never opens a real block device.
 
-The 17-case simulation covers:
+The reviewed-mode cases cover:
 
 - one exact HP/NIC/disk match selecting `/dev/sda`;
 - wrong DMI identity stopping before selection;
 - an erase-disabled role stopping before selection;
 - two matching internal disks stopping as ambiguous;
 - an additional non-matching disk being ignored;
-- an undersized, removable, USB-transport, or mounted target being rejected;
+- an undersized, removable, or USB-transport target being rejected;
 - direct and Ventoy-mapped installer media resolving to their physical parent;
 - the Ventoy backing disk never being selected as the target;
-- unresolved Ventoy ancestry failing closed;
-- leading and trailing signature clearing occurring only after acceptance;
+- unresolved, ambiguous, multi-slave, cyclic, loop, and MD installer ancestry
+  failing closed;
+- direct, mapper-backed, and `/dev/disk/by-uuid` mounted targets being rejected;
+- active swap and unmounted sysfs holders on the target being rejected;
+- leading and trailing signature clearing, synchronization, and partition-table
+  refresh occurring only after acceptance;
 - two interfaces with the expected MAC stopping as ambiguous;
 - a completed role being blocked without a reinstall token;
 - a matching generation-bound reinstall token being accepted;
@@ -33,7 +37,10 @@ with one failing and one passing case per documentation pattern and proves that
 a directory outside Git is rejected.
 
 `management-simulation.sh` covers machine-readable and audited DNS planning,
-the literal apply confirmation, generation-bound reinstall authorization, and
+saving a read-only plan only from a committed zone and never over an existing
+file, plan-bound apply that rejects a wrong confirmation, plan hash, endpoint,
+source commit, modified zone, live-zone drift, or replay without importing,
+generation-bound reinstall authorization, and
 the `/16` network prerequisite, generated first-boot recursion permissions for
 LAN and Tailscale clients, and the firewall's Tailscale source-address guard.
 It also verifies root-only environment-file permissions and bootstrap-password

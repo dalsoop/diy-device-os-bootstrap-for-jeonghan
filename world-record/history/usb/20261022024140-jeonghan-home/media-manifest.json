@@ -165,7 +165,7 @@
     "schema_version": 1,
     "source": {
       "playbook": "world-record/world-playbook.yaml",
-      "world": "world-record/config/home.yaml"
+      "world": "world-record/blueprint/home.yaml"
     },
     "world": {
       "name": "Jeonghan Home",

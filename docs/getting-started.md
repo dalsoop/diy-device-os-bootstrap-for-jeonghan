@@ -8,13 +8,13 @@ command from the repository root unless a section explicitly says otherwise.
 The repository connects the World model, Catalog data, and Installer tooling:
 
 - `./device-os world ...` validates the draft registered in
-  `world-record/world-playbook.yaml` (`world-record/config/home.yaml`) and uses
+  `world-record/world-playbook.yaml` (`world-record/blueprint/home.yaml`) and uses
   its selected media entries.
 - the Installer independently validates the resulting World plan, Catalog
   entries, local profiles, and live target before destructive work.
 - A physical write that passes readback publishes one immutable directory
-  under `world-record/records/usb/`; a failed or cancelled write publishes a
-  redacted record under `world-record/records/usb-failed/`.
+  under `world-record/history/usb/`; a failed or cancelled write publishes a
+  redacted record under `world-record/history/usb-failed/`.
 - Linux assembles the complete multiboot USB directly. macOS builds an
   exact-size MBR raw image in a Linux container and writes it with verified
   readback.
@@ -92,7 +92,7 @@ spec:
 The full file is:
 
 ```text
-world-record/config/home.yaml
+world-record/blueprint/home.yaml
 ```
 
 Entry IDs may name public Catalog entries or reviewed Installer-local profiles.
@@ -149,7 +149,7 @@ sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn \
 
 Boot each HP into Debian Live and follow `guides/DNS_INVENTORY.md` on the USB.
 Copy the resulting `inventory-dns01.conf` through `inventory-dns03.conf` files
-into the ignored `world-record/local/inventory/` directory on the management host.
+into the ignored `world-record/private/inventory/` directory on the management host.
 This first pass never authorizes internal-disk erasure.
 
 ### Second pass: build the production image
@@ -159,10 +159,10 @@ trusted Debian live environment, identify its wired interface and single
 internal target disk, and capture one ignored inventory file at a time:
 
 ```sh
-mkdir -p world-record/local/inventory
+mkdir -p world-record/private/inventory
 sudo engine/installer/dns-image/capture-inventory \
   dns01 10.0.5.1 enp1s0 /dev/sda \
-  > world-record/local/inventory/dns01.conf
+  > world-record/private/inventory/dns01.conf
 ```
 
 Repeat for `dns02` and `dns03`. Review every value. For the first physical
@@ -170,10 +170,10 @@ pilot, change `destructive_install_enabled` to `true` only in `dns01.conf`.
 Disabled example files may be used for the other two roles:
 
 ```sh
-cp world-record/config/nodes/dns02.conf.example \
-  world-record/local/inventory/dns02.conf
-cp world-record/config/nodes/dns03.conf.example \
-  world-record/local/inventory/dns03.conf
+cp world-record/blueprint/nodes/dns02.conf.example \
+  world-record/private/inventory/dns02.conf
+cp world-record/blueprint/nodes/dns03.conf.example \
+  world-record/private/inventory/dns03.conf
 ```
 
 Copy only the operator public SSH key and the public age recipient into the
@@ -181,10 +181,10 @@ ignored input paths:
 
 ```sh
 cp /path/to/id_ed25519.pub \
-  world-record/local/keys/operator-authorized-keys
+  world-record/private/keys/operator-authorized-keys
 age-keygen -o /secure/dns-recovery-age-key.txt
 age-keygen -y /secure/dns-recovery-age-key.txt \
-  > world-record/local/keys/age-recipient
+  > world-record/private/keys/age-recipient
 ```
 
 Install the builder dependencies and build:
@@ -339,11 +339,11 @@ together.
 The intended history key is the physical USB creation time:
 
 ```text
-world-record/records/usb/{YYYYMMDDHHmmss}-{world-slug}/
+world-record/history/usb/{YYYYMMDDHHmmss}-{world-slug}/
 ```
 
 Do not create a completed generation merely because a plan, simulation, build,
 or write command started. `world burn` and `world burn-image-macos` publish a
 generation atomically only after physical write and required readback evidence
 succeed. Failed and cancelled physical attempts are recorded under
-`world-record/records/usb-failed/YYYY/` without becoming generations.
+`world-record/history/usb-failed/YYYY/` without becoming generations.

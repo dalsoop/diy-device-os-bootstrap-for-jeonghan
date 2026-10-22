@@ -3,7 +3,7 @@
 This folder holds the reviewed per-role hardware profiles: `dns01.conf.example`
 through `dns03.conf.example` and `nodes.example.yml`. Guided builds read the
 role profiles here. Actual hardware captures live only under the ignored
-`world-record/local/inventory/`.
+`world-record/private/inventory/`.
 
 - Never commit raw serials, UUIDs, MAC addresses, disk serials, or enabled
   destructive inventory for real machines.

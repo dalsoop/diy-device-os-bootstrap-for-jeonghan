@@ -220,7 +220,7 @@ jobs:
               require_tracked(name, "", plan["source"].get("playbook"))
               require_tracked(name, "", plan["source"].get("world"))
 
-          generations = sorted(path for path in (root / "world-record/records/usb").iterdir() if path.is_dir())
+          generations = sorted(path for path in (root / "world-record/history/usb").iterdir() if path.is_dir())
           if not generations:
               raise SystemExit("no USB generation records found")
           for generation in generations:
@@ -251,7 +251,7 @@ jobs:
                       require_tracked(f"{label} final_review", "", entry["final_review"]["schema"])
               if not (generation / "world.yaml").is_file():
                   raise SystemExit(f"{label} is missing world.yaml")
-          failed_records = sorted((root / "world-record/records/usb-failed").glob("**/*.json"))
+          failed_records = sorted((root / "world-record/history/usb-failed").glob("**/*.json"))
           for path in failed_records:
               record = load(path)
               require_valid(f"failed USB write {path.name}", usb_event, record)

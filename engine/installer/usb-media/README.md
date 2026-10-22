@@ -56,7 +56,7 @@ fixed reserve and overhead already prove the target is too small.
 
 | Input | Ownership |
 | --- | --- |
-| `world-record/config/home.yaml` (registered in `world-record/world-playbook.yaml`) | User-selected entry IDs, language, and safety policy |
+| `world-record/blueprint/home.yaml` (registered in `world-record/world-playbook.yaml`) | User-selected entry IDs, language, and safety policy |
 | `composition.json` | Catalog location, USB properties, local entries, bundles |
 | `../collections/device-os.json` | Menu groups and contributor reference selection |
 | `local-entries/*.json` | Installer-owned profiles such as the DNS installer |

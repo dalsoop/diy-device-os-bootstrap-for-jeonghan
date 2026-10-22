@@ -37,7 +37,7 @@ fail_test("default World was rejected: #{stderr}") unless status.success?
 resolved = JSON.parse(stdout)
 fail_test("default media selection changed") unless resolved.dig("media", "entries") == ["dns-appliance"]
 fail_test("default World identity changed") unless resolved.dig("world", "slug") == "jeonghan-home"
-fail_test("default World source changed") unless resolved.dig("source", "world") == "world-record/config/home.yaml"
+fail_test("default World source changed") unless resolved.dig("source", "world") == "world-record/blueprint/home.yaml"
 fail_test("default playbook source changed") unless resolved.dig("source", "playbook") == "world-record/world-playbook.yaml"
 
 inventory_stdout, inventory_stderr, inventory_status = run_resolver(
@@ -63,10 +63,10 @@ mutations.each do |label, mutation|
   Dir.mktmpdir("world-contract-") do |directory|
     root = Pathname(directory)
     FileUtils.cp(ROOT.join("world-playbook.yaml"), root.join("world-playbook.yaml"))
-    FileUtils.mkdir_p(root.join("config"))
-    fixture = load_yaml(ROOT.join("config/home.yaml"))
+    FileUtils.mkdir_p(root.join("blueprint"))
+    fixture = load_yaml(ROOT.join("blueprint/home.yaml"))
     mutation.call(fixture)
-    write_yaml(root.join("config/home.yaml"), fixture)
+    write_yaml(root.join("blueprint/home.yaml"), fixture)
     _out, _err, fixture_status = run_resolver(root.join("world-playbook.yaml"))
     fail_test("invalid fixture was accepted: #{label}") if fixture_status.success?
   end

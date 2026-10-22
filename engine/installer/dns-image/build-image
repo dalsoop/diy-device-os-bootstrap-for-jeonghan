@@ -8,15 +8,15 @@ repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 monorepo_root=$(CDPATH='' cd -- "$repo_root/../.." && pwd)
 builder_dir="$script_dir/simple-cdd"
 generated_dir="$builder_dir/generated"
-inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$monorepo_root/world-record/local/inventory}
+inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$monorepo_root/world-record/private/inventory}
 install_mode=${DNS_APPLIANCE_INSTALL_MODE:-reviewed}
 case "$install_mode" in
     reviewed) ;;
-    guided) inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$monorepo_root/world-record/config/nodes} ;;
+    guided) inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$monorepo_root/world-record/blueprint/nodes} ;;
     *) echo 'build-image: unknown install mode' >&2; exit 1 ;;
 esac
-authorized_keys=${DNS_APPLIANCE_AUTHORIZED_KEYS:-$monorepo_root/world-record/local/keys/operator-authorized-keys}
-age_recipient=${DNS_APPLIANCE_AGE_RECIPIENT:-$monorepo_root/world-record/local/keys/age-recipient}
+authorized_keys=${DNS_APPLIANCE_AUTHORIZED_KEYS:-$monorepo_root/world-record/private/keys/operator-authorized-keys}
+age_recipient=${DNS_APPLIANCE_AGE_RECIPIENT:-$monorepo_root/world-record/private/keys/age-recipient}
 cache_dir=${DNS_APPLIANCE_CACHE_DIR:-$repo_root/cache}
 artifact_dir=${DNS_APPLIANCE_ARTIFACT_DIR:-$repo_root/artifacts}
 # shellcheck disable=SC1091

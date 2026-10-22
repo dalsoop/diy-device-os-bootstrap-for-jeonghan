@@ -2,12 +2,12 @@
 .env
 .env.*
 
-# Machine-local inputs and observations
-local/*
-!local/README.md
-!local/keys/
-local/keys/*
-!local/keys/*.example
+# Private files never committed
+private/*
+!private/README.md
+!private/keys/
+private/keys/*
+!private/keys/*.example
 
 # Generated plans, caches, downloads, and media
 .device-os/

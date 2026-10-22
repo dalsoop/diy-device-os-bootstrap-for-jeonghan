@@ -4,10 +4,11 @@ Contributions are welcome through pull requests. Keep changes within the module
 boundaries and safety rules in `AGENTS.md`, and update every affected producer,
 consumer, fixture, and document together.
 
-User-owned data lives in `world-record/`: tracked decisions in `config/`,
-ignored private inputs in `local/`, and tool-published history in `records/`.
+User-owned data lives in `world-record/`: the home blueprint (desired state you edit) in
+`blueprint/`, private files never committed in `private/`, and what happened
+(never edited) in `history/`.
 Code, schemas, and tests live in `engine/`. Never hand-edit
-`world-record/records/`.
+`world-record/history/`.
 
 ## Contribution license
 

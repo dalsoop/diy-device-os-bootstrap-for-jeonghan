@@ -57,7 +57,7 @@ class Gateway:
         ).resolve()
         self.device_os = self.repo_root / "device-os"
         self.management = self.repo_root / "engine" / "installer" / "management"
-        self.zone_file = self.repo_root / "world-record" / "config" / "dns" / "home.arpa.zone"
+        self.zone_file = self.repo_root / "world-record" / "blueprint" / "dns" / "home.arpa.zone"
         self.state_dir = Path(
             os.environ.get(
                 "DEVICE_OS_AGENT_STATE_DIR",

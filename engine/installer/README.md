@@ -31,7 +31,7 @@ tree identity in the resolved plan. `simulate` skips image downloads and disk
 writes.
 
 World commands resolve selection from the draft registered in
-`world-record/world-playbook.yaml` (`world-record/config/home.yaml`). The reference
+`world-record/world-playbook.yaml` (`world-record/blueprint/home.yaml`). The reference
 selection in `collections/device-os.json` remains for contributors and defines
 menu groups. World burn commands delegate through the event recorder so a
 successful readback atomically publishes an append-only completed generation.
@@ -70,8 +70,8 @@ write. Ordinary operators should begin with the root
 | `docs/` | Installer procedures and physical verification gates |
 
 Per-role node profiles and the DNS zone the Installer consumes live in
-`world-record/config/`; real hardware captures and operator public keys live in
-the ignored `world-record/local/`.
+`world-record/blueprint/`; real hardware captures and operator public keys live in
+the ignored `world-record/private/`.
 
 Adding an OS with an existing `locked-download` contract is a Catalog data
 change. The DNS image remains a caller-supplied `runtime-artifact`. A new source

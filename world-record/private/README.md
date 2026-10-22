@@ -1,6 +1,7 @@
-# Local Inputs
+# Private Files
 
-This folder holds machine-local inputs and observations. Git ignores
+This folder holds private files that are never committed: operator public keys,
+real hardware captures, and the burn recorder working state. Git ignores
 everything here except this README and the public `keys/*.example` templates.
 
 Do not place long-lived secrets here merely because the folder is ignored.
@@ -9,7 +10,7 @@ belong in the principal secret store. The World may contain a non-sensitive
 reference to that store, never the value.
 
 ```text
-local/
+private/
 ├── keys/
 │   ├── operator-authorized-keys            operator SSH public key(s)
 │   ├── operator-authorized-keys.example    tracked template
@@ -34,5 +35,5 @@ local/
 - `usb-events/` is created automatically for the checkout-local writer lock,
   pending event transactions, safe writer evidence, and atomic staging. It is
   not the durable event history: successful generations are published to
-  `../records/usb/` and failed or cancelled physical attempts to
-  `../records/usb-failed/`.
+  `../history/usb/` and failed or cancelled physical attempts to
+  `../history/usb-failed/`.

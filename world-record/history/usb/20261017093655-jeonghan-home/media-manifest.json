@@ -6,7 +6,7 @@
   },
   "catalog": {
     "repository": "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan",
-    "revision": "f7049099f546c40623e5f6060de38e60c8aeba7c",
+    "revision": "4b93a34119bad5a4915e8055bf7123b7f98869fd",
     "tree": "b2f8699f01dd6dd391c6b9b2d8ce13498f8c9911",
     "path": "engine/catalog",
     "collection": "collections/device-os.json"
@@ -95,14 +95,6 @@
       }
     },
     {
-      "id": "dns-inventory-wizard",
-      "destination": "tools/dns-inventory",
-      "source": {
-        "kind": "repository-file",
-        "path": "dns-image/inventory-wizard"
-      }
-    },
-    {
       "id": "dns-inventory-guide",
       "destination": "guides/DNS_INVENTORY.md",
       "source": {
@@ -115,7 +107,7 @@
     "schema_version": 1,
     "source": {
       "playbook": "world-record/world-playbook.yaml",
-      "world": "world-record/config/home.yaml"
+      "world": "world-record/blueprint/home.yaml"
     },
     "world": {
       "name": "Jeonghan Home",

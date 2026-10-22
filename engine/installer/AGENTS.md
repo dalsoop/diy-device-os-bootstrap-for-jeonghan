@@ -7,9 +7,9 @@ This module is the repository's execution and safety boundary. It resolves World
 - `usb-media/` owns resolution, capacity, download, staging, Ventoy rendering, and physical USB writers.
 - `collections/` owns contributor reference grouping, not the personal selection used by ordinary World commands.
 - `dns-image/` owns the offline DNS image, install gate, and first-boot enrollment; it does not own general public OS behavior.
-- Per-role node profiles and their public examples live in `world-record/config/nodes/`. Real hardware captures live in the ignored `world-record/local/inventory/`, and operator public keys in the ignored `world-record/local/keys/`.
+- Per-role node profiles and their public examples live in `world-record/blueprint/nodes/`. Real hardware captures live in the ignored `world-record/private/inventory/`, and operator public keys in the ignored `world-record/private/keys/`.
 - `management/` owns post-install DNS, Tailscale, backup, restore, reinstall authorization, and read-only monitoring from a trusted host.
-- `build/` owns immutable external input locks; `schemas/` owns exchanged record shapes; `tests/` owns non-destructive simulations; `docs/` owns installer procedures and physical verification gates. Reviewed DNS desired state lives in `world-record/config/dns/`.
+- `build/` owns immutable external input locks; `schemas/` owns exchanged record shapes; `tests/` owns non-destructive simulations; `docs/` owns installer procedures and physical verification gates. Reviewed DNS desired state lives in `world-record/blueprint/dns/`.
 - Long-lived credentials belong outside the checkout. Router mutation and arbitrary remote administration are outside this module.
 
 ## Invariants

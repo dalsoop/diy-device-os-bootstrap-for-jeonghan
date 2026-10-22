@@ -46,6 +46,6 @@ sync
 ```
 
 The management host imports these three files into the ignored
-`world-record/local/inventory/` directory. It enables only the current pilot,
+`world-record/private/inventory/` directory. It enables only the current pilot,
 builds the guarded production image on amd64 Debian 13, and rewrites the USB.
 The production image must not exist on the inventory-stage USB.

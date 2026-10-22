@@ -12,7 +12,7 @@ runner = File.realpath(File.join(__dir__, "../bin/record-usb-event"))
 playbook_path = File.realpath(File.join(__dir__, "../../../world-record/world-playbook.yaml"))
 playbook = YAML.safe_load_file(playbook_path, permitted_classes: [], aliases: false)
 playbook_generations_root = playbook.dig("spec", "generations", "root")
-failed_records_root = "records/usb-failed"
+failed_records_root = "history/usb-failed"
 
 EVENT_KEYS = %w[
   schema_version event_id generation_candidate generation_id world_slug media_id writer
@@ -30,14 +30,14 @@ end
 Dir.mktmpdir("usb-event-simulation") do |temporary|
   repo = File.join(temporary, "repo")
   output = File.join(repo, "world-record")
-  FileUtils.mkdir_p(File.join(repo, "world-record/config"))
-  File.write(File.join(repo, "world-record/config/home.yaml"), "kind: World\n")
+  FileUtils.mkdir_p(File.join(repo, "world-record/blueprint"))
+  File.write(File.join(repo, "world-record/blueprint/home.yaml"), "kind: World\n")
 
   plan = {
     "schema_version" => 1,
     "source" => {
       "playbook" => "world-record/world-playbook.yaml",
-      "world" => "world-record/config/home.yaml"
+      "world" => "world-record/blueprint/home.yaml"
     },
     "world" => {
       "name" => "Test Home",
@@ -120,7 +120,7 @@ Dir.mktmpdir("usb-event-simulation") do |temporary|
     assert(status.success?, "successful simulated write failed: #{stdout} #{stderr}")
   end
 
-  generations = Dir.glob(File.join(output, "records/usb/*")).sort
+  generations = Dir.glob(File.join(output, "history/usb/*")).sort
   assert(generations.map { |path| File.basename(path) } == [
     "20261017020000-test-home",
     "20261017020001-test-home"
@@ -155,7 +155,7 @@ Dir.mktmpdir("usb-event-simulation") do |temporary|
     "--", writer, "--device", "/dev/test-collision"
   )
   assert(!status.success? && stderr.include?("generation ID collision"), "generation collision was accepted")
-  assert(Dir.glob(File.join(output, "records/usb/*")).length == 2, "collision overwrote or added a generation")
+  assert(Dir.glob(File.join(output, "history/usb/*")).length == 2, "collision overwrote or added a generation")
 
   _stdout, stderr, status = Open3.capture3(
     common.merge(
@@ -188,8 +188,8 @@ Dir.mktmpdir("usb-event-simulation") do |temporary|
     "--", writer, "--device", "/dev/test-c"
   )
   assert(status.exitstatus == 9, "failed writer status was not preserved")
-  assert(!File.exist?(File.join(output, "records/usb/20261017020002-test-home")), "failed write published a generation")
-  failed_events = Dir.glob(File.join(output, "records/usb-failed/2026/*.json"))
+  assert(!File.exist?(File.join(output, "history/usb/20261017020002-test-home")), "failed write published a generation")
+  failed_events = Dir.glob(File.join(output, "history/usb-failed/2026/*.json"))
   assert(failed_events.length == 1, "failed write did not create exactly one event")
   failed = JSON.parse(File.read(failed_events.first))
   assert(failed["status"] == "failed", "failed event status is wrong")
@@ -212,26 +212,26 @@ Dir.mktmpdir("usb-event-simulation") do |temporary|
     "--", writer, "--device", "/dev/test-d"
   )
   assert(!status.success?, "evidence for another device was accepted")
-  assert(!File.exist?(File.join(output, "records/usb/20261017020004-test-home")),
+  assert(!File.exist?(File.join(output, "history/usb/20261017020004-test-home")),
          "evidence for another device published a generation")
-  mismatched = Dir.glob(File.join(output, "records/usb-failed/2026/20261017020004-*.json"))
+  mismatched = Dir.glob(File.join(output, "history/usb-failed/2026/20261017020004-*.json"))
   assert(mismatched.length == 1, "evidence for another device did not create exactly one failed event")
   mismatched_event = JSON.parse(File.read(mismatched.first))
   assert(mismatched_event["failure_code"] == "invalid-write-evidence",
          "evidence for another device was not rejected as invalid")
   assert(mismatched_event.keys == EVENT_KEYS, "rejected event does not have the v2 shape")
 
-  tracked_json = Dir.glob(File.join(output, "records/{usb-failed,usb}/**/*.json"), File::FNM_EXTGLOB)
+  tracked_json = Dir.glob(File.join(output, "history/{usb-failed,usb}/**/*.json"), File::FNM_EXTGLOB)
   assert(tracked_json.none? { |path| File.read(path).match?(/serial/i) }, "event output contains a serial field")
   assert(tracked_json.none? { |path| File.read(path).include?("device_path") || File.read(path).include?("/dev/test") },
          "published records contain the device node")
 
-  assert(playbook_generations_root == "records/usb", "playbook generations.root is not records/usb")
+  assert(playbook_generations_root == "history/usb", "playbook generations.root is not history/usb")
   assert(File.directory?(File.join(File.dirname(playbook_path), failed_records_root)),
          "failed-write records folder is missing from the World record")
   builtin_repo = File.join(temporary, "builtin-repo")
-  FileUtils.mkdir_p(File.join(builtin_repo, "world-record/config"))
-  File.write(File.join(builtin_repo, "world-record/config/home.yaml"), "kind: World\n")
+  FileUtils.mkdir_p(File.join(builtin_repo, "world-record/blueprint"))
+  File.write(File.join(builtin_repo, "world-record/blueprint/home.yaml"), "kind: World\n")
   builtin_environment = {
     "DEVICE_OS_TEST_MODE" => "1",
     "DEVICE_OS_EVENT_REPO_ROOT" => builtin_repo,
@@ -269,7 +269,7 @@ Dir.mktmpdir("usb-event-simulation") do |temporary|
   assert(!status.success?, "built-in location failed write succeeded")
   builtin_failed = Dir.glob(File.join(builtin_repo, "world-record", failed_records_root, "2026/20261017030001-*.json"))
   assert(builtin_failed.length == 1, "recorder failed-write root does not equal #{failed_records_root}")
-  published_roots = Dir.children(File.join(builtin_repo, "world-record/records")).sort
+  published_roots = Dir.children(File.join(builtin_repo, "world-record/history")).sort
   assert(published_roots == %w[usb usb-failed], "recorder published outside its record folders: #{published_roots}")
 
   puts "USB event simulations: passed"

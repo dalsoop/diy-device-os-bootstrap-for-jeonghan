@@ -5,12 +5,12 @@ This module holds the World tools for Jeonghan's single accumulating home-infras
 ## Boundaries
 
 - `bin/resolve-world` reads `world-record/world-playbook.yaml` and the drafts it registers, validates them, and emits declarative plans. Registered paths must stay inside `world-record/`. It never downloads images, invokes Catalog code, or writes a device.
-- `bin/record-usb-event` serializes physical writes and publishes their records into `world-record/records/`. Its generation root equals the playbook's `generations.root`.
+- `bin/record-usb-event` serializes physical writes and publishes their records into `world-record/history/`. Its generation root equals the playbook's `generations.root`.
 - `schemas/` owns the versioned published event and verification record shapes (schema version 2).
 - `tests/` owns the World contract and USB event simulations.
-- Configuration is not owned here: `world-record/world-playbook.yaml` registers the draft, the completed-generation root, timezone, and generation format, and `world-record/config/home.yaml` owns assets, networks, nodes, services, media selection, language, and fail-closed intent.
-- Records are not owned here either: `world-record/records/usb/` holds immutable completed physical USB generations, and `world-record/records/usb-failed/` holds append-only redacted records for failed or cancelled physical writes; successful event records live inside their generation.
-- `world-record/local/` holds ignored machine-local observations and public inputs; secrets and raw hardware inventory remain outside Git.
+- Configuration is not owned here: `world-record/world-playbook.yaml` registers the draft, the completed-generation root, timezone, and generation format, and `world-record/blueprint/home.yaml` owns assets, networks, nodes, services, media selection, language, and fail-closed intent.
+- Records are not owned here either: `world-record/history/usb/` holds immutable completed physical USB generations, and `world-record/history/usb-failed/` holds append-only redacted records for failed or cancelled physical writes; successful event records live inside their generation.
+- `world-record/private/` holds private files never committed (machine observations and public inputs); secrets and raw hardware inventory remain outside Git.
 - Public release metadata belongs to the Catalog. Fetching, image assembly, target inspection, and erasure belong to the Installer.
 
 ## Invariants
@@ -26,9 +26,9 @@ This module holds the World tools for Jeonghan's single accumulating home-infras
 
 ## Change pattern
 
-Edit `world-record/config/home.yaml` for personal intent. Add reusable public release metadata to the Catalog and executable behavior to the Installer instead of duplicating either here. A World vocabulary change updates the resolver, Installer consumer, fixtures, and generation contract together.
+Edit `world-record/blueprint/home.yaml` for personal intent. Add reusable public release metadata to the Catalog and executable behavior to the Installer instead of duplicating either here. A World vocabulary change updates the resolver, Installer consumer, fixtures, and generation contract together.
 
-The World event recorder serializes physical writes, keeps pending state under the ignored `world-record/local/usb-events/`, records unsuccessful attempts under `world-record/records/usb-failed/`, and atomically publishes successful readback evidence under `world-record/records/usb/`. Do not create either record from a plan, build, capacity query, or simulation.
+The World event recorder serializes physical writes, keeps pending state under the ignored `world-record/private/usb-events/`, records unsuccessful attempts under `world-record/history/usb-failed/`, and atomically publishes successful readback evidence under `world-record/history/usb/`. Do not create either record from a plan, build, capacity query, or simulation.
 
 ## Verification
 

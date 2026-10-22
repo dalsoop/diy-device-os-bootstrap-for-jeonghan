@@ -15,13 +15,13 @@ diy-device-os-bootstrap-for-jeonghan/
 ├── CONTRIBUTING.md                   ← contribution workflow
 ├── device-os                         ← root command; runs engine/installer/device-os
 ├── world-record/                     ← everything the user decides, keeps private, or looks back on
-│   ├── README.md                     ← user guide: config, local, records
+│   ├── README.md                     ← user guide: blueprint, private, history
 │   ├── world-playbook.yaml           ← registry of World data paths read by the World tools
-│   ├── config/                       ← tracked decisions: home.yaml, nodes/, dns/
-│   │   ├── nodes/AGENTS.md           ← per-role hardware profiles and the local capture boundary
+│   ├── blueprint/                    ← the home blueprint (desired state you edit): home.yaml, nodes/, dns/
+│   │   ├── nodes/AGENTS.md           ← per-role hardware profiles and the private capture boundary
 │   │   └── dns/AGENTS.md             ← reviewed DNS zone desired state
-│   ├── local/                        ← ignored private inputs: keys/, inventory/, usb-events/
-│   └── records/                      ← append-only history: usb/, usb-failed/, verification/
+│   ├── private/                      ← private files never committed: keys/, inventory/, usb-events/
+│   └── history/                      ← what happened; never edited: usb/, usb-failed/, verification/
 ├── engine/
 │   ├── installer/
 │   │   ├── AGENTS.md                 ← execution, media assembly, and destructive gates
@@ -70,7 +70,7 @@ Repository text follows the documentation rule in `docs/standards.md`: name role
 
 1. World intent, a plan, or a successful build never authorizes erasure. Every USB or internal-disk write must re-identify the live target and require its exact target-specific confirmation.
 2. Passwords, tokens, private keys, age identities, real hardware inventory, generated media, enrollment records, and recovery archives never enter Git. The USB may carry secrets only after encryption.
-3. A completed directory under `world-record/records/usb/` is immutable. Every successful physical USB creation receives a new timestamped generation after write and readback verification.
+3. A completed directory under `world-record/history/usb/` is immutable. Every successful physical USB creation receives a new timestamped generation after write and readback verification.
 4. `main` changes only through a pull request with the required `contracts` check passing. Do not push directly, force-push, delete protection, or merge around the gate.
    Agents may create a branch, push it, open a pull request, and monitor its checks, but stop after reporting the pull request and its check state. Merge, enable auto-merge, or use an administrator override only after the repository owner explicitly says to merge that pull request, given after it exists and its check state is known. Earlier general requests such as "proceed", "finish", or "build it" are not merge approval.
 5. Source checks, image assembly, physical write, firmware boot, OS installation, and network cutover are separate evidence states. Never promote a lower state into a higher-state claim.

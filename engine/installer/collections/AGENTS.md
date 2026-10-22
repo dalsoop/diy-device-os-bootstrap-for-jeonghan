@@ -12,7 +12,7 @@ includes and how they are grouped on the USB.
   installation.
 - Keep contributor reference choices here instead of editing shared resolver
   code. Ordinary user selection belongs in
-  `world-record/config/home.yaml`.
+  `world-record/blueprint/home.yaml`.
 - Verify every selection change with a resolved plan and confirm that omitted
   entries, menu groups, DNS reserve, and capacity still match intent.
 

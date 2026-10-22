@@ -37,9 +37,9 @@ Boot a trusted Debian live environment and identify the wired interface and the
 single internal target disk. From a checkout of this repository, run:
 
 ```sh
-mkdir -p world-record/local/inventory
+mkdir -p world-record/private/inventory
 sudo engine/installer/dns-image/capture-inventory dns01 10.0.5.1 enp1s0 /dev/sda \
-  > world-record/local/inventory/dns01.conf
+  > world-record/private/inventory/dns01.conf
 ```
 
 Repeat for `dns02` and `dns03`. Review every generated file. Only after confirming
@@ -48,8 +48,8 @@ For the first physical pilot, enable only `dns01`; disabled role files may remai
 as copies of their examples:
 
 ```sh
-cp world-record/config/nodes/dns02.conf.example world-record/local/inventory/dns02.conf
-cp world-record/config/nodes/dns03.conf.example world-record/local/inventory/dns03.conf
+cp world-record/blueprint/nodes/dns02.conf.example world-record/private/inventory/dns02.conf
+cp world-record/blueprint/nodes/dns03.conf.example world-record/private/inventory/dns03.conf
 ```
 
 The builder requires exactly one enabled role and rejects both zero and multiple
@@ -58,7 +58,7 @@ erase-enabled inventories.
 Copy the operator's public SSH key, never the private key:
 
 ```sh
-cp /path/to/id_ed25519.pub world-record/local/keys/operator-authorized-keys
+cp /path/to/id_ed25519.pub world-record/private/keys/operator-authorized-keys
 ```
 
 Create a dedicated age identity on the management machine and copy only its
@@ -67,7 +67,7 @@ public recipient into the installer input:
 ```sh
 age-keygen -o /secure/dns-recovery-age-key.txt
 age-keygen -y /secure/dns-recovery-age-key.txt \
-  > world-record/local/keys/age-recipient
+  > world-record/private/keys/age-recipient
 ```
 
 ## Build

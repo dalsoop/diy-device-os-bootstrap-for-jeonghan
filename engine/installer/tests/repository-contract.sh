@@ -126,7 +126,7 @@ for file in \
 done
 
 for required in \
-    world-record/local/keys/age-recipient.example \
+    world-record/private/keys/age-recipient.example \
     engine/installer/build/locks/sources.env \
     engine/installer/build/distribution-policy.json \
     engine/installer/schemas/component-redistribution-registry.schema.json \
@@ -136,7 +136,7 @@ for required in \
     engine/installer/schemas/enrollment-record.schema.json \
     engine/installer/schemas/license-check.schema.json \
     engine/installer/schemas/raw-image-manifest.schema.json \
-    world-record/config/dns/home.arpa.zone \
+    world-record/blueprint/dns/home.arpa.zone \
     engine/installer/management/tailscale-policy.example.hujson \
     engine/installer/usb-media/composition.json \
     engine/installer/usb-media/distribution-policy.json \
@@ -153,8 +153,8 @@ for required in \
     engine/agent/requirements.lock \
     engine/agent/tailscale-policy.example.hujson \
     world-record/world-playbook.yaml \
-    world-record/config/home.yaml \
-    world-record/records/usb-failed/README.md \
+    world-record/blueprint/home.yaml \
+    world-record/history/usb-failed/README.md \
     engine/world/schemas/usb-event.schema.json \
     engine/world/schemas/usb-verification.schema.json \
     .github/workflows/ci.yml \
@@ -266,7 +266,7 @@ for contract in \
     tests/documentation-check-simulation.sh \
     engine/world/schemas/usb-event.schema.json \
     engine/world/schemas/usb-verification.schema.json \
-    world-record/records/usb-failed; do
+    world-record/history/usb-failed; do
     grep -q "$contract" "$ci_workflow" || {
         echo "repository-contract: CI does not enforce $contract" >&2
         exit 1

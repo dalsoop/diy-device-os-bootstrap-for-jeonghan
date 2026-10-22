@@ -1,5 +1,5 @@
 # Documentation-only topology view. The installer consumes ignored
-# world-record/local/inventory/dns01.conf, dns02.conf, and dns03.conf files.
+# world-record/private/inventory/dns01.conf, dns02.conf, and dns03.conf files.
 ---
 network:
   cidr: 10.0.0.0/16

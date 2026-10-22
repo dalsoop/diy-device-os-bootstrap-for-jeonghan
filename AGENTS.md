@@ -54,6 +54,7 @@ diy-device-os-bootstrap-for-jeonghan/
 2. Passwords, tokens, private keys, age identities, real hardware inventory, generated media, enrollment records, and recovery archives never enter Git. The USB may carry secrets only after encryption.
 3. A completed directory under `world/worlds/` is immutable. Every successful physical USB creation receives a new timestamped generation after write and readback verification.
 4. `main` changes only through a pull request with the required `contracts` check passing. Do not push directly, force-push, delete protection, or merge around the gate.
+   Agents may create a branch, push it, open a pull request, and monitor its checks, but stop after reporting the pull request and its check state. Merge, enable auto-merge, or use an administrator override only after the repository owner explicitly says to merge that pull request, given after it exists and its check state is known. Earlier general requests such as "proceed", "finish", or "build it" are not merge approval.
 5. Source checks, image assembly, physical write, firmware boot, OS installation, and network cutover are separate evidence states. Never promote a lower state into a higher-state claim.
 
 ## Before changing anything

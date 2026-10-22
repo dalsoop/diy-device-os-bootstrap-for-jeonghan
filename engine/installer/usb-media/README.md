@@ -30,10 +30,10 @@ building and writing:
 ```sh
 ./device-os targets
 ./device-os world build-image \
-  --output "$PWD/installer/artifacts/device-os.raw" \
+  --output "$PWD/engine/installer/artifacts/device-os.raw" \
   --size EXACT_BYTES
 sudo ./device-os world burn-image-macos \
-  --image "$PWD/installer/artifacts/device-os.raw" \
+  --image "$PWD/engine/installer/artifacts/device-os.raw" \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
 ```
@@ -56,16 +56,16 @@ fixed reserve and overhead already prove the target is too small.
 
 | Input | Ownership |
 | --- | --- |
-| `../../world/drafts/<slug>/world.yaml` | User-selected entry IDs, language, and safety policy |
+| `world-record/config/home.yaml` (registered in `world-record/world-playbook.yaml`) | User-selected entry IDs, language, and safety policy |
 | `composition.json` | Catalog location, USB properties, local entries, bundles |
 | `../collections/device-os.json` | Menu groups and contributor reference selection |
 | `local-entries/*.json` | Installer-owned profiles such as the DNS installer |
-| Sibling Catalog | Public bootloader and OS metadata |
+| `engine/catalog/data/` | Public bootloader and OS metadata |
 
-The resolver reads the sibling Catalog from the same clean Git snapshot but does
+The resolver reads `engine/catalog/data/` from the same clean Git snapshot but does
 not execute its scripts. It validates paths and contracts again, records the
 monorepo commit and Catalog tree, then writes the shared resolved plan to
-`work/device-os/catalog.json`.
+`engine/installer/work/device-os/catalog.json`.
 
 ## Supported strategies
 

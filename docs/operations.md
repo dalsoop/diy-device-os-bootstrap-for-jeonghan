@@ -41,32 +41,35 @@ Install the CI tools on Ubuntu, create an isolated Python environment, and run t
 sudo apt-get update
 sudo apt-get install -y jq python3-jsonschema ruby shellcheck python3-venv
 python3 -m venv /tmp/device-os-agent-check
-/tmp/device-os-agent-check/bin/python -m pip install --requirement agent/requirements.lock
+/tmp/device-os-agent-check/bin/python -m pip install --requirement engine/agent/requirements.lock
 
-catalog/bin/verify-catalog
-catalog/tests/catalog-contract.sh
-for record in catalog/catalog/entries/*.json; do
+engine/catalog/bin/verify-catalog
+engine/catalog/tests/catalog-contract.sh
+for record in engine/catalog/data/entries/*.json; do
   /usr/bin/python3 -m jsonschema \
-    -i "$record" catalog/schemas/media-entry.schema.json
+    -i "$record" engine/catalog/schemas/media-entry.schema.json
 done
-for record in catalog/catalog/bootloaders/*.json; do
+for record in engine/catalog/data/bootloaders/*.json; do
   /usr/bin/python3 -m jsonschema \
-    -i "$record" catalog/schemas/bootloader.schema.json
+    -i "$record" engine/catalog/schemas/bootloader.schema.json
 done
-world/tests/world-contract-simulation.rb
-(cd installer && tests/install-gate-simulation.sh)
-(cd installer && tests/management-simulation.sh)
-(cd installer && tests/tailscale-enrollment-simulation.sh)
-(cd installer && tests/dns-license-simulation.sh)
-(cd installer && tests/license-policy-simulation.sh)
-(cd installer && tests/media-catalog-simulation.sh)
-(cd installer && tests/image-builder-simulation.sh)
-(cd installer && tests/macos-writer-simulation.sh)
-(cd installer && tests/repository-contract.sh)
-/tmp/device-os-agent-check/bin/python agent/tests/gateway_simulation.py
+engine/world/tests/world-contract-simulation.rb
+engine/world/tests/usb-event-simulation.rb
+(cd engine/installer && tests/install-gate-simulation.sh)
+(cd engine/installer && tests/management-simulation.sh)
+(cd engine/installer && tests/tailscale-enrollment-simulation.sh)
+(cd engine/installer && tests/dns-license-simulation.sh)
+(cd engine/installer && tests/license-policy-simulation.sh)
+(cd engine/installer && tests/media-catalog-simulation.sh)
+(cd engine/installer && tests/image-builder-simulation.sh)
+(cd engine/installer && tests/macos-writer-simulation.sh)
+(cd engine/installer && tests/inventory-wizard-simulation.sh)
+(cd engine/installer && tests/documentation-check-simulation.sh)
+(cd engine/installer && tests/repository-contract.sh)
+/tmp/device-os-agent-check/bin/python engine/agent/tests/gateway_simulation.py
 ```
 
-The required CI job additionally validates the DNS component registry, component review, build manifest, final review, license decision, and raw-image manifest schemas with both accepted and rejected fixtures. ShellCheck, shell syntax, Python syntax, Ruby syntax, and SPDX checks remain part of CI even when an operator runs only the focused simulations above. A source pass proves no physical media or appliance state.
+The required CI job additionally validates every published USB record under `world-record/records/usb/` and `world-record/records/usb-failed/` against the v2 World schemas, and the DNS component registry, component review, build manifest, final review, license decision, and raw-image manifest schemas with both accepted and rejected fixtures. ShellCheck, shell syntax, Python syntax, Ruby syntax, and SPDX checks remain part of CI even when an operator runs only the focused simulations above. A source pass proves no physical media or appliance state.
 
 ## Check distribution mode
 
@@ -129,39 +132,39 @@ Inspect redacted DNS-build blockers and live removable targets separately:
 ./device-os targets
 ```
 
-Edit `world/drafts/jeonghan-home/world.yaml` to change desired devices or media. Keep real inventories and observations under the ignored local paths, never in the draft.
+Edit `world-record/config/home.yaml` to change desired devices or media. Keep real inventories and observations under the ignored local paths, never in the draft.
 
 ## Check network readiness
 
 From the management host, inspect the expected `/16` topology, node reachability, and Internet readiness separately:
 
 ```sh
-installer/management/network-preflight --json 10.0.0.1/16 | jq
-installer/management/network-preflight --offline --json 10.0.0.1/16 | jq
+engine/installer/management/network-preflight --json 10.0.0.1/16 | jq
+engine/installer/management/network-preflight --offline --json 10.0.0.1/16 | jq
 ```
 
 The offline form marks outbound DNS and HTTPS readiness unknown. Internet is required to fetch public artifacts and enroll Tailscale, but the already-built DNS installer boots and installs offline. A passing Internet probe does not establish LAN routing, node health, or DNS readiness.
 
 ## One USB: guided Debian OS and DNS installation
 
-The guided image is a candidate until BIOS and UEFI installation and a disposable `dns01` pilot pass. Build and validate on the designated M5 host, using its amd64 Debian 13 environment:
+The guided image is a candidate until BIOS and UEFI installation and a disposable `dns01` pilot pass. Build and validate on the build host (amd64 Debian 13):
 
 ```sh
-DNS_APPLIANCE_INSTALL_MODE=guided installer/installer/build-image
-DNS_APPLIANCE_INSTALL_MODE=guided installer/installer/check-readiness
+DNS_APPLIANCE_INSTALL_MODE=guided engine/installer/dns-image/build-image
+DNS_APPLIANCE_INSTALL_MODE=guided engine/installer/dns-image/check-readiness
 ```
 
 Only operator SSH public keys and the public age recipient enter the image. Keep the corresponding private keys outside the checkout on the management host. The default network profiles retain the planned `10.0.0.0/16` LAN and `10.0.5.1` through `.3`; do not deploy them on a `192.168.0.0/24` LAN without a coordinated network/profile change.
 
 For changes limited to the guided Debian Installer flow (`install-gate`,
 `prepare-installer`, `disk-identity`, guided templates, or the shared preseed),
-reuse a previously built guided ISO as a disposable VM base. On the M5 builder,
+reuse a previously built guided ISO as a disposable VM base. On the build host,
 refresh only those files and boot the result directly in the disposable VM:
 
 ```sh
-sh installer/installer/refresh-guided-iso \
-  installer/installer/simple-cdd/images/BASE_GUIDED.iso \
-  installer/artifacts/guided-iteration.iso
+sh engine/installer/dns-image/refresh-guided-iso \
+  engine/installer/dns-image/simple-cdd/images/BASE_GUIDED.iso \
+  engine/installer/artifacts/guided-iteration.iso
 ```
 
 This replays the base ISO's BIOS/UEFI boot metadata, replaces the five installer
@@ -178,7 +181,7 @@ Use the resulting ISO and matching build manifest with the existing `dns-install
 
 Keep the USB connected through first boot until encrypted enrollment completes. Qualify and recover `dns01` before repeating for `dns02` and `dns03`. Tailscale enrollment and cluster bootstrap still run from the management host after OS installation. An active role needs its existing generation-bound reinstall token plus a fresh on-target erase confirmation.
 
-The original reviewed-inventory path below remains available with the default `reviewed` mode.
+The reviewed-inventory path below uses the default `reviewed` mode.
 
 ## First pass: capture hardware inventory
 
@@ -199,10 +202,10 @@ perform a separately confirmed write:
 ./device-os targets
 DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
 DEVICE_OS_MEDIA=inventory-capture ./device-os world build-image \
-  --output "$PWD/installer/artifacts/inventory-capture.raw" \
+  --output "$PWD/engine/installer/artifacts/inventory-capture.raw" \
   --size EXACT_TARGET_BYTES
 sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn-image-macos \
-  --image "$PWD/installer/artifacts/inventory-capture.raw" \
+  --image "$PWD/engine/installer/artifacts/inventory-capture.raw" \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_TARGET_BYTES'
 ```
@@ -215,10 +218,10 @@ inspects or writes the live target.
 The resulting media contains Debian Live only. Boot each HP computer deliberately and follow the inventory guide on the USB. Capture one role at a time from the trusted live environment:
 
 ```sh
-mkdir -p installer/inventory/local
-sudo installer/installer/capture-inventory \
+mkdir -p world-record/local/inventory
+sudo engine/installer/dns-image/capture-inventory \
   dns01 10.0.5.1 enp1s0 /dev/sda \
-  > installer/inventory/local/dns01.conf
+  > world-record/local/inventory/dns01.conf
 ```
 
 Repeat for `dns02` and `dns03` with their actual interface and disk. Review product, UUID, NIC MAC, disk model, disk serial, size, role, and address. Keep `destructive_install_enabled=false` except for the single current physical pilot.
@@ -229,10 +232,10 @@ Use an amd64 Debian 13 builder. Copy only the operator's public SSH key and publ
 
 ```sh
 cp /path/to/id_ed25519.pub \
-  installer/installer/inputs/operator-authorized-keys
+  world-record/local/keys/operator-authorized-keys
 age-keygen -o /secure/dns-recovery-age-key.txt
 age-keygen -y /secure/dns-recovery-age-key.txt \
-  > installer/installer/inputs/age-recipient
+  > world-record/local/keys/age-recipient
 ```
 
 Install build dependencies, verify locked external inputs, fetch the digest-pinned Technitium source, and build:
@@ -240,23 +243,23 @@ Install build dependencies, verify locked external inputs, fetch the digest-pinn
 ```sh
 sudo apt-get install -y simple-cdd debian-cd debian-archive-keyring \
   reprepro rsync xorriso isolinux syslinux-common skopeo jq curl
-installer/build/verify-locks
-installer/installer/fetch-locked-sources
-installer/installer/build-image
+engine/installer/build/verify-locks
+engine/installer/dns-image/fetch-locked-sources
+engine/installer/dns-image/build-image
 ```
 
 For the guided one-USB path, prefix the build with
 `DNS_APPLIANCE_INSTALL_MODE=guided`; the default `reviewed` mode needs the
 captured inventories. The first build on an empty cache downloads the whole
 offline package set (about 2,100 packages, 1.8 GB) from `snapshot.debian.org`
-and took about 70 minutes on `m5m1`; later builds reuse the mirror and take
+and takes about 70 minutes on the build host; later builds reuse the mirror and take
 minutes.
 
 `build-image` refuses zero or multiple erase-enabled roles. Run
 `./device-os world readiness` before the build and keep only the current pilot
 set to `destructive_install_enabled=true`.
 
-The ISO appears under `installer/installer/simple-cdd/images/`; its matching manifest is `installer/artifacts/build-manifest.json`. Retain the package closure, checksums, SBOM, and build manifest outside Git. A successful build does not authorize a USB write.
+The ISO appears under `engine/installer/dns-image/simple-cdd/images/`; its matching manifest is `engine/installer/artifacts/build-manifest.json`. Retain the package closure, checksums, SBOM, and build manifest outside Git. A successful build does not authorize a USB write.
 
 ## Calculate exact fit and burn production media
 
@@ -285,27 +288,27 @@ The command destroys the selected USB. Never reuse a previous device path, seria
 On macOS, build a raw image from the exact DNS artifact and manifest, then write
 it. All paths passed into the container must stay inside this checkout:
 
-An ISO built on a separate amd64 builder goes into
-`installer/installer/simple-cdd/images/`. Its `build-manifest.json`,
+An ISO built on the build host goes into
+`engine/installer/dns-image/simple-cdd/images/`. Its `build-manifest.json`,
 `component-redistribution-registry.json` and `sbom.spdx.json` go together into
-`installer/artifacts/`. `world prepare` fetches and verifies the locked Ventoy
+`engine/installer/artifacts/`. `world prepare` fetches and verifies the locked Ventoy
 release that every World image needs:
 
 ```sh
 ./device-os targets
 ./device-os world prepare
 ./device-os world build-image \
-  --output "$PWD/installer/artifacts/dns-install.raw" \
+  --output "$PWD/engine/installer/artifacts/dns-install.raw" \
   --size EXACT_TARGET_BYTES \
-  --runtime-artifact dns-appliance="$PWD/installer/installer/simple-cdd/images/DNS_ISO" \
-  --runtime-manifest dns-appliance="$PWD/installer/artifacts/build-manifest.json"
+  --runtime-artifact dns-appliance="$PWD/engine/installer/dns-image/simple-cdd/images/DNS_ISO" \
+  --runtime-manifest dns-appliance="$PWD/engine/installer/artifacts/build-manifest.json"
 sudo ./device-os world burn-image-macos \
-  --image "$PWD/installer/artifacts/dns-install.raw" \
+  --image "$PWD/engine/installer/artifacts/dns-install.raw" \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_TARGET_BYTES'
 ```
 
-The image byte size must equal the target and the target must be removable, writable, MBR-compatible, and non-root. World burn commands process one device at a time. Passed readback creates a new tracked generation directory; failed or cancelled physical attempts create a tracked redacted event file. Review those new files and publish them through the normal pull-request path—the root writer never commits or pushes.
+The image byte size must equal the target and the target must be removable, writable, MBR-compatible, and non-root. World burn commands process one device at a time. Passed readback creates a new tracked generation directory under `world-record/records/usb/`; failed or cancelled physical attempts create a tracked redacted event file under `world-record/records/usb-failed/`. Review those new files and publish them through the normal pull-request path—the root writer never commits or pushes.
 
 ## Verify and install one appliance at a time
 
@@ -326,14 +329,14 @@ After the internal-disk boot, verify host-key fingerprint and key-only SSH, DNS 
 After all three standalone nodes have complete enrollment records:
 
 ```sh
-installer/management/import-enrollment \
+engine/installer/management/import-enrollment \
   --enrollment /Volumes/DNS-ENROLL \
   --identity /secure/dns-recovery-age-key.txt \
   --output /secure/dns-bootstrap
 
 DNS_CLUSTER_CREDENTIALS_DIR=/secure/dns-bootstrap \
 DNS_CLUSTER_ACCESS_OUTPUT=/secure/cluster-access.json.age \
-  installer/management/cluster-bootstrap
+  engine/installer/management/cluster-bootstrap
 ```
 
 Move imported values into the principal secret store, rotate bootstrap credentials, and delete temporary plaintext. Verify cluster peers and a DNS canary before enabling another management step.
@@ -345,7 +348,7 @@ Apply the reviewed tailnet policy first. Then provide protected OAuth file paths
 ```sh
 TAILSCALE_OAUTH_CLIENT_ID_FILE=/secure/tailscale/client-id \
 TAILSCALE_OAUTH_CLIENT_SECRET_FILE=/secure/tailscale/client-secret \
-  installer/management/tailscale-enroll --all
+  engine/installer/management/tailscale-enroll --all
 ```
 
 Confirm each node's hostname, `tag:dns-appliance`, Tailscale address, peer reachability, `accept-dns=false`, and absence of routes, exit-node behavior, Tailscale SSH, Serve, and Funnel.
@@ -364,14 +367,14 @@ Check health, create a plan, compare it with the reviewed zone change, then appl
 export TECHNITIUM_URL=https://10.0.5.1:53443
 export TECHNITIUM_TOKEN_FILE=/secure/dns/reader-token
 export TECHNITIUM_CA_FILE=/secure/dns/technitium-ca.pem
-installer/management/dnsctl health
+engine/installer/management/dnsctl health
 
 export TECHNITIUM_TOKEN_FILE=/secure/dns/planner-token
-installer/management/dnsctl plan installer/zones/home.arpa.zone
+engine/installer/management/dnsctl plan world-record/config/dns/home.arpa.zone
 
 approved_commit=$(git rev-parse HEAD)
 export TECHNITIUM_TOKEN_FILE=/secure/dns/applier-token
-installer/management/dnsctl apply installer/zones/home.arpa.zone \
+engine/installer/management/dnsctl apply world-record/config/dns/home.arpa.zone \
   --approved-commit "$approved_commit" \
   --confirm APPLY
 ```
@@ -385,13 +388,13 @@ Router DHCP DNS changes are last. Record old values, retain a wired recovery cli
 Collect only already-encrypted backups:
 
 ```sh
-installer/management/collect-backups /secure/dns-backups
+engine/installer/management/collect-backups /secure/dns-backups
 ```
 
 Periodically decrypt and restore one in an isolated Technitium environment; file presence alone is not recovery proof. The current restore command always disables TLS certificate verification. Use it only for an isolated restore drill; it is not qualified for a production node until trusted-CA or pinned-fingerprint verification is implemented. The drill still binds confirmation to the exact target URL:
 
 ```sh
-installer/management/restore-node \
+engine/installer/management/restore-node \
   --url https://restore-lab.local:53443 \
   --token-file /secure/dns/restore-token \
   --backup /secure/dns-backups/dns01/backup.zip.age \
@@ -402,7 +405,7 @@ installer/management/restore-node \
 Verify the restored canary and remove the isolated lab plaintext afterward; do not target a production node with this command. A completed appliance can be reinstalled only after a generation-bound authorization is written:
 
 ```sh
-installer/management/authorize-reinstall \
+engine/installer/management/authorize-reinstall \
   --enrollment /Volumes/DNS-ENROLL \
   --role dns01 \
   --confirm 'ERASE dns01'
@@ -417,7 +420,7 @@ sudo useradd --create-home --shell /bin/sh device-agent
 sudo install -d -o device-agent -g device-agent /opt/device-os-agent
 sudo -u device-agent python3 -m venv /opt/device-os-agent/venv
 sudo -u device-agent /opt/device-os-agent/venv/bin/python -m pip install \
-  --requirement /srv/diy-device-os-bootstrap-for-jeonghan/agent/requirements.lock
+  --requirement /srv/diy-device-os-bootstrap-for-jeonghan/engine/agent/requirements.lock
 ```
 
 Provision mode-0600 reader, planner, and optional applier token files readable by only `device-agent`; provision the trusted Technitium CA separately. Set the fixed gateway variables in the account's reviewed host-side environment and never accept them from the SSH client:
@@ -436,7 +439,7 @@ DEVICE_OS_AGENT_DNS03_URL=https://dns03:53443
 Omit the applier token and `DEVICE_OS_AGENT_ALLOW_APPLY` for the initial read-only deployment. Add the client's public key to the dedicated account with a forced command:
 
 ```text
-restrict,command="/srv/diy-device-os-bootstrap-for-jeonghan/agent/run" ssh-ed25519 AAAA... operator-agent
+restrict,command="/srv/diy-device-os-bootstrap-for-jeonghan/engine/agent/run" ssh-ed25519 AAAA... operator-agent
 ```
 
 The SSH server must not use `AcceptEnv` for gateway variables. Tailnet ACL and the host firewall permit only the reviewed client identity to reach this account's SSH port; no router port is forwarded. Configure the remote MCP client to invoke ordinary SSH:
@@ -456,7 +459,7 @@ Verify the isolated tool boundary and then the live forced-command path:
 
 ```sh
 /opt/device-os-agent/venv/bin/python \
-  /srv/diy-device-os-bootstrap-for-jeonghan/agent/tests/gateway_simulation.py
+  /srv/diy-device-os-bootstrap-for-jeonghan/engine/agent/tests/gateway_simulation.py
 ssh -T device-agent@management-host
 ```
 
@@ -467,20 +470,20 @@ Prove repository, World, capacity, network, tunnel, DNS health, and DNS plan cal
 | Name | Role and allowed scope |
 | --- | --- |
 | `DEVICE_OS_MEDIA` | Selects one declared World media ID for the current invocation; current values are `dns-install` and `inventory-capture` |
-| `DEVICE_OS_WORLD` | Selects an explicit draft when more than one exists; path must remain within the configured World roots |
+| `DEVICE_OS_WORLD` | Selects an explicit draft when more than one exists; path must remain within `world-record/` as registered in `world-record/world-playbook.yaml` |
 | `DEVICE_OS_WORLD_PLAN` | Installer working path for a resolved World plan; generated, not committed |
 | `USB_MEDIA_CATALOG` | Installer working path for the resolved media plan; generated, not committed |
 | `USB_MEDIA_CACHE_DIR` | Ignored cache for verified bootloader and public OS downloads; changing it does not bypass digest checks |
-| `DNS_APPLIANCE_INVENTORY_DIR` | Ignored directory containing reviewed real-machine inventory used by the DNS image build |
-| `DNS_APPLIANCE_AUTHORIZED_KEYS` | File containing only the operator's public SSH key material for the image |
-| `DNS_APPLIANCE_AGE_RECIPIENT` | File containing only the public age recipient used to encrypt enrollment output |
-| `DNS_APPLIANCE_CACHE_DIR` | Ignored cache for digest-pinned DNS runtime inputs |
-| `DNS_APPLIANCE_ARTIFACT_DIR` | Ignored destination for build manifests, checksums, package closure, and SBOM |
+| `DNS_APPLIANCE_INVENTORY_DIR` | Directory of per-role inventory used by the DNS image build; defaults to the ignored `world-record/local/inventory/` in reviewed mode and to `world-record/config/nodes/` in guided mode |
+| `DNS_APPLIANCE_AUTHORIZED_KEYS` | File containing only the operator's public SSH key material for the image; defaults to `world-record/local/keys/operator-authorized-keys` |
+| `DNS_APPLIANCE_AGE_RECIPIENT` | File containing only the public age recipient used to encrypt enrollment output; defaults to `world-record/local/keys/age-recipient` |
+| `DNS_APPLIANCE_CACHE_DIR` | Ignored cache for digest-pinned DNS runtime inputs; defaults to `engine/installer/cache/` |
+| `DNS_APPLIANCE_ARTIFACT_DIR` | Ignored destination for build manifests, checksums, package closure, and SBOM; defaults to `engine/installer/artifacts/` |
 | `DNS_CLUSTER_CREDENTIALS_DIR` | Protected management-host directory containing imported node credentials |
 | `DNS_CLUSTER_ACCESS_OUTPUT` | Protected destination for the encrypted cluster access bundle |
-| `DNS_CLUSTER_AGE_RECIPIENT` | Public age-recipient file used for the encrypted cluster access bundle |
+| `DNS_CLUSTER_AGE_RECIPIENT` | Public age-recipient file used for the encrypted cluster access bundle; defaults to `world-record/local/keys/age-recipient` |
 | `DNS_CLUSTER_DOMAIN` | Cluster domain override; defaults to `dns-cluster.home.arpa` and must match reviewed DNS intent |
-| `DNS_CLUSTER_ZONE_FILE` | Reviewed zone-file override; defaults to the tracked `home.arpa` desired state |
+| `DNS_CLUSTER_ZONE_FILE` | Reviewed zone-file override; defaults to the tracked `world-record/config/dns/home.arpa.zone` |
 | `DNSCTL_AUDIT_LOG` | Protected append-only destination for redacted DNS plan/apply events |
 | `TECHNITIUM_URL` | Direct management-command target URL; callers use reviewed fixed node endpoints, not arbitrary agent input |
 | `TECHNITIUM_TOKEN_FILE` | Protected role-specific token file for direct management commands |

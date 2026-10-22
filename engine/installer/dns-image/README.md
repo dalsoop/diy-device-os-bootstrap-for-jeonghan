@@ -1,4 +1,4 @@
-# Installer source
+# DNS Image Source
 
 This directory contains the first implementation of the Debian OS installer:
 
@@ -22,7 +22,7 @@ digest-pinned Technitium image, a checksum-pinned Tailscale client, and
 operational utilities without Internet access. First boot generates credentials
 once, verifies services, and writes age-encrypted recovery secrets plus plaintext
 `public.json`, sanitized logs, completion markers, and generation pointers to
-`DNS-ENROLL`. Tailscale remains logged out until the management machine supplies
+`DNS-ENROLL`. Tailscale remains logged out until the management host supplies
 a one-off key after Internet connectivity is available.
 
 See [`docs/os-install.md`](../docs/os-install.md) before building or booting it.

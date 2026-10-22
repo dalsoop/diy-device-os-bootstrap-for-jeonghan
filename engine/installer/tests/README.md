@@ -26,6 +26,12 @@ first-boot safety contracts. GitHub Actions runs the installer, management,
 Tailscale enrollment, media-catalog, and repository-contract simulations plus
 ShellCheck and Python syntax validation.
 
+`repository-contract.sh` also runs the documentation check over every tracked
+text file; `repository-contract.sh --documentation-only <checkout>` runs only
+that check. `documentation-check-simulation.sh` builds temporary Git fixtures
+with one failing and one passing case per documentation pattern and proves that
+a directory outside Git is rejected.
+
 `management-simulation.sh` covers machine-readable and audited DNS planning,
 the literal apply confirmation, generation-bound reinstall authorization, and
 the `/16` network prerequisite, generated first-boot recursion permissions for

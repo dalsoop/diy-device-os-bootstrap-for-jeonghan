@@ -4,9 +4,9 @@ This module owns reusable public bootloader and operating-system metadata. It is
 
 ## Boundaries
 
-- `catalog/index.json` is the closed-world registry. Every controlled JSON file appears exactly once, and every reference resolves to one controlled file.
-- `catalog/entries/` owns public media metadata. Private images, signed URLs, hardware bindings, guarded profiles, and personal selection do not belong here.
-- `catalog/bootloaders/` owns bootloader release metadata, not extraction or installation behavior.
+- `data/index.json` is the closed-world registry. Every controlled JSON file appears exactly once, and every reference resolves to one controlled file.
+- `data/entries/` owns public media metadata. Private images, signed URLs, hardware bindings, guarded profiles, and personal selection do not belong here.
+- `data/bootloaders/` owns bootloader release metadata, not extraction or installation behavior.
 - `schemas/` publishes the JSON shape; `bin/verify-catalog` is the executable CI gate; `tests/` owns isolated acceptance and rejection fixtures.
 - Installer source strategies and World policy are outside this module. Never add hooks or command fragments to a Catalog entry.
 
@@ -27,4 +27,4 @@ The schemas currently reject all additional properties, while the jq validator d
 
 ## Verification
 
-Run `catalog/bin/verify-catalog` and `catalog/tests/catalog-contract.sh`. Cover absent and unregistered files, duplicate IDs/paths/filenames, unsafe paths, malformed digests, non-HTTPS URLs, unsupported behavior, and any newly introduced field. A pass proves metadata consistency only; it does not prove vendor authenticity, successful download, firmware boot, or installation.
+Run `engine/catalog/bin/verify-catalog` and `engine/catalog/tests/catalog-contract.sh`. Cover absent and unregistered files, duplicate IDs/paths/filenames, unsafe paths, malformed digests, non-HTTPS URLs, unsupported behavior, and any newly introduced field. A pass proves metadata consistency only; it does not prove vendor authenticity, successful download, firmware boot, or installation.

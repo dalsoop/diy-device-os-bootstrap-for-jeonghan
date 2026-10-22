@@ -1,6 +1,6 @@
 # Completed World Generations
 
-This directory is intentionally empty until the first qualified write. A completed generation
+Each directory here is one completed generation. A generation
 appears only after one physical USB has been written and the required readback
 verification has succeeded.
 
@@ -30,4 +30,4 @@ silently migrate them. A convenience `latest` view may be derived, but it is
 not an authority.
 
 Failed and cancelled physical write attempts are not generations. Their
-redacted append-only records live under `world/events/YYYY/` instead.
+redacted append-only records live under `world-record/records/usb-failed/YYYY/` instead.

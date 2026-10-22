@@ -1,14 +1,14 @@
 # Agent management plane
 
 The management plane is separate from the DNS appliances.
-Run command examples from the monorepo root.
+Run command examples from the repository root.
 
 Implemented bootstrap and operating surfaces:
 
 - `import-enrollment` decrypts completed USB records into a caller-selected
   protected directory; it never writes credentials into the repository.
-- `cluster-bootstrap` initializes dns01, joins dns02/dns03, imports the catalog
-  backed `home.arpa` zone, and emits an age-encrypted agent token bundle.
+- `cluster-bootstrap` initializes dns01, joins dns02/dns03, imports the reviewed
+  `home.arpa` zone from `world-record/config/dns/home.arpa.zone`, and emits an age-encrypted agent token bundle.
 - `dnsctl health` uses the reader token.
 - `dnsctl plan` emits current and desired hashes plus a human diff.
 - `dnsctl apply` requires literal `--confirm APPLY`, a caller-supplied commit
@@ -44,14 +44,14 @@ Store the ID and secret outside this repository, one line per protected file:
 ```sh
 TAILSCALE_OAUTH_CLIENT_ID_FILE=/secure/tailscale/client-id \
 TAILSCALE_OAUTH_CLIENT_SECRET_FILE=/secure/tailscale/client-secret \
-  installer/management/tailscale-enroll --all
+  engine/installer/management/tailscale-enroll --all
 ```
 
 The nodes must already be reachable at `10.0.5.1` through `10.0.5.3` by the
 operator SSH key. Enrollment requires Internet access to the Tailscale control
 plane but does not change the appliances' local DNS resolver or routing role.
 
-The reviewed MCP gateway now lives under [`../../agent`](../../agent). It runs
+The reviewed MCP gateway lives in [`engine/agent/`](../../agent). It runs
 on a management host, reaches this module only through a fixed command
 allowlist, and uses stdio through a Tailscale-constrained SSH forced command.
 `dnsctl` remains the delegated apply and audit boundary; the gateway cannot

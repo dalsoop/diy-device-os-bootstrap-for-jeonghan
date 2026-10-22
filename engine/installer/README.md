@@ -2,7 +2,8 @@
 
 This module resolves the embedded data-only Catalog, verifies public downloads,
 assembles the Korean-first multiboot media layout, and enforces destructive
-target safety. The root [`device-os`](../device-os) command delegates here.
+target safety. The root [`device-os`](../../device-os) command delegates to
+[`device-os`](device-os) here.
 
 The embedded Catalog and local profile registry include Proxmox VE, Proxmox
 Backup Server, TrueNAS SCALE, Pop!_OS, Debian Live, and a guarded offline
@@ -14,7 +15,7 @@ installer for three HP DNS appliances. The World chooses the actual USB subset.
 
 ## Read-only workflow
 
-Run from the monorepo root:
+Run from the repository root:
 
 ```sh
 ./device-os world validate
@@ -24,12 +25,13 @@ Run from the monorepo root:
 ./device-os world simulate
 ```
 
-The resolver reads `../catalog/` from the same Git snapshot, validates its JSON
+The resolver reads `engine/catalog/data/` from the same Git snapshot, validates its JSON
 without executing Catalog code, and records both the monorepo commit and Catalog
 tree identity in the resolved plan. `simulate` skips image downloads and disk
 writes.
 
-World commands resolve selection from `../world/drafts/`. The reference
+World commands resolve selection from the draft registered in
+`world-record/world-playbook.yaml` (`world-record/config/home.yaml`). The reference
 selection in `collections/device-os.json` remains for contributors and defines
 menu groups. World burn commands delegate through the event recorder so a
 successful readback atomically publishes an append-only completed generation.
@@ -46,12 +48,12 @@ Podman/Docker loop-device builder, then burns it through the separately guarded
 `world burn-image-macos` command. `device-os targets` prints the current
 device/name/serial/size confirmation tuple. The burn commands delegate to the
 internal writer implementations. This derivative exposes only the documented
-`burn` spellings and does not retain old write-command aliases.
+`burn` spellings; there are no write-command aliases.
 
-Read [operations](../docs/operations.md), [security](../docs/security.md), and the
+Read [operations](../../docs/operations.md), [security](../../docs/security.md), and the
 [physical verification gates](docs/verification.md) before any release or disk
 write. Ordinary operators should begin with the root
-[Getting Started guide](../docs/getting-started.md).
+[Getting Started guide](../../docs/getting-started.md).
 
 ## Module map
 
@@ -60,10 +62,16 @@ write. Ordinary operators should begin with the root
 | `device-os` | Module command implementation |
 | `usb-media/` | Catalog resolution, capacity, download, menu, and writers |
 | `collections/` | Reference selection and shared menu groups |
-| `installer/` | Offline DNS appliance image and guarded install gate |
-| `management/` | DNS cluster, Tailscale, desired state, backup, and recovery |
-| `inventory/` | Public examples; real observations remain ignored |
+| `dns-image/` | Offline DNS appliance image and guarded install gate |
+| `management/` | DNS cluster, Tailscale, desired-state apply, backup, and recovery |
+| `build/` | Immutable external input locks and distribution contracts |
+| `schemas/` | Installation, enrollment, and distribution record shapes |
 | `tests/` | Isolated source and rejection simulations |
+| `docs/` | Installer procedures and physical verification gates |
+
+Per-role node profiles and the DNS zone the Installer consumes live in
+`world-record/config/`; real hardware captures and operator public keys live in
+the ignored `world-record/local/`.
 
 Adding an OS with an existing `locked-download` contract is a Catalog data
 change. The DNS image remains a caller-supplied `runtime-artifact`. A new source

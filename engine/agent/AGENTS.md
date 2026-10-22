@@ -7,7 +7,7 @@ policy.
 ## Boundaries
 
 - Delegate World operations to the root `device-os` command.
-- Delegate DNS operations to reviewed commands under `installer/management/`.
+- Delegate DNS operations to reviewed commands under `engine/installer/management/`.
 - Never reproduce Installer logic, Catalog metadata, or World state here.
 - Never expose USB burn, internal-disk installation, restore, reinstall
   authorization, enrollment, arbitrary shell, arbitrary path, or arbitrary URL

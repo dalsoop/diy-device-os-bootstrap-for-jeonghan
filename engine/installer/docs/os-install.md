@@ -37,9 +37,9 @@ Boot a trusted Debian live environment and identify the wired interface and the
 single internal target disk. From a checkout of this repository, run:
 
 ```sh
-mkdir -p installer/inventory/local
-sudo installer/installer/capture-inventory dns01 10.0.5.1 enp1s0 /dev/sda \
-  > installer/inventory/local/dns01.conf
+mkdir -p world-record/local/inventory
+sudo engine/installer/dns-image/capture-inventory dns01 10.0.5.1 enp1s0 /dev/sda \
+  > world-record/local/inventory/dns01.conf
 ```
 
 Repeat for `dns02` and `dns03`. Review every generated file. Only after confirming
@@ -48,8 +48,8 @@ For the first physical pilot, enable only `dns01`; disabled role files may remai
 as copies of their examples:
 
 ```sh
-cp installer/inventory/nodes/dns02.conf.example installer/inventory/local/dns02.conf
-cp installer/inventory/nodes/dns03.conf.example installer/inventory/local/dns03.conf
+cp world-record/config/nodes/dns02.conf.example world-record/local/inventory/dns02.conf
+cp world-record/config/nodes/dns03.conf.example world-record/local/inventory/dns03.conf
 ```
 
 The builder requires exactly one enabled role and rejects both zero and multiple
@@ -58,7 +58,7 @@ erase-enabled inventories.
 Copy the operator's public SSH key, never the private key:
 
 ```sh
-cp /path/to/id_ed25519.pub installer/installer/inputs/operator-authorized-keys
+cp /path/to/id_ed25519.pub world-record/local/keys/operator-authorized-keys
 ```
 
 Create a dedicated age identity on the management machine and copy only its
@@ -67,7 +67,7 @@ public recipient into the installer input:
 ```sh
 age-keygen -o /secure/dns-recovery-age-key.txt
 age-keygen -y /secure/dns-recovery-age-key.txt \
-  > installer/installer/inputs/age-recipient
+  > world-record/local/keys/age-recipient
 ```
 
 ## Build
@@ -77,19 +77,19 @@ Build on an amd64 Debian 13 machine with `simple-cdd` installed:
 ```sh
 sudo apt-get install simple-cdd debian-cd debian-archive-keyring \
   reprepro rsync xorriso isolinux syslinux-common skopeo jq curl
-installer/installer/fetch-locked-sources
-installer/installer/build-image
+engine/installer/dns-image/fetch-locked-sources
+engine/installer/dns-image/build-image
 ```
 
 The builder refuses macOS, non-amd64 hosts, missing SSH keys, incomplete
 inventory, placeholders in enabled roles, malformed hashes, and a completely
 disabled inventory. Build output is written under
-`installer/installer/simple-cdd/images/` and remains ignored by Git.
+`engine/installer/dns-image/simple-cdd/images/` and remains ignored by Git.
 
 The source lock currently selects Debian 13.7, the `20261011T000000Z` Debian
 snapshot, Simple-CDD 0.6.9, and the Technitium 15.6.1 linux/amd64 manifest
 digest, plus Tailscale 1.104.1 for linux/amd64 by SHA-256. Build evidence is
-emitted under ignored `installer/artifacts/`.
+emitted under ignored `engine/installer/artifacts/`.
 
 ## Add the DNS image to the multiboot USB
 
@@ -138,14 +138,14 @@ machine so no shared join secret is embedded in the public installer.
 After all three `ACTIVE` records exist, import and cluster them:
 
 ```sh
-installer/management/import-enrollment \
+engine/installer/management/import-enrollment \
   --enrollment /Volumes/DNS-ENROLL \
   --identity /secure/dns-recovery-age-key.txt \
   --output /secure/dns-bootstrap
 
 DNS_CLUSTER_CREDENTIALS_DIR=/secure/dns-bootstrap \
 DNS_CLUSTER_ACCESS_OUTPUT=/secure/cluster-access.json.age \
-  installer/management/cluster-bootstrap
+  engine/installer/management/cluster-bootstrap
 ```
 
 Cockpit is then available as `dns-operator` at `https://10.0.5.1:9090` through

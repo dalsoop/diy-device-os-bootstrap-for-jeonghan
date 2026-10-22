@@ -83,7 +83,7 @@ Routine expiration is not imposed by this repository on externally owned long-li
 
 ## Audit policy
 
-Git commits, pull-request review, and required CI checks are the durable record for desired state, source locks, and configuration changes. World burn commands serialize physical attempts and record exact source identity, artifact digests, redacted target model and size, write/readback outcome, and timestamps without committing raw serials. Successful evidence is stored inside its immutable generation; failed and cancelled attempts use the separate append-only event tree. The root writer never commits or pushes Git state.
+Git commits, pull-request review, and required CI checks are the durable record for desired state, source locks, and configuration changes. World burn commands serialize physical attempts and record exact source identity, artifact digests, redacted target model and size, write/readback outcome, and timestamps without committing raw serials. Successful evidence is stored inside its immutable generation; failed and cancelled attempts use the separate append-only event tree under `world-record/records/usb-failed/`. The root writer never commits or pushes Git state.
 
 `dnsctl` appends redacted JSONL for completed plan operations and apply API outcomes. Confirmation, commit, dirty-zone, and transport failures can currently exit before an audit event; the log therefore does not prove that a saved plan was reviewed or a pull request approved.
 

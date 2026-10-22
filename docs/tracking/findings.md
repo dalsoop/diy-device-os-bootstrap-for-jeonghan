@@ -150,27 +150,29 @@ documentation gap found, the missing `world prepare` before the macOS
 `dns-install` build, is fixed.
 
 The disposable QEMU launch, key-input and screenshot tools used for the VM
-installs, and the read-only enrollment inspection, exist only on `m5m1`
-(`/Users/m5m1/dns-guided-vm`). The repository can build every artifact but
+installs, and the read-only enrollment inspection, exist only on the VM host,
+outside the repository. The repository can build every artifact but
 cannot reproduce the VM qualification by itself. Closing this requires moving
 those tools into the repository with path rejection for real devices, as
 designed in the 2026-10-21 qualification plan.
 
-## Hosted CI conflicts with the M5-only validation policy
+## Hosted CI conflicts with the build-host-only validation policy
 
 On 2026-10-21, `.github/workflows/ci.yml` still selects GitHub-hosted
 `ubuntu-24.04` for the required `contracts` job on pull requests and pushes to
-`main`. The operator requires builds, tests, and lint gates to run only on
-`m5m1` or `m5m2`. Opening a pull request would therefore start validation on a
-disallowed host, even though source validation has passed separately on `m5m1`.
+`main`. The operator requires builds, tests, and lint gates to run only on the
+designated build hosts. Opening a pull request would therefore start validation
+on a disallowed host, even though source validation has passed separately on the
+build host.
 
 The pending Tailscale DNS correction and newly verified USB generation remain
 on branches without a pull request. The workflow does not yet connect the
-required GitHub check to the designated M5 validation infrastructure. Closing
+required GitHub check to the designated build-host validation infrastructure. Closing
 this requires a reviewed runner/workflow integration; the required check and
 branch protection have not been changed or bypassed.
 
 **Operator decision (2026-10-22):** this repository is exempt. Its required
 `contracts` check may keep running on GitHub-hosted `ubuntu-24.04` for pull
 requests and `main`. Image builds, VM qualification, and physical media work
-stay on `m5m1`/`m5m2`. Moving the check to an M5 runner remains optional.
+stay on the designated build hosts. Moving the check to a build-host runner
+remains optional.

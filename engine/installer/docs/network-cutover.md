@@ -12,7 +12,7 @@ way to restore its previous LAN address and mask. Record the old DHCP DNS values
 Run the static check from the management machine:
 
 ```sh
-installer/management/network-preflight 10.0.0.1/16
+engine/installer/management/network-preflight 10.0.0.1/16
 ```
 
 The default run records the management host's default gateway and also checks

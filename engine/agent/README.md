@@ -32,7 +32,7 @@ repository:
 ```sh
 python3 -m venv /opt/device-os-agent/venv
 /opt/device-os-agent/venv/bin/python -m pip install \
-  --requirement /srv/diy-device-os-bootstrap-for-jeonghan/agent/requirements.lock
+  --requirement /srv/diy-device-os-bootstrap-for-jeonghan/engine/agent/requirements.lock
 ```
 
 Configure only credential file paths. Keep the files readable by the dedicated
@@ -86,7 +86,7 @@ confirmation, matching `HEAD`, and a clean tracked zone file.
 Point an MCP host at the following stdio command:
 
 ```text
-/srv/diy-device-os-bootstrap-for-jeonghan/agent/run
+/srv/diy-device-os-bootstrap-for-jeonghan/engine/agent/run
 ```
 
 The wrapper uses `DEVICE_OS_AGENT_PYTHON` when set and otherwise uses
@@ -106,7 +106,7 @@ For a dedicated `device-agent` account, constrain its SSH public key to the
 gateway command in `authorized_keys`:
 
 ```text
-restrict,command="/srv/diy-device-os-bootstrap-for-jeonghan/agent/run" ssh-ed25519 AAAA... operator-agent
+restrict,command="/srv/diy-device-os-bootstrap-for-jeonghan/engine/agent/run" ssh-ed25519 AAAA... operator-agent
 ```
 
 Then configure the remote MCP host to launch:
@@ -136,7 +136,7 @@ appliances.
 Run the isolated simulation after installing the locked dependencies:
 
 ```sh
-/opt/device-os-agent/venv/bin/python agent/tests/gateway_simulation.py
+/opt/device-os-agent/venv/bin/python engine/agent/tests/gateway_simulation.py
 ```
 
 The simulation verifies tool exposure and safety delegation. A live rollout

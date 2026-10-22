@@ -1,16 +1,16 @@
 # World Module
 
-This module owns Jeonghan's single accumulating home-infrastructure World. DNS is the first service represented in it; future device roles and media extend `jeonghan-home` rather than creating DNS-, storage-, or hypervisor-specific Worlds.
+This module holds the World tools for Jeonghan's single accumulating home-infrastructure World. The World data itself lives in `world-record/`; this module reads it and publishes records into it. DNS is the first service represented in it; future device roles and media extend `jeonghan-home` rather than creating DNS-, storage-, or hypervisor-specific Worlds.
 
 ## Boundaries
 
-- `world-playbook.yaml` registers mutable draft paths, the completed-generation root, timezone, and generation format.
-- `drafts/jeonghan-home/world.yaml` owns mutable assets, networks, nodes, services, media selection, language, and fail-closed intent.
-- `worlds/` owns immutable completed physical USB generations.
-- `events/` owns append-only redacted records for failed or cancelled physical writes; successful event records live inside their generation.
-- `schemas/` owns the versioned event and verification record shapes.
-- `local/` owns ignored machine-local observations and public inputs; secrets and raw hardware inventory remain outside Git.
-- `bin/resolve-world` validates and emits declarative plans. It never downloads images, invokes Catalog code, or writes a device.
+- `bin/resolve-world` reads `world-record/world-playbook.yaml` and the drafts it registers, validates them, and emits declarative plans. Registered paths must stay inside `world-record/`. It never downloads images, invokes Catalog code, or writes a device.
+- `bin/record-usb-event` serializes physical writes and publishes their records into `world-record/records/`. Its generation root equals the playbook's `generations.root`.
+- `schemas/` owns the versioned published event and verification record shapes (schema version 2).
+- `tests/` owns the World contract and USB event simulations.
+- Configuration is not owned here: `world-record/world-playbook.yaml` registers the draft, the completed-generation root, timezone, and generation format, and `world-record/config/home.yaml` owns assets, networks, nodes, services, media selection, language, and fail-closed intent.
+- Records are not owned here either: `world-record/records/usb/` holds immutable completed physical USB generations, and `world-record/records/usb-failed/` holds append-only redacted records for failed or cancelled physical writes; successful event records live inside their generation.
+- `world-record/local/` holds ignored machine-local observations and public inputs; secrets and raw hardware inventory remain outside Git.
 - Public release metadata belongs to the Catalog. Fetching, image assembly, target inspection, and erasure belong to the Installer.
 
 ## Invariants
@@ -26,10 +26,10 @@ This module owns Jeonghan's single accumulating home-infrastructure World. DNS i
 
 ## Change pattern
 
-Edit the draft for personal intent. Add reusable public release metadata to the Catalog and executable behavior to the Installer instead of duplicating either here. A World vocabulary change updates the resolver, Installer consumer, fixtures, and generation contract together.
+Edit `world-record/config/home.yaml` for personal intent. Add reusable public release metadata to the Catalog and executable behavior to the Installer instead of duplicating either here. A World vocabulary change updates the resolver, Installer consumer, fixtures, and generation contract together.
 
-The World event recorder serializes physical writes, keeps pending state under ignored `local/`, records unsuccessful attempts under `events/`, and atomically publishes successful readback evidence under `worlds/`. Do not create either record from a plan, build, capacity query, or simulation.
+The World event recorder serializes physical writes, keeps pending state under the ignored `world-record/local/usb-events/`, records unsuccessful attempts under `world-record/records/usb-failed/`, and atomically publishes successful readback evidence under `world-record/records/usb/`. Do not create either record from a plan, build, capacity query, or simulation.
 
 ## Verification
 
-Run `world/tests/world-contract-simulation.rb` and `world/tests/usb-event-simulation.rb`, then exercise `./device-os world validate`, `available`, `plan`, `capacity`, and `simulate`. Cover unknown or duplicate IDs, missing references, duplicate addresses, unreachable gateways, invalid paths, unsupported language, invalid default media, weakened safety policy, failed writes, readback failure, and generation collisions. These checks prove source behavior only, not physical media creation.
+Run `engine/world/tests/world-contract-simulation.rb` and `engine/world/tests/usb-event-simulation.rb`, then exercise `./device-os world validate`, `available`, `plan`, `capacity`, and `simulate`. Cover unknown or duplicate IDs, missing references, duplicate addresses, unreachable gateways, invalid paths, unsupported language, invalid default media, weakened safety policy, failed writes, readback failure, and generation collisions. These checks prove source behavior only, not physical media creation.

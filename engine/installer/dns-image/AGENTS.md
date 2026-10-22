@@ -3,7 +3,7 @@
 This module builds the guarded, offline DNS-appliance image and performs
 first-boot enrollment.
 
-- Build only from reviewed immutable locks on the supported amd64 Debian host.
+- Build only from reviewed immutable locks on the build host (amd64 Debian 13).
 - Never embed an SSH private key, age identity, OAuth secret, plaintext password,
   real inventory outside ignored paths, or cluster join credential.
 - Partitioning must be unreachable until exactly one enabled role and one

@@ -6,10 +6,10 @@ This module is the repository's execution and safety boundary. It resolves World
 
 - `usb-media/` owns resolution, capacity, download, staging, Ventoy rendering, and physical USB writers.
 - `collections/` owns contributor reference grouping, not the personal selection used by ordinary World commands.
-- `installer/` owns the offline DNS image, install gate, and first-boot enrollment; it does not own general public OS behavior.
-- `inventory/` contains public examples only. Real hardware captures live in ignored local storage.
+- `dns-image/` owns the offline DNS image, install gate, and first-boot enrollment; it does not own general public OS behavior.
+- Per-role node profiles and their public examples live in `world-record/config/nodes/`. Real hardware captures live in the ignored `world-record/local/inventory/`, and operator public keys in the ignored `world-record/local/keys/`.
 - `management/` owns post-install DNS, Tailscale, backup, restore, reinstall authorization, and read-only monitoring from a trusted host.
-- `build/` owns immutable external input locks; `schemas/` owns exchanged record shapes; `tests/` owns non-destructive simulations; `zones/` owns reviewed DNS desired state.
+- `build/` owns immutable external input locks; `schemas/` owns exchanged record shapes; `tests/` owns non-destructive simulations; `docs/` owns installer procedures and physical verification gates. Reviewed DNS desired state lives in `world-record/config/dns/`.
 - Long-lived credentials belong outside the checkout. Router mutation and arbitrary remote administration are outside this module.
 
 ## Invariants
@@ -30,6 +30,6 @@ CLI and record changes update every producer, consumer, schema, fixture, and ope
 
 ## Verification
 
-Run shell syntax and ShellCheck for executable shell files, Python syntax for the status monitor, and all scripts under `installer/tests/`. Destructive fixtures use temporary fake device trees and must never open a real block device, mounted USB, live DNS node, or production credential.
+Run shell syntax and ShellCheck for executable shell files, Python syntax for the status monitor, and all scripts under `engine/installer/tests/`. Destructive fixtures use temporary fake device trees and must never open a real block device, mounted USB, live DNS node, or production credential.
 
-An image build requires the supported amd64 Debian 13 environment and immutable locks. Physical qualification then advances through disposable VM BIOS/UEFI, one `dns01` pilot, and one-at-a-time expansion. Passing source simulations must not be reported as physical qualification.
+An image build requires the build host (amd64 Debian 13) and immutable locks. Physical qualification then advances through disposable VM BIOS/UEFI, one `dns01` pilot, and one-at-a-time expansion. Passing source simulations must not be reported as physical qualification.

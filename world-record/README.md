@@ -1,9 +1,41 @@
-# Jeonghan Home World
+# World Record
 
-This module is the operator-owned intent for Jeonghan's home infrastructure. The
-mutable draft is
-[`drafts/jeonghan-home/world.yaml`](drafts/jeonghan-home/world.yaml). Editing it
-does not create a USB and never authorizes a destructive operation.
+This folder is everything you need as the user of this repository. It holds
+what you decide about Jeonghan's home, what you keep private on your own
+machine, and what has happened so far. Everything else in the repository is
+machinery in `engine/` that reads this folder; you do not need to open it.
+
+Editing anything here never creates a USB and never authorizes a destructive
+operation. Writes happen only through `./device-os` with a target-specific
+confirmation.
+
+```text
+world-record/
+├── README.md               this guide
+├── world-playbook.yaml     registry of the paths below, read by the World tools
+├── config/                 what you decide (tracked)
+│   ├── home.yaml
+│   ├── nodes/
+│   └── dns/
+├── local/                  what stays private on your machine (ignored)
+│   ├── keys/
+│   ├── inventory/
+│   └── usb-events/
+└── records/                what happened (tracked, never edited)
+    ├── usb/
+    ├── usb-failed/
+    └── verification/
+```
+
+## config/ — what you edit
+
+| To change | Edit |
+| --- | --- |
+| Networks, nodes, services, media selections, or policies of the home | [`config/home.yaml`](config/home.yaml) |
+| The reviewed hardware profile of one DNS role (`dns01`..`dns03`) | `config/nodes/<role>.conf.example` and [`config/nodes/nodes.example.yml`](config/nodes/nodes.example.yml) |
+| DNS records served by the cluster | [`config/dns/home.arpa.zone`](config/dns/home.arpa.zone) and [`config/dns/home.arpa.example.yml`](config/dns/home.arpa.example.yml) |
+
+Check every change before anything is built:
 
 ```sh
 ./device-os world validate
@@ -16,37 +48,42 @@ The default `dns-install` media selects only `dns-appliance`. The separate
 `inventory-capture` media selects only `debian-live`. Both use Korean menu
 presentation; the DNS installer itself is also configured for `ko_KR.UTF-8`.
 
-## Physical USB generations
+See [`config/nodes/AGENTS.md`](config/nodes/AGENTS.md) and
+[`config/dns/AGENTS.md`](config/dns/AGENTS.md) for the rules of each part.
 
-Every successfully verified physical USB creation receives a new immutable ID:
+## local/ — what stays private
 
-```text
-worlds/{YYYYMMDDHHmmss}-{world-slug}/
-```
+`local/` is ignored by Git except its README and the public `keys/*.example`
+templates. It holds operator public keys, real hardware captures, and the burn
+recorder's working state. See [`local/README.md`](local/README.md).
 
-The timestamp is captured in `Asia/Seoul` when the resolved World is sealed
-immediately before the target-specific write. It is not draft creation time,
-file modification time, or commit time. Rewriting identical intent to another
-USB still creates a new generation. Completed generations are never edited or
-overwritten.
+Passwords, tokens, private SSH keys, age identities, and recovery archives do
+not belong here either; they stay in the principal secret store.
 
-```text
-world/
-├── world-playbook.yaml
-├── drafts/jeonghan-home/world.yaml
-├── events/README.md
-├── worlds/README.md
-├── schemas/
-└── local/README.md
-```
+## records/ — what happened
 
-`drafts/` is mutable desired state. `worlds/` is append-only completed history.
-`events/` is append-only failed and cancelled physical-attempt history.
-`local/` contains ignored machine-local observations and reviewed public inputs.
-Generated images, caches, credentials, private keys, raw hardware identifiers,
-and recovery material do not belong in Git.
+`records/` is written by the tools and is never edited by hand.
+
+- `records/usb/` holds one immutable generation per successfully verified
+  physical USB creation, named `{YYYYMMDDHHmmss}-{world-slug}/`. The timestamp
+  is captured in `Asia/Seoul` when the resolved World is sealed immediately
+  before the target-specific write. Rewriting identical intent to another USB
+  still creates a new generation. See [`records/usb/README.md`](records/usb/README.md).
+- `records/usb-failed/` holds redacted records of physical writes that failed
+  or were cancelled. They never become generations. See
+  [`records/usb-failed/README.md`](records/usb-failed/README.md).
+- `records/verification/` holds verification reports for source checks,
+  simulations, and VM qualification runs.
 
 `world burn` and `world burn-image-macos` serialize physical attempts. They
-stage pending state under ignored `local/`, publish a completed generation only
-after writer readback passes, and retain redacted unsuccessful event records.
-A plan or successful simulation is not evidence that a physical USB was written.
+stage pending state under the ignored `local/usb-events/`, publish a completed
+generation only after writer readback passes, and retain redacted records of
+unsuccessful attempts. A plan or successful simulation is not evidence that a
+physical USB was written.
+
+## world-playbook.yaml
+
+[`world-playbook.yaml`](world-playbook.yaml) tells the World tools where the
+home definition (`config/home.yaml`) and the generation root (`records/usb`)
+live, the timezone, and the generation ID format. Registered paths must stay
+inside this folder.

@@ -12,13 +12,13 @@ execution and credential boundaries.
 
 ## Decision
 
-Add a root `agent/` access plane that exposes a small MCP tool allowlist. The
+Add an `engine/agent/` access plane that exposes a small MCP tool allowlist. The
 gateway runs only on a trusted management host and uses MCP stdio. Remote
 clients reach that stdio process through a forced ordinary-SSH command carried
 over the reviewed Tailscale network.
 
 The gateway delegates to the root `device-os` command and reviewed
-`installer/management/` commands. It owns no desired state and reimplements no
+`engine/installer/management/` commands. It owns no desired state and reimplements no
 Installer behavior. USB burn, operating-system installation, restore,
 reinstall authorization, enrollment, arbitrary shell, arbitrary path, and
 arbitrary URL capabilities are not exposed.

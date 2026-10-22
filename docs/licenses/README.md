@@ -12,6 +12,6 @@ This repository is licensed under the GNU GPL version 3 in the root
 The DNS image build and both USB writers copy these files into generated media
 and fail when one is missing. They install them under the same file names on
 the USB (`licenses/`) and on the target (`/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/`).
-When adding or renaming a file here, update `installer/installer/build-image`,
-`installer/usb-media/write-usb-linux`, the `contracts` workflow and
-`installer/tests/repository-contract.sh` together.
+When adding or renaming a file here, update `engine/installer/dns-image/build-image`,
+`engine/installer/usb-media/write-usb-linux`, the `contracts` workflow and
+`engine/installer/tests/repository-contract.sh` together.

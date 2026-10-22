@@ -61,12 +61,17 @@ cd diy-device-os-bootstrap-for-jeonghan
 ./device-os world simulate
 ```
 
-The operator normally changes only
-[`world/drafts/jeonghan-home/world.yaml`](world/drafts/jeonghan-home/world.yaml).
+The user only needs [`world-record/`](world-record/README.md). Its `config/`
+holds what you decide, `local/` holds private inputs that never enter Git, and
+`records/` holds what happened and is never edited. Everything in `engine/` is
+machinery that reads `world-record/`; you do not need to open it.
+
+The home definition is
+[`world-record/config/home.yaml`](world-record/config/home.yaml).
 It defines `dns01`, `dns02`, and `dns03` at `10.0.5.1` through `10.0.5.3`, with
-the router at `10.0.0.1`. Hardware observations, keys, generated media,
-credentials, and recovery material stay outside Git in the documented ignored
-locations or the principal secret store.
+the router at `10.0.0.1`. Hardware observations and keys stay in the ignored
+`world-record/local/`; generated media, credentials, and recovery material stay
+outside Git in the documented ignored locations or the principal secret store.
 
 ## Build and burn flow
 
@@ -102,10 +107,10 @@ devices. The later write remains a separate target-specific action:
 ./device-os targets
 DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
 DEVICE_OS_MEDIA=inventory-capture ./device-os world build-image \
-  --output "$PWD/installer/artifacts/inventory-capture.raw" \
+  --output "$PWD/engine/installer/artifacts/inventory-capture.raw" \
   --size EXACT_TARGET_BYTES
 sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn-image-macos \
-  --image "$PWD/installer/artifacts/inventory-capture.raw" \
+  --image "$PWD/engine/installer/artifacts/inventory-capture.raw" \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_TARGET_BYTES'
 ```
@@ -120,24 +125,31 @@ without printing hardware identities or credentials.
 ```text
 diy-device-os-bootstrap-for-jeonghan/
 ├── device-os              operator command
-├── world/                 home intent and append-only USB generations
-├── catalog/               data-only public OS and bootloader metadata
-├── installer/             builders, media assembly, and destructive gates
-├── agent/                 constrained management-host MCP access plane
+├── world-record/          the user's folder
+│   ├── config/            home intent, per-role node profiles, DNS zone
+│   ├── local/             ignored keys, hardware captures, burn recorder state
+│   └── records/           append-only USB generations, failed writes, verification reports
+├── engine/                machinery
+│   ├── installer/         builders, media assembly, management, and destructive gates
+│   ├── catalog/           data-only public OS and bootloader metadata
+│   ├── agent/             constrained management-host MCP access plane
+│   └── world/             World resolver and USB recorder
 └── docs/                  architecture, workflow, and decisions
 ```
 
-- `world/` owns operator intent, not erasure authority.
-- `catalog/` owns public metadata and executes nothing.
-- `installer/` validates all inputs and live targets before writing.
-- `agent/` exposes planning and reviewed DNS operations, never USB burn or OS
-  installation.
+- `world-record/` owns operator intent and history, not erasure authority.
+- `engine/world/` resolves that intent and publishes records after verified writes.
+- `engine/catalog/` owns public metadata and executes nothing.
+- `engine/installer/` validates all inputs and live targets before writing.
+- `engine/agent/` exposes planning and reviewed DNS operations, never USB burn or
+  OS installation.
 
-Each verified physical USB creation publishes an immutable World
-generation named `{YYYYMMDDHHmmss}-{world-slug}`. The timestamp is the USB
-creation event in `Asia/Seoul`, not draft or commit time. Failed or cancelled
-physical attempts are recorded separately under `world/events/`; simulations
-do not create physical evidence.
+Each verified physical USB creation publishes an immutable World generation
+under `world-record/records/usb/` named `{YYYYMMDDHHmmss}-{world-slug}`. The
+timestamp is the USB creation event in `Asia/Seoul`, not draft or commit time.
+Failed or cancelled physical attempts are recorded separately under
+`world-record/records/usb-failed/`; simulations do not create physical
+evidence.
 
 ## Documentation
 
@@ -152,9 +164,9 @@ do not create physical evidence.
 - [Implementation status](docs/tracking/status.md)
 - [Open findings](docs/tracking/findings.md)
 - [Decision history](docs/tracking/decisions/index.md)
-- [DNS install usability audit](installer/docs/dns-install-usability-audit.md)
-- [Physical verification gates](installer/docs/verification.md)
-- [Agent Gateway](agent/README.md)
+- [DNS install usability audit](engine/installer/docs/dns-install-usability-audit.md)
+- [Physical verification gates](engine/installer/docs/verification.md)
+- [Agent Gateway](engine/agent/README.md)
 
 ## Upstream updates
 

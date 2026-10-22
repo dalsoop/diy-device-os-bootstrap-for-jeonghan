@@ -1,7 +1,7 @@
 # Catalog Module
 
 This module is the data-only registry of public operating-system and bootloader
-metadata used by the sibling Installer. It publishes official HTTPS locations,
+metadata used by the Installer in `engine/installer/`. It publishes official HTTPS locations,
 locked SHA-256 values, stable IDs, menu labels, boot behavior, and an explicit
 redistribution-review status. It never
 downloads, executes, or writes the media it describes.
@@ -14,17 +14,17 @@ Catalog Git tree identity in every resolved plan.
 ## Layout
 
 ```text
-catalog/
-├── catalog/index.json
-├── catalog/entries/*.json
-├── catalog/bootloaders/*.json
+engine/catalog/
+├── data/index.json
+├── data/entries/*.json
+├── data/bootloaders/*.json
 ├── schemas/
 ├── bin/verify-catalog
 └── tests/catalog-contract.sh
 ```
 
 Each product has one JSON file and appears exactly once in
-`catalog/index.json`. Stable IDs do not contain release numbers. Public entries
+`data/index.json`. Stable IDs do not contain release numbers. Public entries
 remain interactive installers or live environments with
 `profile_adapter: none`; guarded local profiles belong to the Installer and
 selection belongs to the World.
@@ -59,7 +59,7 @@ its redistribution status together and rely on the root CI for validation. A pas
 Catalog test proves metadata consistency only, not download provenance, boot,
 firmware, or installation behavior.
 
-See the repository [contracts](../docs/contracts.md),
-[security policy](../docs/security.md), and
-[engineering standards](../docs/standards.md).
+See the repository [contracts](../../docs/contracts.md),
+[security policy](../../docs/security.md), and
+[engineering standards](../../docs/standards.md).
 

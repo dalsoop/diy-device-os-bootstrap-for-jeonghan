@@ -1,7 +1,7 @@
 # USB Media Module
 
-This module resolves the sibling data-only Catalog with the reference choices
-and writes the resulting multiboot USB.
+This module resolves the data-only Catalog in `engine/catalog/data/` with the
+reference choices and writes the resulting multiboot USB.
 
 - Treat external Catalog files as untrusted data. Never execute fetched code.
 - Record the exact monorepo commit and Catalog tree. Accept an external

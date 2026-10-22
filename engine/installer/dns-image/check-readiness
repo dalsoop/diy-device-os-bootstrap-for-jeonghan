@@ -6,15 +6,16 @@ set -euo pipefail
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 monorepo_root=$(CDPATH='' cd -- "$repo_root/../.." && pwd)
-inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$monorepo_root/world-record/private/inventory}
+inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$monorepo_root/burn-history/os-installs}
+inventory_file=hardware.conf
 install_mode=${DNS_APPLIANCE_INSTALL_MODE:-reviewed}
 case "$install_mode" in
     reviewed) ;;
-    guided) inventory_dir=${DNS_APPLIANCE_INVENTORY_DIR:-$monorepo_root/world-record/blueprint/nodes} ;;
+    guided) inventory_file=os.conf ;;
     *) echo 'check-readiness: unknown install mode' >&2; exit 2 ;;
 esac
-authorized_keys=${DNS_APPLIANCE_AUTHORIZED_KEYS:-$monorepo_root/world-record/private/keys/operator-authorized-keys}
-age_recipient=${DNS_APPLIANCE_AGE_RECIPIENT:-$monorepo_root/world-record/private/keys/age-recipient}
+authorized_keys=${DNS_APPLIANCE_AUTHORIZED_KEYS:-$monorepo_root/burn-history/keys/operator-authorized-keys}
+age_recipient=${DNS_APPLIANCE_AGE_RECIPIENT:-$monorepo_root/burn-history/keys/age-recipient}
 cache_dir=${DNS_APPLIANCE_CACHE_DIR:-$repo_root/cache}
 artifact_dir=${DNS_APPLIANCE_ARTIFACT_DIR:-$repo_root/artifacts}
 # shellcheck disable=SC1091
@@ -29,10 +30,7 @@ block() { blockers+=("$1"); }
 enabled_count=0
 inventory_complete=1
 for role in dns01 dns02 dns03; do
-    file=$inventory_dir/$role.conf
-    if [ "$install_mode" = guided ] && [ ! -r "$file" ]; then
-        file=$inventory_dir/$role.conf.example
-    fi
+    file=$inventory_dir/$role/$inventory_file
     if [ ! -r "$file" ]; then
         inventory_complete=0
         block "missing captured inventory for $role"

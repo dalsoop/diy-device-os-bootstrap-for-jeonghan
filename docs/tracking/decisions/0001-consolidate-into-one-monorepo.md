@@ -17,7 +17,7 @@ independent release benefit.
 `dalsoop/diy-device-os-bootstrap` was chosen as the canonical generic repository. It contains three explicit
 modules:
 
-- World: operator intent and immutable USB records in `world-record/`, read and
+- World: operator intent and immutable USB records in `burn-history/`, read and
   published by the World tools in `engine/world/`;
 - Catalog: data-only public OS metadata in `engine/catalog/`;
 - Installer: executable behavior and destructive safety gates in

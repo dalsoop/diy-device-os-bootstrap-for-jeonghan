@@ -1,5 +1,5 @@
-# Documentation-only topology view. The installer consumes ignored
-# world-record/private/inventory/dns01.conf, dns02.conf, and dns03.conf files.
+# Documentation-only topology view. The installer consumes the ignored
+# burn-history/os-installs/<role>/hardware.conf files for dns01, dns02, and dns03.
 ---
 network:
   cidr: 10.0.0.0/16

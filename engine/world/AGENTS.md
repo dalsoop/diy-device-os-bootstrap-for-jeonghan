@@ -1,16 +1,16 @@
 # World Module
 
-This module holds the World tools for Jeonghan's single accumulating home-infrastructure World. The World data itself lives in `world-record/`; this module reads it and publishes records into it. DNS is the first service represented in it; future device roles and media extend `jeonghan-home` rather than creating DNS-, storage-, or hypervisor-specific Worlds.
+This module holds the World tools for Jeonghan's single accumulating home-infrastructure World. The World data itself lives in `burn-history/`; this module reads it and publishes records into it. DNS is the first service represented in it; future device roles and media extend `jeonghan-home` rather than creating DNS-, storage-, or hypervisor-specific Worlds.
 
 ## Boundaries
 
-- `bin/resolve-world` reads `world-record/world-playbook.yaml` and the drafts it registers, validates them, and emits declarative plans. Registered paths must stay inside `world-record/`. It never downloads images, invokes Catalog code, or writes a device.
-- `bin/record-usb-event` serializes physical writes and publishes their records into `world-record/history/`. Its generation root equals the playbook's `generations.root`.
+- `bin/resolve-world` reads `burn-history/.paths.yaml` and the drafts it registers, validates them, and emits declarative plans. Registered paths must stay inside `burn-history/`. It never downloads images, invokes Catalog code, or writes a device.
+- `bin/record-usb-event` serializes physical writes and publishes their records into `burn-history/logs/usb/` and `burn-history/logs/usb/failed/`. Its generation root equals the playbook's `generations.root`; `failed/` inside it is never a generation.
 - `schemas/` owns the versioned published event and verification record shapes (schema version 2).
 - `tests/` owns the World contract and USB event simulations.
-- Configuration is not owned here: `world-record/world-playbook.yaml` registers the draft, the completed-generation root, timezone, and generation format, and `world-record/blueprint/home.yaml` owns assets, networks, nodes, services, media selection, language, and fail-closed intent.
-- Records are not owned here either: `world-record/history/usb/` holds immutable completed physical USB generations, and `world-record/history/usb-failed/` holds append-only redacted records for failed or cancelled physical writes; successful event records live inside their generation.
-- `world-record/private/` holds private files never committed (machine observations and public inputs); secrets and raw hardware inventory remain outside Git.
+- Configuration is not owned here: `burn-history/.paths.yaml` registers the draft, the completed-generation root, timezone, and generation format, and `burn-history/home.yaml` owns assets, networks, nodes, services, media selection, language, and fail-closed intent.
+- Records are not owned here either: `burn-history/logs/usb/` holds immutable completed physical USB generations, and `burn-history/logs/usb/failed/` holds append-only redacted records for failed or cancelled physical writes; successful event records live inside their generation.
+- `burn-history/keys/`, `burn-history/os-installs/<role>/hardware.conf`, and `burn-history/.in-progress/` hold private files never committed (public key inputs, hardware captures, and recorder state); secrets and raw hardware inventory remain outside Git.
 - Public release metadata belongs to the Catalog. Fetching, image assembly, target inspection, and erasure belong to the Installer.
 
 ## Invariants
@@ -26,9 +26,9 @@ This module holds the World tools for Jeonghan's single accumulating home-infras
 
 ## Change pattern
 
-Edit `world-record/blueprint/home.yaml` for personal intent. Add reusable public release metadata to the Catalog and executable behavior to the Installer instead of duplicating either here. A World vocabulary change updates the resolver, Installer consumer, fixtures, and generation contract together.
+Edit `burn-history/home.yaml` for personal intent. Add reusable public release metadata to the Catalog and executable behavior to the Installer instead of duplicating either here. A World vocabulary change updates the resolver, Installer consumer, fixtures, and generation contract together.
 
-The World event recorder serializes physical writes, keeps pending state under the ignored `world-record/private/usb-events/`, records unsuccessful attempts under `world-record/history/usb-failed/`, and atomically publishes successful readback evidence under `world-record/history/usb/`. Do not create either record from a plan, build, capacity query, or simulation.
+The World event recorder serializes physical writes, keeps pending state under the ignored `burn-history/.in-progress/`, records unsuccessful attempts under `burn-history/logs/usb/failed/`, and atomically publishes successful readback evidence under `burn-history/logs/usb/`. Do not create either record from a plan, build, capacity query, or simulation.
 
 ## Verification
 

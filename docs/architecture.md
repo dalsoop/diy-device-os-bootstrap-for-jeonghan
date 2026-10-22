@@ -9,7 +9,7 @@ operator or remote agent
         |
         | root CLI, or MCP stdio through forced SSH over Tailscale
         v
-world-record/blueprint/ desired state -----------------+
+burn-history/ desired state ----------------------+
         | validated media and policy               |
         v                                           |
 engine/installer/ resolver and execution  <--- engine/catalog/ untrusted public metadata
@@ -19,7 +19,7 @@ engine/installer/ resolver and execution  <--- engine/catalog/ untrusted public 
         +--> guarded DNS installation               |
         +--> management-host DNS operations         |
         |                                           |
-        +--> world-record/history/usb/<generation>/ after verified write and readback
+        +--> burn-history/logs/usb/<generation>/ after verified write and readback
 
 engine/agent/ delegates read, plan, and narrowly gated DNS operations to the same CLI surfaces;
 it owns neither desired state nor destructive authority.
@@ -29,8 +29,8 @@ it owns neither desired state nor destructive authority.
 
 | Component | Role | Receives | Produces | Must not own |
 | --- | --- | --- | --- | --- |
-| `world-record/` | The home blueprint (desired state), private files never committed, and history of what happened | Operator edits the home blueprint in `blueprint/`; private files never committed in `private/` | Desired state for the World tools; records published by them | Executables, download behavior, target erasure, public vendor metadata, secrets |
-| `engine/world/` | World resolver and USB event recorder | `world-record/world-playbook.yaml` and registered paths | Validated media selection, safety policy, immutable generation records | Download behavior, target erasure, public vendor metadata, secrets |
+| `burn-history/` | The home definition (desired state), private files never committed, and logs of what happened | Operator edits `home.yaml`, `dns-records.zone`, and `os-installs/<role>/os.conf`; private files never committed in `keys/`, `os-installs/<role>/hardware.conf`, and `.in-progress/` | Desired state for the World tools; records published by them | Executables, download behavior, target erasure, public vendor metadata, secrets |
+| `engine/world/` | World resolver and USB event recorder | `burn-history/.paths.yaml` and registered paths | Validated media selection, safety policy, immutable generation records | Download behavior, target erasure, public vendor metadata, secrets |
 | `engine/catalog/` | Data-only registry of public bootloaders and OS media | Reviewed vendor release facts | Indexed JSON metadata and schemas | Selection, executable hooks, downloads, private profiles, disk writes |
 | `engine/installer/` | Resolver, image builder, media writer, DNS install gate, and management commands | Validated World, revalidated Catalog, local runtime artifacts, live device facts | Plans, verified cache, media, DNS appliance image, enrollment and operations | Long-lived secret storage or implicit destructive permission |
 | `engine/agent/` | Management-host MCP access plane | Fixed tool arguments, fixed credential-file paths, delegated command output | Structured results clipped at 64 KiB without content redaction | Arbitrary execution, URL/path selection, media writes, installation, restore, enrollment |
@@ -47,12 +47,12 @@ The root `device-os` command is the operator entry point. Ruby resolves World YA
 
 ## Media creation flow
 
-1. The operator edits `world-record/blueprint/home.yaml` and selects a declared media definition.
+1. The operator edits `burn-history/home.yaml` and selects a declared media definition.
 2. `engine/world/bin/resolve-world` validates references, addresses, language, and fail-closed policy, then emits a versioned World plan.
 3. The Installer independently validates that plan, revalidates every selected public or local entry, records the repository commit and Catalog tree, and calculates capacity.
 4. `prepare` downloads only selected locked artifacts and promotes each cache file only after SHA-256 verification. The DNS image remains a separately built runtime artifact with its own manifest.
 5. Immediately before `burn`, the writer inspects the live removable device, rejects root/internal/ambiguous/unresolved targets, binds confirmation to the current path and serial, stages the exact plan, writes the USB, and verifies the result.
-6. The World event recorder serializes physical attempts, stores pending state under the ignored `world-record/private/usb-events/`, and atomically publishes a completed World generation only after write and readback succeed. Failed and cancelled attempts publish redacted event records but never generation directories.
+6. The World event recorder serializes physical attempts, stores pending state under the ignored `burn-history/.in-progress/`, and atomically publishes a completed World generation only after write and readback succeed. Failed and cancelled attempts publish redacted event records but never generation directories.
 
 No World field crosses the Installer boundary as erasure permission. No Catalog file crosses it as executable code. No successful plan or build crosses it as physical evidence.
 
@@ -80,13 +80,13 @@ A remote MCP client reaches a dedicated management-host account through ordinary
 
 | State | Location and lifetime |
 | --- | --- |
-| Mutable desired state | `world-record/blueprint/home.yaml` |
-| Private files never committed | ignored `world-record/private/` (`keys/`, `inventory/`, `usb-events/`) |
+| Mutable desired state | `burn-history/home.yaml` |
+| Private files never committed | ignored `burn-history/keys/` (except its README), `burn-history/os-installs/<role>/hardware.conf`, and `burn-history/.in-progress/` |
 | Public metadata | reviewed `engine/catalog/data/` |
 | Generated caches and workspaces | ignored `engine/installer/` paths (`artifacts/`, `cache/`, `work/`, Simple-CDD outputs); disposable |
 | Release evidence | manifests, checksums, package closure, and SBOM outside committed media |
-| Completed USB history | append-only `world-record/history/usb/<YYYYMMDDHHmmss>-jeonghan-home/` |
-| Failed or cancelled USB writes | append-only `world-record/history/usb-failed/YYYY/` |
-| Verification reports | `world-record/history/verification/` |
+| Completed USB history | append-only `burn-history/logs/usb/<YYYYMMDDHHmmss>-jeonghan-home/` |
+| Failed or cancelled USB writes | append-only `burn-history/logs/usb/failed/YYYY/` |
+| Verification reports | `burn-history/logs/checks/` |
 | Credentials and private identities | external principal secret store |
 | Agent runtime policy | management-host files and environment outside Git |

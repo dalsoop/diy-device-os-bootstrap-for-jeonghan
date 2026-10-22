@@ -81,8 +81,8 @@ def main() -> None:
         token.write_text("test-token\n", encoding="utf-8")
         token.chmod(0o600)
         ca_file.write_text("test-ca\n", encoding="utf-8")
-        (root / "world-record" / "blueprint" / "dns").mkdir(parents=True)
-        (root / "world-record" / "blueprint" / "dns" / "home.arpa.zone").write_text(
+        (root / "burn-history").mkdir(parents=True)
+        (root / "burn-history" / "dns-records.zone").write_text(
             "$ORIGIN home.arpa.\n", encoding="utf-8"
         )
         executable(

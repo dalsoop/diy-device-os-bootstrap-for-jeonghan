@@ -69,7 +69,7 @@ engine/world/tests/usb-event-simulation.rb
 /tmp/device-os-agent-check/bin/python engine/agent/tests/gateway_simulation.py
 ```
 
-The required CI job additionally validates every published USB record under `world-record/history/usb/` and `world-record/history/usb-failed/` against the v2 World schemas, and the DNS component registry, component review, build manifest, final review, license decision, and raw-image manifest schemas with both accepted and rejected fixtures. ShellCheck, shell syntax, Python syntax, Ruby syntax, and SPDX checks remain part of CI even when an operator runs only the focused simulations above. A source pass proves no physical media or appliance state.
+The required CI job additionally validates every published USB record under `burn-history/logs/usb/` and `burn-history/logs/usb/failed/` against the v2 World schemas, and the DNS component registry, component review, build manifest, final review, license decision, and raw-image manifest schemas with both accepted and rejected fixtures. ShellCheck, shell syntax, Python syntax, Ruby syntax, and SPDX checks remain part of CI even when an operator runs only the focused simulations above. A source pass proves no physical media or appliance state.
 
 ## Check distribution mode
 
@@ -132,7 +132,7 @@ Inspect redacted DNS-build blockers and live removable targets separately:
 ./device-os targets
 ```
 
-Edit `world-record/blueprint/home.yaml` to change desired devices or media. Keep real inventories and observations under the ignored `world-record/private/` (private files never committed), never in the blueprint.
+Edit `burn-history/home.yaml` to change desired devices or media. Keep real hardware captures in the ignored `burn-history/os-installs/<role>/hardware.conf` and keys in the ignored `burn-history/keys/` (private files never committed), never in `home.yaml`.
 
 ## Check network readiness
 
@@ -218,10 +218,9 @@ inspects or writes the live target.
 The resulting media contains Debian Live only. Boot each HP computer deliberately and follow the inventory guide on the USB. Capture one role at a time from the trusted live environment:
 
 ```sh
-mkdir -p world-record/private/inventory
 sudo engine/installer/dns-image/capture-inventory \
   dns01 10.0.5.1 enp1s0 /dev/sda \
-  > world-record/private/inventory/dns01.conf
+  > burn-history/os-installs/dns01/hardware.conf
 ```
 
 Repeat for `dns02` and `dns03` with their actual interface and disk. Review product, UUID, NIC MAC, disk model, disk serial, size, role, and address. Keep `destructive_install_enabled=false` except for the single current physical pilot.
@@ -232,10 +231,10 @@ Use an amd64 Debian 13 builder. Copy only the operator's public SSH key and publ
 
 ```sh
 cp /path/to/id_ed25519.pub \
-  world-record/private/keys/operator-authorized-keys
+  burn-history/keys/operator-authorized-keys
 age-keygen -o /secure/dns-recovery-age-key.txt
 age-keygen -y /secure/dns-recovery-age-key.txt \
-  > world-record/private/keys/age-recipient
+  > burn-history/keys/age-recipient
 ```
 
 Install build dependencies, verify locked external inputs, fetch the digest-pinned Technitium source, and build:
@@ -308,7 +307,7 @@ sudo ./device-os world burn-image-macos \
   --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_TARGET_BYTES'
 ```
 
-The image byte size must equal the target and the target must be removable, writable, MBR-compatible, and non-root. World burn commands process one device at a time. Passed readback creates a new tracked generation directory under `world-record/history/usb/`; failed or cancelled physical attempts create a tracked redacted event file under `world-record/history/usb-failed/`. Review those new files and publish them through the normal pull-request path—the root writer never commits or pushes.
+The image byte size must equal the target and the target must be removable, writable, MBR-compatible, and non-root. World burn commands process one device at a time. Passed readback creates a new tracked generation directory under `burn-history/logs/usb/`; failed or cancelled physical attempts create a tracked redacted event file under `burn-history/logs/usb/failed/`. Review those new files and publish them through the normal pull-request path—the root writer never commits or pushes.
 
 ## Verify and install one appliance at a time
 
@@ -370,11 +369,11 @@ export TECHNITIUM_CA_FILE=/secure/dns/technitium-ca.pem
 engine/installer/management/dnsctl health
 
 export TECHNITIUM_TOKEN_FILE=/secure/dns/planner-token
-engine/installer/management/dnsctl plan world-record/blueprint/dns/home.arpa.zone
+engine/installer/management/dnsctl plan burn-history/dns-records.zone
 
 approved_commit=$(git rev-parse HEAD)
 export TECHNITIUM_TOKEN_FILE=/secure/dns/applier-token
-engine/installer/management/dnsctl apply world-record/blueprint/dns/home.arpa.zone \
+engine/installer/management/dnsctl apply burn-history/dns-records.zone \
   --approved-commit "$approved_commit" \
   --confirm APPLY
 ```
@@ -470,20 +469,20 @@ Prove repository, World, capacity, network, tunnel, DNS health, and DNS plan cal
 | Name | Role and allowed scope |
 | --- | --- |
 | `DEVICE_OS_MEDIA` | Selects one declared World media ID for the current invocation; current values are `dns-install` and `inventory-capture` |
-| `DEVICE_OS_WORLD` | Selects an explicit draft when more than one exists; path must remain within `world-record/` as registered in `world-record/world-playbook.yaml` |
+| `DEVICE_OS_WORLD` | Selects an explicit draft when more than one exists; path must remain within `burn-history/` as registered in `burn-history/.paths.yaml` |
 | `DEVICE_OS_WORLD_PLAN` | Installer working path for a resolved World plan; generated, not committed |
 | `USB_MEDIA_CATALOG` | Installer working path for the resolved media plan; generated, not committed |
 | `USB_MEDIA_CACHE_DIR` | Ignored cache for verified bootloader and public OS downloads; changing it does not bypass digest checks |
-| `DNS_APPLIANCE_INVENTORY_DIR` | Directory of per-role inventory used by the DNS image build; defaults to the ignored `world-record/private/inventory/` in reviewed mode and to `world-record/blueprint/nodes/` in guided mode |
-| `DNS_APPLIANCE_AUTHORIZED_KEYS` | File containing only the operator's public SSH key material for the image; defaults to `world-record/private/keys/operator-authorized-keys` |
-| `DNS_APPLIANCE_AGE_RECIPIENT` | File containing only the public age recipient used to encrypt enrollment output; defaults to `world-record/private/keys/age-recipient` |
+| `DNS_APPLIANCE_INVENTORY_DIR` | Directory that holds the per-role folders (`dns01/`, `dns02/`, `dns03/`) used by the DNS image build and readiness check; defaults to `burn-history/os-installs`. Reviewed mode reads `<dir>/<role>/hardware.conf` (ignored real captures); guided mode reads `<dir>/<role>/os.conf` |
+| `DNS_APPLIANCE_AUTHORIZED_KEYS` | File containing only the operator's public SSH key material for the image; defaults to `burn-history/keys/operator-authorized-keys` |
+| `DNS_APPLIANCE_AGE_RECIPIENT` | File containing only the public age recipient used to encrypt enrollment output; defaults to `burn-history/keys/age-recipient` |
 | `DNS_APPLIANCE_CACHE_DIR` | Ignored cache for digest-pinned DNS runtime inputs; defaults to `engine/installer/cache/` |
 | `DNS_APPLIANCE_ARTIFACT_DIR` | Ignored destination for build manifests, checksums, package closure, and SBOM; defaults to `engine/installer/artifacts/` |
 | `DNS_CLUSTER_CREDENTIALS_DIR` | Protected management-host directory containing imported node credentials |
 | `DNS_CLUSTER_ACCESS_OUTPUT` | Protected destination for the encrypted cluster access bundle |
-| `DNS_CLUSTER_AGE_RECIPIENT` | Public age-recipient file used for the encrypted cluster access bundle; defaults to `world-record/private/keys/age-recipient` |
+| `DNS_CLUSTER_AGE_RECIPIENT` | Public age-recipient file used for the encrypted cluster access bundle; defaults to `burn-history/keys/age-recipient` |
 | `DNS_CLUSTER_DOMAIN` | Cluster domain override; defaults to `dns-cluster.home.arpa` and must match reviewed DNS intent |
-| `DNS_CLUSTER_ZONE_FILE` | Reviewed zone-file override; defaults to the tracked `world-record/blueprint/dns/home.arpa.zone` |
+| `DNS_CLUSTER_ZONE_FILE` | Reviewed zone-file override; defaults to the tracked `burn-history/dns-records.zone` |
 | `DNSCTL_AUDIT_LOG` | Protected append-only destination for redacted DNS plan/apply events |
 | `TECHNITIUM_URL` | Direct management-command target URL; callers use reviewed fixed node endpoints, not arbitrary agent input |
 | `TECHNITIUM_TOKEN_FILE` | Protected role-specific token file for direct management commands |

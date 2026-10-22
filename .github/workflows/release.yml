@@ -14,8 +14,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Use runner-local public inputs
         run: |
-          install -m 0644 /etc/dns-appliance-builder/operator-authorized-keys world-record/private/keys/operator-authorized-keys
-          install -m 0644 /etc/dns-appliance-builder/age-recipient world-record/private/keys/age-recipient
+          install -m 0644 /etc/dns-appliance-builder/operator-authorized-keys burn-history/keys/operator-authorized-keys
+          install -m 0644 /etc/dns-appliance-builder/age-recipient burn-history/keys/age-recipient
       - name: Fetch digest-pinned Technitium image
         working-directory: engine/installer
         run: dns-image/fetch-locked-sources

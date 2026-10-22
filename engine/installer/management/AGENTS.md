@@ -27,3 +27,19 @@ This module runs from a trusted management host after appliance installation.
 - Router mutation is outside this module until a model-specific authenticated,
   reversible API and console recovery are proven.
 
+## DNS zone
+
+The reviewed zone is `burn-history/dns-records.zone`; its YAML description
+example is `engine/installer/docs/examples/home.arpa.example.yml`.
+`cluster-bootstrap` reads the zone by default, and `dnsctl plan` and
+`dnsctl apply` take it as their zone-file argument.
+
+- Keep zone changes declarative and reviewable; do not embed credentials or live
+  API responses.
+- Preserve a low-risk canary record that can be queried over UDP and TCP after
+  each apply or restore.
+- Advance SOA serials deliberately when zone content changes.
+- Do not combine a broad zone rewrite with unrelated installer or credential
+  changes.
+- Verify a zone change with the plan hash and diff, then query the canary over
+  UDP and TCP after apply before making another change.

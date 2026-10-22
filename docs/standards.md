@@ -18,7 +18,7 @@ These rules apply to every tracked text file: documentation, decision records, v
 
 ## Module boundaries
 
-- `world-record/` is the only folder the user edits. Its `blueprint/` is the home blueprint (desired state you edit), its `private/` holds private files never committed, and its `history/` records what happened; tools publish it and nobody edits it. It MUST NOT contain executables, schemas, or tests.
+- `burn-history/` is the only folder the user edits. Its `home.yaml`, `dns-records.zone`, and `os-installs/<role>/os.conf` are the desired state you edit; its `keys/`, `os-installs/<role>/hardware.conf`, and `.in-progress/` are private files never committed; its `logs/` records what happened, every file in it is tracked, tools publish it, and nobody edits it. It MUST NOT contain executables, schemas, or tests.
 - `engine/world/` MAY resolve desired state and record evidence identity but MUST NOT implement downloads, execute Catalog code, or authorize a write.
 - `engine/catalog/` MAY contain public declarative metadata and schemas but MUST NOT contain hooks, credentials, private profiles, collection policy, download execution, or disk behavior.
 - `engine/installer/` MUST revalidate World and Catalog input before use and is the only module that MAY download, assemble, or write media. It MUST NOT become the long-lived secret store.

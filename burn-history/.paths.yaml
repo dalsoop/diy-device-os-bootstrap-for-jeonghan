@@ -8,8 +8,8 @@ spec:
   timezone: Asia/Seoul
   drafts:
     - slug: jeonghan-home
-      path: blueprint/home.yaml
+      path: home.yaml
   generations:
-    root: history/usb
+    root: logs/usb
     idFormat: "{YYYYMMDDHHmmss}-{world-slug}"
     publishAfter: verified-physical-usb-write

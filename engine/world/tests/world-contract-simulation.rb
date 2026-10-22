@@ -12,7 +12,7 @@ require "tmpdir"
 require "yaml"
 
 MODULE_ROOT = Pathname(__dir__).join("..").expand_path
-ROOT = MODULE_ROOT.join("../../world-record").expand_path
+ROOT = MODULE_ROOT.join("../../burn-history").expand_path
 RESOLVER = MODULE_ROOT.join("bin/resolve-world")
 
 def fail_test(message)
@@ -32,16 +32,16 @@ def write_yaml(path, value)
   File.write(path, YAML.dump(value))
 end
 
-stdout, stderr, status = run_resolver(ROOT.join("world-playbook.yaml"))
+stdout, stderr, status = run_resolver(ROOT.join(".paths.yaml"))
 fail_test("default World was rejected: #{stderr}") unless status.success?
 resolved = JSON.parse(stdout)
 fail_test("default media selection changed") unless resolved.dig("media", "entries") == ["dns-appliance"]
 fail_test("default World identity changed") unless resolved.dig("world", "slug") == "jeonghan-home"
-fail_test("default World source changed") unless resolved.dig("source", "world") == "world-record/blueprint/home.yaml"
-fail_test("default playbook source changed") unless resolved.dig("source", "playbook") == "world-record/world-playbook.yaml"
+fail_test("default World source changed") unless resolved.dig("source", "world") == "burn-history/home.yaml"
+fail_test("default playbook source changed") unless resolved.dig("source", "playbook") == "burn-history/.paths.yaml"
 
 inventory_stdout, inventory_stderr, inventory_status = run_resolver(
-  ROOT.join("world-playbook.yaml"), "--media", "inventory-capture"
+  ROOT.join(".paths.yaml"), "--media", "inventory-capture"
 )
 fail_test("inventory media was rejected: #{inventory_stderr}") unless inventory_status.success?
 inventory = JSON.parse(inventory_stdout)
@@ -62,12 +62,11 @@ mutations = {
 mutations.each do |label, mutation|
   Dir.mktmpdir("world-contract-") do |directory|
     root = Pathname(directory)
-    FileUtils.cp(ROOT.join("world-playbook.yaml"), root.join("world-playbook.yaml"))
-    FileUtils.mkdir_p(root.join("blueprint"))
-    fixture = load_yaml(ROOT.join("blueprint/home.yaml"))
+    FileUtils.cp(ROOT.join(".paths.yaml"), root.join(".paths.yaml"))
+    fixture = load_yaml(ROOT.join("home.yaml"))
     mutation.call(fixture)
-    write_yaml(root.join("blueprint/home.yaml"), fixture)
-    _out, _err, fixture_status = run_resolver(root.join("world-playbook.yaml"))
+    write_yaml(root.join("home.yaml"), fixture)
+    _out, _err, fixture_status = run_resolver(root.join(".paths.yaml"))
     fail_test("invalid fixture was accepted: #{label}") if fixture_status.success?
   end
 end

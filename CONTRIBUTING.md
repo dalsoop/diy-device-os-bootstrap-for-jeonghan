@@ -4,11 +4,12 @@ Contributions are welcome through pull requests. Keep changes within the module
 boundaries and safety rules in `AGENTS.md`, and update every affected producer,
 consumer, fixture, and document together.
 
-User-owned data lives in `world-record/`: the home blueprint (desired state you edit) in
-`blueprint/`, private files never committed in `private/`, and what happened
-(never edited) in `history/`.
+User-owned data lives in `burn-history/`: what you edit (`home.yaml`,
+`dns-records.zone`, `os-installs/<role>/os.conf`), private files never committed
+(`keys/`, `os-installs/<role>/hardware.conf`, `.in-progress/`), and what happened
+(never edited) in `logs/`.
 Code, schemas, and tests live in `engine/`. Never hand-edit
-`world-record/history/`.
+`burn-history/logs/`.
 
 ## Contribution license
 

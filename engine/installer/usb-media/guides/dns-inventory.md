@@ -45,7 +45,7 @@ sudo sh /mnt/tools/capture-inventory dns01 10.0.5.1 enp1s0 /dev/sda | \
 sync
 ```
 
-The management host imports these three files into the ignored
-`world-record/private/inventory/` directory. It enables only the current pilot,
+The management host imports each `inventory-<role>.conf` as the ignored
+`burn-history/os-installs/<role>/hardware.conf`. It enables only the current pilot,
 builds the guarded production image on amd64 Debian 13, and rewrites the USB.
 The production image must not exist on the inventory-stage USB.

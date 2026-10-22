@@ -2,9 +2,9 @@
 
 This tree stores append-only, redacted records for physical USB write attempts
 that failed or were cancelled after a World generation candidate was sealed.
-Successful events live with their immutable evidence under `world-record/history/usb/`.
+Successful events live with their immutable evidence under `burn-history/logs/usb/`.
 
-Paths use `world-record/history/usb-failed/YYYY/{event-id}.json`. Event IDs include the generation
+Paths use `burn-history/logs/usb/failed/YYYY/{event-id}.json`. Event IDs include the generation
 candidate plus a random suffix so separate attempts never overwrite one
 another. Records contain no raw serial, UUID, MAC address, credential, image,
 or recovery material.

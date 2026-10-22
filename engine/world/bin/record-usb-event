@@ -160,7 +160,7 @@ repo_root = if test_mode && ENV["DEVICE_OS_EVENT_REPO_ROOT"]
 world_root = if test_mode && ENV["DEVICE_OS_EVENT_OUTPUT_ROOT"]
                File.expand_path(ENV.fetch("DEVICE_OS_EVENT_OUTPUT_ROOT"))
              else
-               File.join(repo_root, "world-record")
+               File.join(repo_root, "burn-history")
              end
 
 unless test_mode
@@ -202,11 +202,11 @@ unless test_mode
 end
 
 ENV["TZ"] = world.fetch("timezone")
-local_root = File.join(world_root, "private", "usb-events")
+local_root = File.join(world_root, ".in-progress")
 pending_root = File.join(local_root, "pending")
 staging_root = File.join(local_root, "staging")
-events_root = File.join(world_root, "history", "usb-failed")
-generations_root = File.join(world_root, "history", "usb")
+events_root = File.join(world_root, "logs", "usb", "failed")
+generations_root = File.join(world_root, "logs", "usb")
 FileUtils.mkdir_p([pending_root, staging_root, events_root, generations_root], mode: 0o700)
 
 lock_path = File.join(local_root, "writer.lock")

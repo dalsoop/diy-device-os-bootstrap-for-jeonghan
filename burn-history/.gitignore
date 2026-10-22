@@ -3,11 +3,10 @@
 .env.*
 
 # Private files never committed
-private/*
-!private/README.md
-!private/keys/
-private/keys/*
-!private/keys/*.example
+keys/*
+!keys/README.md
+os-installs/*/hardware.conf
+.in-progress/
 
 # Generated plans, caches, downloads, and media
 .device-os/
@@ -31,3 +30,7 @@ credentials/
 *.key
 *.pem
 id_*
+
+# Logs are tracked records, even where a global ignore template excludes logs/
+!logs/
+!logs/**

@@ -8,13 +8,13 @@ command from the repository root unless a section explicitly says otherwise.
 The repository connects the World model, Catalog data, and Installer tooling:
 
 - `./device-os world ...` validates the draft registered in
-  `world-record/world-playbook.yaml` (`world-record/blueprint/home.yaml`) and uses
+  `burn-history/.paths.yaml` (`burn-history/home.yaml`) and uses
   its selected media entries.
 - the Installer independently validates the resulting World plan, Catalog
   entries, local profiles, and live target before destructive work.
 - A physical write that passes readback publishes one immutable directory
-  under `world-record/history/usb/`; a failed or cancelled write publishes a
-  redacted record under `world-record/history/usb-failed/`.
+  under `burn-history/logs/usb/`; a failed or cancelled write publishes a
+  redacted record under `burn-history/logs/usb/failed/`.
 - Linux assembles the complete multiboot USB directly. macOS builds an
   exact-size MBR raw image in a Linux container and writes it with verified
   readback.
@@ -92,7 +92,7 @@ spec:
 The full file is:
 
 ```text
-world-record/blueprint/home.yaml
+burn-history/home.yaml
 ```
 
 Entry IDs may name public Catalog entries or reviewed Installer-local profiles.
@@ -148,8 +148,8 @@ sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn \
 ```
 
 Boot each HP into Debian Live and follow `guides/DNS_INVENTORY.md` on the USB.
-Copy the resulting `inventory-dns01.conf` through `inventory-dns03.conf` files
-into the ignored `world-record/private/inventory/` directory on the management host.
+Copy each resulting `inventory-<role>.conf` file (`dns01` through `dns03`) to
+the ignored `burn-history/os-installs/<role>/hardware.conf` on the management host.
 This first pass never authorizes internal-disk erasure.
 
 ### Second pass: build the production image
@@ -159,21 +159,21 @@ trusted Debian live environment, identify its wired interface and single
 internal target disk, and capture one ignored inventory file at a time:
 
 ```sh
-mkdir -p world-record/private/inventory
 sudo engine/installer/dns-image/capture-inventory \
   dns01 10.0.5.1 enp1s0 /dev/sda \
-  > world-record/private/inventory/dns01.conf
+  > burn-history/os-installs/dns01/hardware.conf
 ```
 
 Repeat for `dns02` and `dns03`. Review every value. For the first physical
-pilot, change `destructive_install_enabled` to `true` only in `dns01.conf`.
-Disabled example files may be used for the other two roles:
+pilot, change `destructive_install_enabled` to `true` only in
+`os-installs/dns01/hardware.conf`. The disabled guided profiles may be used for
+the other two roles:
 
 ```sh
-cp world-record/blueprint/nodes/dns02.conf.example \
-  world-record/private/inventory/dns02.conf
-cp world-record/blueprint/nodes/dns03.conf.example \
-  world-record/private/inventory/dns03.conf
+cp burn-history/os-installs/dns02/os.conf \
+  burn-history/os-installs/dns02/hardware.conf
+cp burn-history/os-installs/dns03/os.conf \
+  burn-history/os-installs/dns03/hardware.conf
 ```
 
 Copy only the operator public SSH key and the public age recipient into the
@@ -181,10 +181,10 @@ ignored input paths:
 
 ```sh
 cp /path/to/id_ed25519.pub \
-  world-record/private/keys/operator-authorized-keys
+  burn-history/keys/operator-authorized-keys
 age-keygen -o /secure/dns-recovery-age-key.txt
 age-keygen -y /secure/dns-recovery-age-key.txt \
-  > world-record/private/keys/age-recipient
+  > burn-history/keys/age-recipient
 ```
 
 Install the builder dependencies and build:
@@ -339,11 +339,11 @@ together.
 The intended history key is the physical USB creation time:
 
 ```text
-world-record/history/usb/{YYYYMMDDHHmmss}-{world-slug}/
+burn-history/logs/usb/{YYYYMMDDHHmmss}-{world-slug}/
 ```
 
 Do not create a completed generation merely because a plan, simulation, build,
 or write command started. `world burn` and `world burn-image-macos` publish a
 generation atomically only after physical write and required readback evidence
 succeed. Failed and cancelled physical attempts are recorded under
-`world-record/history/usb-failed/YYYY/` without becoming generations.
+`burn-history/logs/usb/failed/YYYY/` without becoming generations.

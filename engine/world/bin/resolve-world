@@ -103,7 +103,7 @@ begin
   fail_contract("unexpected positional arguments") unless ARGV.empty?
 
   default_repository_root = Pathname(__dir__).join("../../..").expand_path
-  playbook_path = Pathname(options.fetch(:playbook, default_repository_root.join("world-record/world-playbook.yaml").to_s)).expand_path
+  playbook_path = Pathname(options.fetch(:playbook, default_repository_root.join("burn-history/.paths.yaml").to_s)).expand_path
   module_root = playbook_path.dirname
   fail_contract("playbook must be a readable regular file") unless playbook_path.file? && playbook_path.readable? && !playbook_path.symlink?
 

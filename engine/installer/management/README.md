@@ -8,7 +8,7 @@ Implemented bootstrap and operating surfaces:
 - `import-enrollment` decrypts completed USB records into a caller-selected
   protected directory; it never writes credentials into the repository.
 - `cluster-bootstrap` initializes dns01, joins dns02/dns03, imports the reviewed
-  `home.arpa` zone from `world-record/blueprint/dns/home.arpa.zone`, and emits an age-encrypted agent token bundle.
+  `home.arpa` zone from `burn-history/dns-records.zone`, and emits an age-encrypted agent token bundle.
 - `dnsctl health` uses the reader token.
 - `dnsctl plan` emits current and desired hashes plus a human diff.
 - `dnsctl apply` requires literal `--confirm APPLY`, a caller-supplied commit

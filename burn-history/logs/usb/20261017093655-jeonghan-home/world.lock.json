@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "source": {
-    "playbook": "world-record/world-playbook.yaml",
-    "world": "world-record/blueprint/home.yaml"
+    "playbook": "burn-history/.paths.yaml",
+    "world": "burn-history/home.yaml"
   },
   "world": {
     "name": "Jeonghan Home",

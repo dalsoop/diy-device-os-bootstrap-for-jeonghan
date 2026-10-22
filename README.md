@@ -61,22 +61,23 @@ cd diy-device-os-bootstrap-for-jeonghan
 ./device-os world simulate
 ```
 
-The user only needs [`world-record/`](world-record/README.md). Its `blueprint/`
-is the home blueprint (desired state you edit), `private/` holds private files
-never committed, and `history/` records what happened and is never edited. Everything in `engine/` is
-machinery that reads `world-record/`; you do not need to open it.
+The user only needs [`burn-history/`](burn-history/README.md). You edit
+`home.yaml`, `dns-records.zone`, and the per-role `os-installs/<role>/os.conf`;
+`keys/` and each `os-installs/<role>/hardware.conf` hold private files never
+committed; `logs/` records what happened and is never edited. Everything in
+`engine/` is machinery that reads `burn-history/`; you do not need to open it.
 
 The home definition is
-[`world-record/blueprint/home.yaml`](world-record/blueprint/home.yaml).
+[`burn-history/home.yaml`](burn-history/home.yaml).
 It defines `dns01`, `dns02`, and `dns03` at `10.0.5.1` through `10.0.5.3`, with
-the router at `10.0.0.1`. Hardware observations and keys stay in the ignored
-`world-record/private/`; generated media, credentials, and recovery material stay
+the router at `10.0.0.1`. Hardware captures (`burn-history/os-installs/<role>/hardware.conf`) and keys
+(`burn-history/keys/`) stay ignored; generated media, credentials, and recovery material stay
 outside Git in the documented ignored locations or the principal secret store.
 
 ## Build and burn flow
 
 1. Boot `inventory-capture` and collect each HP machine's exact hardware data.
-2. Review the private inventories in `world-record/private/inventory/` and enable one machine at a time.
+2. Review the private captures in `burn-history/os-installs/<role>/hardware.conf` and enable one machine at a time.
 3. On an amd64 Debian 13 builder, build the offline Korean DNS installer ISO.
 4. Check capacity with the exact ISO and its build manifest.
 5. On Linux, burn directly, or on macOS build an exact-size raw image in the
@@ -125,10 +126,12 @@ without printing hardware identities or credentials.
 ```text
 diy-device-os-bootstrap-for-jeonghan/
 ├── device-os              operator command
-├── world-record/          the user's folder
-│   ├── blueprint/         the home blueprint: home intent, per-role node profiles, DNS zone
-│   ├── private/           private files never committed: keys, hardware captures, burn recorder state
-│   └── history/           what happened, never edited: USB generations, failed writes, verification reports
+├── burn-history/          the user's folder
+│   ├── home.yaml          home intent: networks, computers, services, media, policies
+│   ├── dns-records.zone   the DNS zone
+│   ├── os-installs/       per-role folders: os.conf guided profile, hardware.conf real capture (ignored)
+│   ├── keys/              operator public keys, never committed
+│   └── logs/              what happened, never edited: USB generations, failed writes, verification reports
 ├── engine/                machinery
 │   ├── installer/         builders, media assembly, management, and destructive gates
 │   ├── catalog/           data-only public OS and bootloader metadata
@@ -137,7 +140,7 @@ diy-device-os-bootstrap-for-jeonghan/
 └── docs/                  architecture, workflow, and decisions
 ```
 
-- `world-record/` owns operator intent and history, not erasure authority.
+- `burn-history/` owns operator intent and history, not erasure authority.
 - `engine/world/` resolves that intent and publishes records after verified writes.
 - `engine/catalog/` owns public metadata and executes nothing.
 - `engine/installer/` validates all inputs and live targets before writing.
@@ -145,10 +148,10 @@ diy-device-os-bootstrap-for-jeonghan/
   OS installation.
 
 Each verified physical USB creation publishes an immutable World generation
-under `world-record/history/usb/` named `{YYYYMMDDHHmmss}-{world-slug}`. The
+under `burn-history/logs/usb/` named `{YYYYMMDDHHmmss}-{world-slug}`. The
 timestamp is the USB creation event in `Asia/Seoul`, not draft or commit time.
 Failed or cancelled physical attempts are recorded separately under
-`world-record/history/usb-failed/`; simulations do not create physical
+`burn-history/logs/usb/failed/`; simulations do not create physical
 evidence.
 
 ## Documentation

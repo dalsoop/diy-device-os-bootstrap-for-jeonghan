@@ -126,7 +126,10 @@ for file in \
 done
 
 for required in \
-    world-record/private/keys/age-recipient.example \
+    engine/installer/docs/examples/age-recipient.example \
+    engine/installer/docs/examples/operator-authorized-keys.example \
+    engine/installer/docs/examples/nodes.example.yml \
+    engine/installer/docs/examples/home.arpa.example.yml \
     engine/installer/build/locks/sources.env \
     engine/installer/build/distribution-policy.json \
     engine/installer/schemas/component-redistribution-registry.schema.json \
@@ -136,7 +139,11 @@ for required in \
     engine/installer/schemas/enrollment-record.schema.json \
     engine/installer/schemas/license-check.schema.json \
     engine/installer/schemas/raw-image-manifest.schema.json \
-    world-record/blueprint/dns/home.arpa.zone \
+    burn-history/dns-records.zone \
+    burn-history/os-installs/dns01/os.conf \
+    burn-history/os-installs/dns02/os.conf \
+    burn-history/os-installs/dns03/os.conf \
+    burn-history/keys/README.md \
     engine/installer/management/tailscale-policy.example.hujson \
     engine/installer/usb-media/composition.json \
     engine/installer/usb-media/distribution-policy.json \
@@ -152,9 +159,10 @@ for required in \
     engine/agent/README.md \
     engine/agent/requirements.lock \
     engine/agent/tailscale-policy.example.hujson \
-    world-record/world-playbook.yaml \
-    world-record/blueprint/home.yaml \
-    world-record/history/usb-failed/README.md \
+    burn-history/.paths.yaml \
+    burn-history/home.yaml \
+    burn-history/logs/usb/README.md \
+    burn-history/logs/usb/failed/README.md \
     engine/world/schemas/usb-event.schema.json \
     engine/world/schemas/usb-verification.schema.json \
     .github/workflows/ci.yml \
@@ -266,7 +274,7 @@ for contract in \
     tests/documentation-check-simulation.sh \
     engine/world/schemas/usb-event.schema.json \
     engine/world/schemas/usb-verification.schema.json \
-    world-record/history/usb-failed; do
+    burn-history/logs/usb/failed; do
     grep -q "$contract" "$ci_workflow" || {
         echo "repository-contract: CI does not enforce $contract" >&2
         exit 1
@@ -305,6 +313,37 @@ if git -C "$monorepo_root" grep -I -n -i -E \
     echo "repository-contract: obsolete project name remains" >&2
     exit 1
 fi
+
+# Logs are records: every file under burn-history/logs/ is tracked, and no
+# ignore rule (including a global one) matches any of them.
+logs_untracked=$(git -C "$monorepo_root" ls-files --others -- burn-history/logs)
+if [ -n "$logs_untracked" ]; then
+    printf '%s\n' "$logs_untracked" >&2
+    echo "repository-contract: burn-history/logs/ holds untracked files" >&2
+    exit 1
+fi
+logs_tracked=$(git -C "$monorepo_root" ls-files -- burn-history/logs)
+[ -n "$logs_tracked" ] || {
+    echo "repository-contract: burn-history/logs/ has no tracked records" >&2
+    exit 1
+}
+set +e
+logs_ignored=$(git -C "$monorepo_root" ls-files -- burn-history/logs |
+    git -C "$monorepo_root" check-ignore --no-index --stdin)
+ignore_status=$?
+set -e
+case $ignore_status in
+    0)
+        printf '%s\n' "$logs_ignored" >&2
+        echo "repository-contract: an ignore rule matches files under burn-history/logs/" >&2
+        exit 1
+        ;;
+    1) ;;
+    *)
+        echo "repository-contract: cannot check ignore rules for burn-history/logs/" >&2
+        exit 1
+        ;;
+esac
 
 documentation_check "$monorepo_root" || exit 1
 

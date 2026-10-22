@@ -30,4 +30,5 @@ silently migrate them. A convenience `latest` view may be derived, but it is
 not an authority.
 
 Failed and cancelled physical write attempts are not generations. Their
-redacted append-only records live under `world-record/history/usb-failed/YYYY/` instead.
+redacted append-only records live under [`failed/`](failed/README.md)`YYYY/` instead.
+The `failed/` folder is never a generation.

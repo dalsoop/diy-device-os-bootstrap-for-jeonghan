@@ -8,9 +8,9 @@ repo_root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 monorepo_root=$(CDPATH='' cd -- "$repo_root/../.." && pwd)
 credentials_dir=${DNS_CLUSTER_CREDENTIALS_DIR:-}
 output=${DNS_CLUSTER_ACCESS_OUTPUT:-}
-recipient_file=${DNS_CLUSTER_AGE_RECIPIENT:-$monorepo_root/world-record/private/keys/age-recipient}
+recipient_file=${DNS_CLUSTER_AGE_RECIPIENT:-$monorepo_root/burn-history/keys/age-recipient}
 cluster_domain=${DNS_CLUSTER_DOMAIN:-dns-cluster.home.arpa}
-zone_file=${DNS_CLUSTER_ZONE_FILE:-$monorepo_root/world-record/blueprint/dns/home.arpa.zone}
+zone_file=${DNS_CLUSTER_ZONE_FILE:-$monorepo_root/burn-history/dns-records.zone}
 
 usage() {
     echo "usage: DNS_CLUSTER_CREDENTIALS_DIR=/secure/dir DNS_CLUSTER_ACCESS_OUTPUT=/secure/cluster-access.json.age $0" >&2

@@ -12,13 +12,13 @@ spec:
   assets:
     - id: hp-dns-01
       type: computer
-      inventoryRef: private/inventory/dns01.yaml
+      inventoryRef: os-installs/dns01/hardware.conf
     - id: hp-dns-02
       type: computer
-      inventoryRef: private/inventory/dns02.yaml
+      inventoryRef: os-installs/dns02/hardware.conf
     - id: hp-dns-03
       type: computer
-      inventoryRef: private/inventory/dns03.yaml
+      inventoryRef: os-installs/dns03/hardware.conf
 
   networks:
     - id: home-lan

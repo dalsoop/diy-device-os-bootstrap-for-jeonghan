@@ -26,12 +26,12 @@ registry, build manifest, and final review record.
 | TrueNAS SCALE | The image contains independently licensed open-source components and may present edition- or component-specific terms | <https://github.com/truenas> and the notices delivered with the exact image |
 
 The complete Tailscale BSD-3-Clause text associated with the pinned client
-source is stored at `third_party/licenses/Tailscale-BSD-3-Clause.txt`. The DNS
+source is stored at `docs/licenses/Tailscale-BSD-3-Clause.txt`. The DNS
 builder also fetches and verifies the dependency-license report from the exact
 pinned Tailscale tag, includes it in the ISO, and installs it beside the project
 notices. These inclusions preserve useful material but do not by themselves
 approve redistribution. GNU GPL version 3 text used by this project and the
-GPL-licensed upstream components is stored at `LICENSE`.
+GPL-licensed upstream components is stored at the repository root `LICENSE`.
 
 ## Generated media and systems
 

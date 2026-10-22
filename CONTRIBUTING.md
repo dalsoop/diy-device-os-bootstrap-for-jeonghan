@@ -38,4 +38,4 @@ separate permission required from another copyright holder.
   installation, and network cutover as separate evidence states.
 - Do not describe a source tag or CI result as physical qualification.
 
-See `LICENSE_HISTORY.md` for the MIT-to-GPL transition boundary.
+See `docs/licenses/LICENSE_HISTORY.md` for the MIT-to-GPL transition boundary.

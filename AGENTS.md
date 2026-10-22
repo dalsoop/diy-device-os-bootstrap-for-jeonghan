@@ -8,7 +8,9 @@ This public monorepo is the single operator-owned source for Jeonghan's home-dev
 diy-device-os-bootstrap-for-jeonghan/
 ├── AGENTS.md                         ← agent entry point
 ├── CLAUDE.md                         ← Claude entry point; identical to AGENTS.md
+├── LICENSE                           ← GNU GPL version 3 for this repository
 ├── docs/
+│   ├── licenses/                     ← license history, third-party notices, bundled upstream license texts
 │   ├── architecture.md               ← components, trust boundaries, and end-to-end flows
 │   ├── business-rules.md             ← World, media, DNS, evidence, and generation rules
 │   ├── security.md                   ← identities, credentials, destructive authority, and audit policy

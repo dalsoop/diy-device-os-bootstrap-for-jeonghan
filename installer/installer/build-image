@@ -62,8 +62,8 @@ printf '%s' "$source_revision" | grep -Eq '^[0-9a-f]{40}$' ||
     fail "source revision is not a full Git commit"
 source_archive=$source_repository/archive/$source_revision.tar.gz
 
-for legal_file in LICENSE LICENSE_HISTORY.md THIRD_PARTY_NOTICES.md \
-    third_party/licenses/Tailscale-BSD-3-Clause.txt; do
+for legal_file in LICENSE docs/licenses/LICENSE_HISTORY.md docs/licenses/THIRD_PARTY_NOTICES.md \
+    docs/licenses/Tailscale-BSD-3-Clause.txt; do
     [ -r "$monorepo_root/$legal_file" ] || fail "missing legal file: $legal_file"
 done
 for contract_file in \
@@ -178,11 +178,11 @@ install -m 0644 "$repo_root/schemas/enrollment-record.schema.json" \
     "$generated_dir/enrollment-record.schema.json"
 install -m 0644 "$monorepo_root/LICENSE" \
     "$generated_dir/diy-device-os-bootstrap-for-jeonghan-license.txt"
-install -m 0644 "$monorepo_root/LICENSE_HISTORY.md" \
+install -m 0644 "$monorepo_root/docs/licenses/LICENSE_HISTORY.md" \
     "$generated_dir/license-history.md"
-install -m 0644 "$monorepo_root/THIRD_PARTY_NOTICES.md" \
+install -m 0644 "$monorepo_root/docs/licenses/THIRD_PARTY_NOTICES.md" \
     "$generated_dir/third-party-notices.md"
-install -m 0644 "$monorepo_root/third_party/licenses/Tailscale-BSD-3-Clause.txt" \
+install -m 0644 "$monorepo_root/docs/licenses/Tailscale-BSD-3-Clause.txt" \
     "$generated_dir/tailscale-license.txt"
 install -m 0644 "$tailscale_licenses" \
     "$generated_dir/tailscale-dependency-licenses.md"

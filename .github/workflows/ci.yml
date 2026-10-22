@@ -21,9 +21,9 @@ jobs:
         shell: bash
         run: |
           test -r LICENSE
-          test -r LICENSE_HISTORY.md
-          test -r THIRD_PARTY_NOTICES.md
-          test -r third_party/licenses/Tailscale-BSD-3-Clause.txt
+          test -r docs/licenses/LICENSE_HISTORY.md
+          test -r docs/licenses/THIRD_PARTY_NOTICES.md
+          test -r docs/licenses/Tailscale-BSD-3-Clause.txt
           missing=0
           while IFS= read -r file; do
             if ! grep -q '^# SPDX-FileCopyrightText: 2026 dalsoop$' "$file"; then

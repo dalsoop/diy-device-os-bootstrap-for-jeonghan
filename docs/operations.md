@@ -369,16 +369,17 @@ export TECHNITIUM_CA_FILE=/secure/dns/technitium-ca.pem
 engine/installer/management/dnsctl health
 
 export TECHNITIUM_TOKEN_FILE=/secure/dns/planner-token
-engine/installer/management/dnsctl plan burn-history/dns-records.zone
+engine/installer/management/dnsctl plan burn-history/dns-records.zone \
+  --out /secure/dns/plans/<new-plan>.json
 
-approved_commit=$(git rev-parse HEAD)
 export TECHNITIUM_TOKEN_FILE=/secure/dns/applier-token
-engine/installer/management/dnsctl apply burn-history/dns-records.zone \
-  --approved-commit "$approved_commit" \
+engine/installer/management/dnsctl apply \
+  --plan /secure/dns/plans/<new-plan>.json \
+  --plan-sha256 <plan_sha256> \
   --confirm APPLY
 ```
 
-The zone file must be clean and the approved commit must equal the checkout's `HEAD`. Change one logical zone operation at a time and query the canary over UDP and TCP before continuing.
+Save the plan from a clean checkout of the reviewed commit and review it; `plan --out` prints its `plan_sha256` on stderr. Apply rejects a different hash, endpoint, `HEAD`, or zone file, a live zone that changed since the plan, and a plan already applied; in each case make and review a new plan. Verify pull-request approval before apply; the command does not prove it. Change one logical zone operation at a time and query the canary over UDP and TCP before continuing.
 
 Router DHCP DNS changes are last. Record old values, retain a wired recovery client, advertise all three resolver addresses, renew one test lease, and observe a full lease cycle. If client resolution fails, restore the old DHCP DNS values before investigating the nodes.
 

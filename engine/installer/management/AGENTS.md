@@ -4,10 +4,11 @@ This module runs from a trusted management host after appliance installation.
 
 - Keep credentials in protected caller-selected files and directories outside
   the repository. Never print tokens or place them in URLs.
-- Reader and planner operations are the default. Apply enforces literal
-  confirmation, a caller-supplied commit equal to `HEAD`, and a clean zone
-  file. Human review and plan comparison remain required because the command
-  does not prove approval or consume a saved plan.
+- Reader and planner operations are the default. Apply consumes one saved,
+  read-only plan named by its SHA-256 and rejects any change of target,
+  commit, zone file, or live zone since that plan, and any replay. Human
+  review of that plan remains required because the command does not prove
+  pull-request approval.
 - Bootstrap all three nodes only from verified enrollment records. Encrypt the
   resulting access bundle before final placement.
 - Tailscale OAuth credentials never leave the management host. Mint one
@@ -31,8 +32,9 @@ This module runs from a trusted management host after appliance installation.
 
 The reviewed zone is `burn-history/dns-records.zone`; its YAML description
 example is `engine/installer/docs/examples/home.arpa.example.yml`.
-`cluster-bootstrap` reads the zone by default, and `dnsctl plan` and
-`dnsctl apply` take it as their zone-file argument.
+`cluster-bootstrap` reads the zone by default, `dnsctl plan` takes it as its
+zone-file argument, and `dnsctl apply` reads it through the saved plan's
+`zone_path`.
 
 - Keep zone changes declarative and reviewable; do not embed credentials or live
   API responses.

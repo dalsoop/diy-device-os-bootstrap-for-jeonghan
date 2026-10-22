@@ -14,7 +14,7 @@ SSH carried by the Tailscale network.
   DNS-resolution, and HTTPS probes;
 - report the Tailscale state of only `dns01`, `dns02`, and `dns03`;
 - read DNS health and produce a `home.arpa` plan with role-specific tokens;
-- optionally apply the tracked zone through the existing `dnsctl` gates.
+- optionally apply one saved, reviewed plan through the `dnsctl` gates.
 
 It cannot burn a USB, install an operating system, authorize a reinstall,
 restore a node, mint enrollment credentials, execute arbitrary commands, read
@@ -71,15 +71,17 @@ until the host administrator sets:
 export DEVICE_OS_AGENT_ALLOW_APPLY=1
 ```
 
-Even then, a call must name the exact checked-out commit and supply this exact
-target-specific phrase:
+`dns_plan` saves a read-only plan under
+`$DEVICE_OS_AGENT_STATE_DIR/dns-plans/<plan_sha256>.json` and returns
+`plan_sha256`. After reviewing that plan, a call to `dns_apply` must name the
+`plan_sha256` and supply this exact target-specific phrase:
 
 ```text
-APPLY home.arpa TO dns01 AT <full-commit-id>
+APPLY home.arpa TO dns01 PLAN <plan_sha256>
 ```
 
-The delegated `dnsctl` command independently requires its literal `APPLY`
-confirmation, matching `HEAD`, and a clean tracked zone file.
+The delegated `dnsctl apply` independently checks the plan hash, target URL,
+`HEAD`, the tracked zone file, the live zone, and replays before it writes.
 
 ## Local MCP connection
 

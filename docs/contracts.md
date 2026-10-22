@@ -92,7 +92,9 @@ A generation is complete only when `public.json`, `recovery.tar.age`, the saniti
 
 `engine/installer/management/network-preflight --json <router-cidr>` returns schema-version-1 topology, LAN reachability, optional outbound IP/DNS/HTTPS probes, phase gates, and blockers. `--offline` reports Internet readiness as unknown. It does not establish DNS health or installation evidence.
 
-`dnsctl health` reads a fixed node. `dnsctl plan` returns current and desired hashes plus a human diff. `dnsctl apply` requires literal `APPLY`, a caller-supplied commit equal to `HEAD`, and a clean tracked zone file; it returns nonzero for authentication, TLS, state, or API failure and appends redacted audit JSONL for completed plan/apply outcomes. It does not consume a saved plan or prove pull-request approval.
+`dnsctl health` reads a fixed node. `dnsctl plan <zone-file> [--out <plan-file>]` prints a plan and a human diff. The plan is a JSON object with `schema_version` 2, `created_at`, `zone`, `target_url`, `source_commit`, `zone_path` (relative to the Git work tree), `current_sha256`, `desired_sha256`, and `changed`; `source_commit` and `zone_path` are null when the zone file is untracked or modified. `--out` requires a committed, unmodified zone, saves the object once with mode 0444 through a hard link that never replaces an existing name, and prints `dnsctl: plan_sha256=<sha256>` on stderr.
+
+`dnsctl apply --plan <plan-file> --plan-sha256 <sha256> --confirm APPLY` hashes one private copy of the plan and writes only when all of these hold: the hash matches; the plan is a saved schema-version-2 plan; `TECHNITIUM_URL` equals `target_url`; `HEAD` equals `source_commit`; the zone file is tracked, unmodified, and hashes to `desired_sha256`; the live zone still hashes to `current_sha256`; and the audit log has no successful apply of the same `plan_sha256`. A plan with `changed` false returns `{"status":"unchanged"}` without writing. Success prints `{status, plan_sha256, response}`. The command returns nonzero for authentication, TLS, state, drift, replay, or API failure and appends redacted audit JSONL, carrying `plan_sha256` for saved plans, for completed plan/apply outcomes and live-zone drift. It does not prove pull-request approval or require unrelated checkout files to be clean.
 
 Restore requires an explicit target URL and `RESTORE <exact-url>`, decrypts and validates the archive locally, then currently sends the token and backup with TLS certificate verification disabled. That interface is limited to isolated recovery drills and is not a production-qualified restore path. Backup collection accepts only encrypted outputs. Tailscale enrollment accepts protected OAuth credential-file paths, not credential values, and creates one short-lived node key at a time.
 
@@ -158,8 +160,8 @@ The gateway is accessed through MCP stdio locally or a management-host forced SS
 | `network_preflight` | Router CIDR and Internet-check boolean | Topology/reachability JSON | Fixed probes only; no repair |
 | `tunnel_status` | None | Management host and `dns01`–`dns03` Tailscale state | Uses only administrator-fixed executable path |
 | `dns_health` | `dns01`, `dns02`, or `dns03` | Delegated health JSON | Reader credential only; fixed node URLs |
-| `dns_plan` | One fixed role | Delegated desired-state plan | Planner credential only; no apply |
-| `dns_apply` | Fixed role, full lowercase 40-character approved commit, exact `APPLY home.arpa TO <role> AT <commit>` | Delegated apply result | Always discoverable but rejects calls unless host policy is enabled; requires applier token and trusted CA plus all `dnsctl` gates |
+| `dns_plan` | One fixed role | Delegated plan plus `plan_sha256`; the plan is saved read-only as `$DEVICE_OS_AGENT_STATE_DIR/dns-plans/<plan_sha256>.json` | Planner credential only; no apply |
+| `dns_apply` | Fixed role, lowercase 64-character `plan_sha256` of a plan saved by `dns_plan`, exact `APPLY home.arpa TO <role> PLAN <plan_sha256>` | Delegated apply result | Always discoverable but rejects calls unless host policy is enabled; rejects an unknown plan; requires applier token and trusted CA plus all `dnsctl` gates |
 
 There is no gateway interface for USB burn, OS installation, restore, reinstall authorization, enrollment, router mutation, arbitrary shell, arbitrary path, arbitrary URL, or raw credential input.
 

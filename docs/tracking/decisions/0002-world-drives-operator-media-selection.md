@@ -18,7 +18,7 @@ fail-closed policies. The Installer consumes that resolved plan and selects
 exactly the listed entry IDs from either the embedded public Catalog or the
 reviewed local-profile registry.
 
-`installer/collections/device-os.json` remains the menu-group definition and a
+`engine/installer/collections/device-os.json` remains the menu-group definition and a
 contributor-only reference selection. It is not the ordinary user's source
 of truth. When the World omits the DNS profile, the resolved USB plan sets the
 DNS enrollment reserve to zero.

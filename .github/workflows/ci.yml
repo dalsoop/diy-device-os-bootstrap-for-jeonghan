@@ -40,36 +40,36 @@ jobs:
         run: |
           python3 -m venv /tmp/device-os-agent-ci
           /tmp/device-os-agent-ci/bin/python -m pip install \
-            --requirement agent/requirements.lock
+            --requirement engine/agent/requirements.lock
       - name: Check shell syntax
         run: |
-          bash -n agent/run
-          find device-os installer catalog -type f -perm -u+x -print0 |
+          bash -n engine/agent/run
+          find device-os engine/installer engine/catalog -type f -perm -u+x -print0 |
             xargs -0 -n1 bash -n
       - name: ShellCheck
         run: |
-          shellcheck agent/run
-          find device-os installer catalog -type f -perm -u+x -print0 |
+          shellcheck engine/agent/run
+          find device-os engine/installer engine/catalog -type f -perm -u+x -print0 |
             xargs -0 shellcheck
       - name: Check Python syntax
         run: |
-          python3 -c 'compile(open("installer/management/dns-appliance-status-monitor/server.py", encoding="utf-8").read(), "server.py", "exec")'
-          python3 -c 'compile(open("agent/server.py", encoding="utf-8").read(), "server.py", "exec")'
-          python3 -c 'compile(open("installer/installer/lib/installer_glyphs.py", encoding="utf-8").read(), "installer_glyphs.py", "exec")'
+          python3 -c 'compile(open("engine/installer/management/dns-appliance-status-monitor/server.py", encoding="utf-8").read(), "server.py", "exec")'
+          python3 -c 'compile(open("engine/agent/server.py", encoding="utf-8").read(), "server.py", "exec")'
+          python3 -c 'compile(open("engine/installer/dns-image/lib/installer_glyphs.py", encoding="utf-8").read(), "installer_glyphs.py", "exec")'
       - name: Check Ruby syntax
         run: |
-          ruby -c world/bin/resolve-world
-          ruby -c world/bin/record-usb-event
-          ruby -c world/tests/world-contract-simulation.rb
-          ruby -c world/tests/usb-event-simulation.rb
+          ruby -c engine/world/bin/resolve-world
+          ruby -c engine/world/bin/record-usb-event
+          ruby -c engine/world/tests/world-contract-simulation.rb
+          ruby -c engine/world/tests/usb-event-simulation.rb
       - name: Validate World contract
         run: |
-          world/tests/world-contract-simulation.rb
-          world/tests/usb-event-simulation.rb
+          engine/world/tests/world-contract-simulation.rb
+          engine/world/tests/usb-event-simulation.rb
       - name: Validate Catalog contracts
         run: |
-          catalog/bin/verify-catalog
-          catalog/tests/catalog-contract.sh
+          engine/catalog/bin/verify-catalog
+          engine/catalog/tests/catalog-contract.sh
       - name: Validate JSON Schema contracts
         shell: bash
         run: |
@@ -77,6 +77,7 @@ jobs:
           /usr/bin/python3 - <<'PY'
           import copy
           import json
+          import subprocess
           from pathlib import Path
 
           from jsonschema import Draft202012Validator
@@ -101,26 +102,26 @@ jobs:
               if selected_validator.is_valid(instance):
                   raise SystemExit(f"invalid fixture passed {name}")
 
-          catalog_index = validator("catalog/schemas/catalog-index.schema.json")
-          media_entry = validator("catalog/schemas/media-entry.schema.json")
-          bootloader = validator("catalog/schemas/bootloader.schema.json")
-          component_registry = validator("installer/schemas/component-redistribution-registry.schema.json")
-          component_review = validator("installer/schemas/component-review-record.schema.json")
-          build_manifest = validator("installer/schemas/dns-build-manifest.schema.json")
-          final_review = validator("installer/schemas/dns-final-review-record.schema.json")
-          license_check = validator("installer/schemas/license-check.schema.json")
-          raw_manifest = validator("installer/schemas/raw-image-manifest.schema.json")
+          catalog_index = validator("engine/catalog/schemas/catalog-index.schema.json")
+          media_entry = validator("engine/catalog/schemas/media-entry.schema.json")
+          bootloader = validator("engine/catalog/schemas/bootloader.schema.json")
+          component_registry = validator("engine/installer/schemas/component-redistribution-registry.schema.json")
+          component_review = validator("engine/installer/schemas/component-review-record.schema.json")
+          build_manifest = validator("engine/installer/schemas/dns-build-manifest.schema.json")
+          final_review = validator("engine/installer/schemas/dns-final-review-record.schema.json")
+          license_check = validator("engine/installer/schemas/license-check.schema.json")
+          raw_manifest = validator("engine/installer/schemas/raw-image-manifest.schema.json")
 
-          require_valid("Catalog index", catalog_index, load("catalog/catalog/index.json"))
-          for path in sorted((root / "catalog/catalog/entries").glob("*.json")):
+          require_valid("Catalog index", catalog_index, load("engine/catalog/data/index.json"))
+          for path in sorted((root / "engine/catalog/data/entries").glob("*.json")):
               require_valid(f"Catalog v2 entry {path.name}", media_entry, json.loads(path.read_text()))
-          for path in sorted((root / "catalog/catalog/bootloaders").glob("*.json")):
+          for path in sorted((root / "engine/catalog/data/bootloaders").glob("*.json")):
               require_valid(f"Catalog v2 bootloader {path.name}", bootloader, json.loads(path.read_text()))
 
-          invalid_media = load("catalog/catalog/entries/debian-live.json")
+          invalid_media = load("engine/catalog/data/entries/debian-live.json")
           invalid_media["redistribution"] = {"status": "unknown"}
           require_invalid("Catalog v2 unknown redistribution", media_entry, invalid_media)
-          invalid_bootloader = load("catalog/catalog/bootloaders/ventoy.json")
+          invalid_bootloader = load("engine/catalog/data/bootloaders/ventoy.json")
           invalid_bootloader["unexpected"] = True
           require_invalid("Catalog v2 additional property", bootloader, invalid_bootloader)
 
@@ -195,13 +196,86 @@ jobs:
               del invalid_fixture[rejected_key]
               require_invalid(f"{name} missing {rejected_key}", selected_validator, invalid_fixture)
 
+          usb_event = validator("engine/world/schemas/usb-event.schema.json")
+          usb_verification = validator("engine/world/schemas/usb-verification.schema.json")
+          tracked = set(subprocess.run(
+              ["git", "ls-files", "-z"], cwd=root, check=True, capture_output=True
+          ).stdout.decode("utf-8").split("\0")) - {""}
+
+          def require_tracked(name, base, relative, tree=False):
+              if not isinstance(relative, str) or not relative or relative.startswith("/") or any(
+                  segment in ("", ".", "..") for segment in relative.split("/")
+              ):
+                  raise SystemExit(f"record path is unsafe in {name}: {relative!r}")
+              path = f"{base}/{relative}" if base else relative
+              if path in tracked:
+                  return
+              if tree and any(candidate.startswith(f"{path}/") for candidate in tracked):
+                  return
+              raise SystemExit(f"record path does not resolve to a tracked path in {name}: {path}")
+
+          def require_world_plan(name, plan):
+              if plan.get("schema_version") != 1 or not isinstance(plan.get("source"), dict):
+                  raise SystemExit(f"World plan is malformed in {name}")
+              require_tracked(name, "", plan["source"].get("playbook"))
+              require_tracked(name, "", plan["source"].get("world"))
+
+          # failed/ holds failed-write records inside the generations root; it is never a generation.
+          generations = sorted(path for path in (root / "burn-history/logs/usb").iterdir()
+                               if path.is_dir() and path.name != "failed")
+          if not generations:
+              raise SystemExit("no USB generation records found")
+          for generation in generations:
+              label = f"USB generation {generation.name}"
+              event = load(generation / "event.json")
+              require_valid(f"{label} event.json", usb_event, event)
+              verification = load(generation / "verification.json")
+              require_valid(f"{label} verification.json", usb_verification, verification)
+              if not (event["status"] == "succeeded" and event["generation_id"] == generation.name and
+                      verification["generation_id"] == generation.name and
+                      verification["event_id"] == event["event_id"]):
+                  raise SystemExit(f"{label} identity does not match its folder")
+              world_lock = load(generation / "world.lock.json")
+              require_world_plan(f"{label} world.lock.json", world_lock)
+              manifest = load(generation / "media-manifest.json")
+              if manifest.get("world") != world_lock:
+                  raise SystemExit(f"{label} media-manifest.json does not embed world.lock.json")
+              require_tracked(f"{label} catalog", "", manifest["catalog"]["path"], tree=True)
+              require_tracked(f"{label} collection", "engine/installer", manifest["catalog"]["collection"])
+              for bundle in manifest["bundles"]:
+                  require_tracked(f"{label} bundle", "engine/installer", bundle["source"]["path"],
+                                  tree=bundle["source"]["kind"] == "repository-tree")
+              for entry in manifest["entries"]:
+                  for key in ("manifest_schema", "component_registry_schema"):
+                      if key in entry["source"]:
+                          require_tracked(f"{label} {key}", "", entry["source"][key])
+                  if "final_review" in entry:
+                      require_tracked(f"{label} final_review", "", entry["final_review"]["schema"])
+              if not (generation / "world.yaml").is_file():
+                  raise SystemExit(f"{label} is missing world.yaml")
+          failed_records = sorted((root / "burn-history/logs/usb/failed").glob("**/*.json"))
+          for path in failed_records:
+              record = load(path)
+              require_valid(f"failed USB write {path.name}", usb_event, record)
+              if record["status"] == "succeeded" or record["generation_id"] is not None or path.stem != record["event_id"]:
+                  raise SystemExit(f"failed USB write {path.name} identity is invalid")
+
+          v1_event = load(generations[0] / "event.json")
+          v1_event["schema_version"] = 1
+          v1_event["device_path"] = "/dev/fixture"
+          require_invalid("USB event with device_path", usb_event, v1_event)
+          v1_verification = load(generations[0] / "verification.json")
+          v1_verification["device_path"] = "/dev/fixture"
+          require_invalid("USB verification with device_path", usb_verification, v1_verification)
+          print(f"USB records: {len(generations)} generations and {len(failed_records)} failed writes validated")
+
           print("JSON Schema contracts: passed")
           PY
       - name: Resolve embedded Catalog
-        working-directory: installer
+        working-directory: engine/installer
         run: usb-media/resolve-catalog
       - name: Run Installer simulations
-        working-directory: installer
+        working-directory: engine/installer
         run: |
           tests/install-gate-simulation.sh
           tests/management-simulation.sh
@@ -212,6 +286,7 @@ jobs:
           tests/image-builder-simulation.sh
           tests/macos-writer-simulation.sh
           tests/inventory-wizard-simulation.sh
+          tests/documentation-check-simulation.sh
           tests/repository-contract.sh
       - name: Run Agent Gateway simulation
-        run: /tmp/device-os-agent-ci/bin/python agent/tests/gateway_simulation.py
+        run: /tmp/device-os-agent-ci/bin/python engine/agent/tests/gateway_simulation.py

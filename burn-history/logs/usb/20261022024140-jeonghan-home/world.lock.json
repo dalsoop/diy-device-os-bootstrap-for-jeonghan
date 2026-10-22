@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "source": {
+    "playbook": "burn-history/.paths.yaml",
+    "world": "burn-history/home.yaml"
+  },
+  "world": {
+    "name": "Jeonghan Home",
+    "slug": "jeonghan-home",
+    "lifecycle": "draft",
+    "timezone": "Asia/Seoul"
+  },
+  "media": {
+    "id": "dns-install",
+    "language": "ko-KR",
+    "entries": [
+      "dns-appliance"
+    ]
+  },
+  "policies": {
+    "unattendedInstall": "guarded",
+    "requireExactHardwareMatch": true,
+    "requireSingleInternalTargetDisk": true,
+    "requireTargetSpecificEraseConfirmation": true,
+    "automaticBootTimeout": "disabled"
+  }
+}

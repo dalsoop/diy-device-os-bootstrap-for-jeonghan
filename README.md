@@ -61,17 +61,23 @@ cd diy-device-os-bootstrap-for-jeonghan
 ./device-os world simulate
 ```
 
-The operator normally changes only
-[`world/drafts/jeonghan-home/world.yaml`](world/drafts/jeonghan-home/world.yaml).
+The user only needs [`burn-history/`](burn-history/README.md). You edit
+`home.yaml`, `dns-records.zone`, and the per-role `os-installs/<role>/os.conf`;
+`keys/` and each `os-installs/<role>/hardware.conf` hold private files never
+committed; `logs/` records what happened and is never edited. Everything in
+`engine/` is machinery that reads `burn-history/`; you do not need to open it.
+
+The home definition is
+[`burn-history/home.yaml`](burn-history/home.yaml).
 It defines `dns01`, `dns02`, and `dns03` at `10.0.5.1` through `10.0.5.3`, with
-the router at `10.0.0.1`. Hardware observations, keys, generated media,
-credentials, and recovery material stay outside Git in the documented ignored
-locations or the principal secret store.
+the router at `10.0.0.1`. Hardware captures (`burn-history/os-installs/<role>/hardware.conf`) and keys
+(`burn-history/keys/`) stay ignored; generated media, credentials, and recovery material stay
+outside Git in the documented ignored locations or the principal secret store.
 
 ## Build and burn flow
 
 1. Boot `inventory-capture` and collect each HP machine's exact hardware data.
-2. Review the local inventories and enable one machine at a time.
+2. Review the private captures in `burn-history/os-installs/<role>/hardware.conf` and enable one machine at a time.
 3. On an amd64 Debian 13 builder, build the offline Korean DNS installer ISO.
 4. Check capacity with the exact ISO and its build manifest.
 5. On Linux, burn directly, or on macOS build an exact-size raw image in the
@@ -102,10 +108,10 @@ devices. The later write remains a separate target-specific action:
 ./device-os targets
 DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
 DEVICE_OS_MEDIA=inventory-capture ./device-os world build-image \
-  --output "$PWD/installer/artifacts/inventory-capture.raw" \
+  --output "$PWD/engine/installer/artifacts/inventory-capture.raw" \
   --size EXACT_TARGET_BYTES
 sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn-image-macos \
-  --image "$PWD/installer/artifacts/inventory-capture.raw" \
+  --image "$PWD/engine/installer/artifacts/inventory-capture.raw" \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_TARGET_BYTES'
 ```
@@ -120,24 +126,33 @@ without printing hardware identities or credentials.
 ```text
 diy-device-os-bootstrap-for-jeonghan/
 ├── device-os              operator command
-├── world/                 home intent and append-only USB generations
-├── catalog/               data-only public OS and bootloader metadata
-├── installer/             builders, media assembly, and destructive gates
-├── agent/                 constrained management-host MCP access plane
+├── burn-history/          the user's folder
+│   ├── home.yaml          home intent: networks, computers, services, media, policies
+│   ├── dns-records.zone   the DNS zone
+│   ├── os-installs/       per-role folders: os.conf guided profile, hardware.conf real capture (ignored)
+│   ├── keys/              operator public keys, never committed
+│   └── logs/              what happened, never edited: USB generations, failed writes, verification reports
+├── engine/                machinery
+│   ├── installer/         builders, media assembly, management, and destructive gates
+│   ├── catalog/           data-only public OS and bootloader metadata
+│   ├── agent/             constrained management-host MCP access plane
+│   └── world/             World resolver and USB recorder
 └── docs/                  architecture, workflow, and decisions
 ```
 
-- `world/` owns operator intent, not erasure authority.
-- `catalog/` owns public metadata and executes nothing.
-- `installer/` validates all inputs and live targets before writing.
-- `agent/` exposes planning and reviewed DNS operations, never USB burn or OS
-  installation.
+- `burn-history/` owns operator intent and history, not erasure authority.
+- `engine/world/` resolves that intent and publishes records after verified writes.
+- `engine/catalog/` owns public metadata and executes nothing.
+- `engine/installer/` validates all inputs and live targets before writing.
+- `engine/agent/` exposes planning and reviewed DNS operations, never USB burn or
+  OS installation.
 
-Each verified physical USB creation publishes an immutable World
-generation named `{YYYYMMDDHHmmss}-{world-slug}`. The timestamp is the USB
-creation event in `Asia/Seoul`, not draft or commit time. Failed or cancelled
-physical attempts are recorded separately under `world/events/`; simulations
-do not create physical evidence.
+Each verified physical USB creation publishes an immutable World generation
+under `burn-history/logs/usb/` named `{YYYYMMDDHHmmss}-{world-slug}`. The
+timestamp is the USB creation event in `Asia/Seoul`, not draft or commit time.
+Failed or cancelled physical attempts are recorded separately under
+`burn-history/logs/usb/failed/`; simulations do not create physical
+evidence.
 
 ## Documentation
 
@@ -152,9 +167,9 @@ do not create physical evidence.
 - [Implementation status](docs/tracking/status.md)
 - [Open findings](docs/tracking/findings.md)
 - [Decision history](docs/tracking/decisions/index.md)
-- [DNS install usability audit](installer/docs/dns-install-usability-audit.md)
-- [Physical verification gates](installer/docs/verification.md)
-- [Agent Gateway](agent/README.md)
+- [DNS install usability audit](engine/installer/docs/dns-install-usability-audit.md)
+- [Physical verification gates](engine/installer/docs/verification.md)
+- [Agent Gateway](engine/agent/README.md)
 
 ## Upstream updates
 

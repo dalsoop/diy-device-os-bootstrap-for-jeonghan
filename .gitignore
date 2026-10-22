@@ -3,17 +3,11 @@
 __pycache__/
 *.pyc
 .venv/
-agent/.venv/
+engine/agent/.venv/
 
-installer/artifacts/
-installer/cache/
-installer/work/
-installer/inventory/local/
-installer/installer/inputs/age-recipient
-installer/installer/inputs/operator-authorized-keys
-installer/installer/simple-cdd/generated/
-installer/installer/simple-cdd/images/
-installer/installer/simple-cdd/tmp/
-
-world/local/*
-!world/local/README.md
+engine/installer/artifacts/
+engine/installer/cache/
+engine/installer/work/
+engine/installer/dns-image/simple-cdd/generated/
+engine/installer/dns-image/simple-cdd/images/
+engine/installer/dns-image/simple-cdd/tmp/

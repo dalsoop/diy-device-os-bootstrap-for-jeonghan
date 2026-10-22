@@ -1,21 +1,23 @@
 # Getting Started
 
 This is the operator guide for the currently implemented workflow. Run every
-command from the monorepo root unless a section explicitly says otherwise.
+command from the repository root unless a section explicitly says otherwise.
 
 ## Current implementation boundary
 
 The repository connects the World model, Catalog data, and Installer tooling:
 
-- `./device-os world ...` validates `world/drafts/<slug>/world.yaml` and uses
+- `./device-os world ...` validates the draft registered in
+  `burn-history/.paths.yaml` (`burn-history/home.yaml`) and uses
   its selected media entries.
 - the Installer independently validates the resulting World plan, Catalog
   entries, local profiles, and live target before destructive work.
-- A successful write does not yet publish an immutable directory under
-  `world/worlds/` automatically.
-- Linux can assemble the complete multiboot USB. macOS can plan and simulate,
-  and can write an existing exact-size MBR raw image, but this repository does
-  not yet build that raw image.
+- A physical write that passes readback publishes one immutable directory
+  under `burn-history/logs/usb/`; a failed or cancelled write publishes a
+  redacted record under `burn-history/logs/usb/failed/`.
+- Linux assembles the complete multiboot USB directly. macOS builds an
+  exact-size MBR raw image in a Linux container and writes it with verified
+  readback.
 
 Do not treat a World edit, plan, capacity result, or simulation as evidence that
 a USB was written or a machine was installed.
@@ -68,7 +70,7 @@ These commands do not download images or write a disk.
 Check the management host's live network path separately:
 
 ```sh
-installer/management/network-preflight --json 10.0.0.1/16 | jq
+engine/installer/management/network-preflight --json 10.0.0.1/16 | jq
 ```
 
 The report distinguishes LAN topology and reachability from outbound IP, DNS,
@@ -90,7 +92,7 @@ spec:
 The full file is:
 
 ```text
-world/drafts/jeonghan-home/world.yaml
+burn-history/home.yaml
 ```
 
 Entry IDs may name public Catalog entries or reviewed Installer-local profiles.
@@ -146,8 +148,8 @@ sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn \
 ```
 
 Boot each HP into Debian Live and follow `guides/DNS_INVENTORY.md` on the USB.
-Copy the resulting `inventory-dns01.conf` through `inventory-dns03.conf` files
-into the ignored `installer/inventory/local/` directory on the management host.
+Copy each resulting `inventory-<role>.conf` file (`dns01` through `dns03`) to
+the ignored `burn-history/os-installs/<role>/hardware.conf` on the management host.
 This first pass never authorizes internal-disk erasure.
 
 ### Second pass: build the production image
@@ -157,21 +159,21 @@ trusted Debian live environment, identify its wired interface and single
 internal target disk, and capture one ignored inventory file at a time:
 
 ```sh
-mkdir -p installer/inventory/local
-sudo installer/installer/capture-inventory \
+sudo engine/installer/dns-image/capture-inventory \
   dns01 10.0.5.1 enp1s0 /dev/sda \
-  > installer/inventory/local/dns01.conf
+  > burn-history/os-installs/dns01/hardware.conf
 ```
 
 Repeat for `dns02` and `dns03`. Review every value. For the first physical
-pilot, change `destructive_install_enabled` to `true` only in `dns01.conf`.
-Disabled example files may be used for the other two roles:
+pilot, change `destructive_install_enabled` to `true` only in
+`os-installs/dns01/hardware.conf`. The disabled guided profiles may be used for
+the other two roles:
 
 ```sh
-cp installer/inventory/nodes/dns02.conf.example \
-  installer/inventory/local/dns02.conf
-cp installer/inventory/nodes/dns03.conf.example \
-  installer/inventory/local/dns03.conf
+cp burn-history/os-installs/dns02/os.conf \
+  burn-history/os-installs/dns02/hardware.conf
+cp burn-history/os-installs/dns03/os.conf \
+  burn-history/os-installs/dns03/hardware.conf
 ```
 
 Copy only the operator public SSH key and the public age recipient into the
@@ -179,10 +181,10 @@ ignored input paths:
 
 ```sh
 cp /path/to/id_ed25519.pub \
-  installer/installer/inputs/operator-authorized-keys
+  burn-history/keys/operator-authorized-keys
 age-keygen -o /secure/dns-recovery-age-key.txt
 age-keygen -y /secure/dns-recovery-age-key.txt \
-  > installer/installer/inputs/age-recipient
+  > burn-history/keys/age-recipient
 ```
 
 Install the builder dependencies and build:
@@ -190,12 +192,12 @@ Install the builder dependencies and build:
 ```sh
 sudo apt-get install -y simple-cdd debian-cd debian-archive-keyring \
   reprepro rsync xorriso isolinux syslinux-common skopeo jq curl
-installer/installer/fetch-locked-sources
-installer/installer/build-image
+engine/installer/dns-image/fetch-locked-sources
+engine/installer/dns-image/build-image
 ```
 
-The ISO is created under `installer/installer/simple-cdd/images/`; its matching
-manifest is `installer/artifacts/build-manifest.json`. Both remain ignored by
+The ISO is created under `engine/installer/dns-image/simple-cdd/images/`; its matching
+manifest is `engine/installer/artifacts/build-manifest.json`. Both remain ignored by
 Git. A successful build is not permission to erase a USB or internal disk.
 
 The default `dns-install` selection contains only the guarded DNS image. The
@@ -267,33 +269,33 @@ After burning:
    node passes its gates.
 
 Use the detailed checklists in
-[`installer/docs/verification.md`](../installer/docs/verification.md) and
-[`installer/docs/os-install.md`](../installer/docs/os-install.md).
+[`engine/installer/docs/verification.md`](../engine/installer/docs/verification.md) and
+[`engine/installer/docs/os-install.md`](../engine/installer/docs/os-install.md).
 
 ## 9. Import enrollment and bootstrap the cluster
 
 After all three `ACTIVE` enrollment records exist:
 
 ```sh
-installer/management/import-enrollment \
+engine/installer/management/import-enrollment \
   --enrollment /media/DNS-ENROLL \
   --identity /secure/dns-recovery-age-key.txt \
   --output /secure/dns-bootstrap
 
 DNS_CLUSTER_CREDENTIALS_DIR=/secure/dns-bootstrap \
 DNS_CLUSTER_ACCESS_OUTPUT=/secure/cluster-access.json.age \
-  installer/management/cluster-bootstrap
+  engine/installer/management/cluster-bootstrap
 ```
 
 Move imported secrets into the principal secret store and rotate bootstrap
 credentials. Apply the router DHCP DNS change only after all node and rollback
-gates in [`installer/docs/network-cutover.md`](../installer/docs/network-cutover.md)
+gates in [`engine/installer/docs/network-cutover.md`](../engine/installer/docs/network-cutover.md)
 pass.
 
 ## 10. Connect an external agent without opening a router port
 
 Install the pinned Agent Gateway dependencies on the trusted management host,
-keep role-specific DNS token files outside Git, and expose `agent/run` only as a
+keep role-specific DNS token files outside Git, and expose `engine/agent/run` only as a
 dedicated SSH forced command. The SSH service must be reachable only through
 the reviewed Tailscale policy and host firewall.
 
@@ -305,7 +307,7 @@ delegates to `dnsctl` when explicitly enabled. USB burn, OS installation,
 restore, reinstall authorization, enrollment, arbitrary commands, arbitrary
 paths, and arbitrary URLs are never MCP tools.
 
-See [`agent/README.md`](../agent/README.md) for installation, credential paths,
+See [`engine/agent/README.md`](../engine/agent/README.md) for installation, credential paths,
 the forced-command example, and MCP client configuration.
 
 ## macOS boundary
@@ -318,10 +320,10 @@ the container does not receive a macOS block device:
 ./device-os targets
 DEVICE_OS_MEDIA=inventory-capture ./device-os world prepare
 DEVICE_OS_MEDIA=inventory-capture ./device-os world build-image \
-  --output "$PWD/installer/artifacts/inventory-capture.raw" \
+  --output "$PWD/engine/installer/artifacts/inventory-capture.raw" \
   --size EXACT_BYTES
 sudo DEVICE_OS_MEDIA=inventory-capture ./device-os world burn-image-macos \
-  --image "$PWD/installer/artifacts/inventory-capture.raw" \
+  --image "$PWD/engine/installer/artifacts/inventory-capture.raw" \
   --device /dev/diskN \
   --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
 ```
@@ -337,11 +339,11 @@ together.
 The intended history key is the physical USB creation time:
 
 ```text
-world/worlds/{YYYYMMDDHHmmss}-{world-slug}/
+burn-history/logs/usb/{YYYYMMDDHHmmss}-{world-slug}/
 ```
 
 Do not create a completed generation merely because a plan, simulation, build,
 or write command started. `world burn` and `world burn-image-macos` publish a
 generation atomically only after physical write and required readback evidence
 succeed. Failed and cancelled physical attempts are recorded under
-`world/events/YYYY/` without becoming generations.
+`burn-history/logs/usb/failed/YYYY/` without becoming generations.

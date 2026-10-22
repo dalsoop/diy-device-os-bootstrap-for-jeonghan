@@ -1,0 +1,24 @@
+{
+  "schema_version": 2,
+  "event_id": "20261021005006-jeonghan-home-1c46aa6b",
+  "generation_candidate": "20261021005006-jeonghan-home",
+  "generation_id": "20261021005006-jeonghan-home",
+  "world_slug": "jeonghan-home",
+  "media_id": "inventory-capture",
+  "writer": "macos-mbr-last",
+  "repository_revision": "f7049099f546c40623e5f6060de38e60c8aeba7c",
+  "catalog_tree": "b2f8699f01dd6dd391c6b9b2d8ce13498f8c9911",
+  "status": "succeeded",
+  "started_at": "2026-10-21T00:50:06+09:00",
+  "finished_at": "2026-10-21T01:38:22+09:00",
+  "exit_code": 0,
+  "failure_code": null,
+  "target": {
+    "display_name": "SanDisk 3.2Gen1",
+    "bytes": 30784094208
+  },
+  "readback": {
+    "method": "mbr-last-raw-compare",
+    "status": "passed"
+  }
+}

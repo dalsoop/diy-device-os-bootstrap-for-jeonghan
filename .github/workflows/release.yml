@@ -14,16 +14,16 @@ jobs:
       - uses: actions/checkout@v7
       - name: Use runner-local public inputs
         run: |
-          install -m 0644 /etc/dns-appliance-builder/operator-authorized-keys installer/installer/inputs/operator-authorized-keys
-          install -m 0644 /etc/dns-appliance-builder/age-recipient installer/installer/inputs/age-recipient
+          install -m 0644 /etc/dns-appliance-builder/operator-authorized-keys burn-history/keys/operator-authorized-keys
+          install -m 0644 /etc/dns-appliance-builder/age-recipient burn-history/keys/age-recipient
       - name: Fetch digest-pinned Technitium image
-        working-directory: installer
-        run: installer/fetch-locked-sources
+        working-directory: engine/installer
+        run: dns-image/fetch-locked-sources
       - name: Build candidate ISO and manifests
-        working-directory: installer
+        working-directory: engine/installer
         env:
           DNS_APPLIANCE_INVENTORY_DIR: /etc/dns-appliance-builder/inventory
-        run: installer/build-image
+        run: dns-image/build-image
       - name: Stage non-executable source-release evidence
         shell: bash
         run: |
@@ -31,9 +31,9 @@ jobs:
           evidence_dir="${RUNNER_TEMP}/dns-release-evidence"
           install -d -m 0755 "$evidence_dir"
           ./device-os license check --mode source-release --json \
-            > installer/artifacts/source-release-license-check.json
+            > engine/installer/artifacts/source-release-license-check.json
           jq -e '.mode == "source-release" and .decision == "allow" and .blockers == []' \
-            installer/artifacts/source-release-license-check.json >/dev/null
+            engine/installer/artifacts/source-release-license-check.json >/dev/null
           for file in \
             SHA256SUMS \
             build-manifest.json \
@@ -42,7 +42,7 @@ jobs:
             debian-package-sha256s.txt \
             sbom.spdx.json \
             source-release-license-check.json; do
-            install -m 0644 "installer/artifacts/$file" "$evidence_dir/$file"
+            install -m 0644 "engine/installer/artifacts/$file" "$evidence_dir/$file"
           done
           if find "$evidence_dir" -type f \( \
               -iname '*.iso' -o -iname '*.raw' -o -iname '*.img' -o \

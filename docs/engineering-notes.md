@@ -189,7 +189,7 @@ and compares all of them before live target inspection or any write.
 
 **Cause:** Debian 13's base-installer and grub-installer install packages into the target that are neither in debootstrap's base set nor dependencies of the appliance package list: `zstd` for the initramfs, `efibootmgr` for UEFI NVRAM entries, and `shim-signed`, `grub-efi-amd64-signed` and `mokutil` for Secure Boot. A mirror-only debian-cd image omits them, and the installer has no network fallback.
 
-**Response:** list firmware-neutral ones in `dns.packages` and firmware-specific ones (`grub-pc`, `grub-efi-amd64`, the Secure Boot chain, `dosfstools`) in `dns.downloads`; `installer/installer-target-packages` records the full set and `build-image` fails when any is missing from the DVD. A package change needs a full `build-image`; `refresh-guided-iso` only replaces guided files.
+**Response:** list firmware-neutral ones in `dns.packages` and firmware-specific ones (`grub-pc`, `grub-efi-amd64`, the Secure Boot chain, `dosfstools`) in `dns.downloads`; `engine/installer/dns-image/installer-target-packages` records the full set and `build-image` fails when any is missing from the DVD. A package change needs a full `build-image`; `refresh-guided-iso` only replaces guided files.
 
 ## The Secure Boot chain must not be preinstalled on BIOS targets
 

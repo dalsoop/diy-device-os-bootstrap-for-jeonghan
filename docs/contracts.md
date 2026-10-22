@@ -37,7 +37,7 @@ MiB. It rejects GPT images and images at or below 1 MiB.
 
 ## World Playbook
 
-`world/world-playbook.yaml` uses API version `device-os.bootstrap/v1alpha1` and kind `WorldPlaybook`. It declares `Asia/Seoul`, safe draft paths, the completed-generation root, and generation format `{YYYYMMDDHHmmss}-{world-slug}`.
+`burn-history/.paths.yaml` uses API version `device-os.bootstrap/v1alpha1` and kind `WorldPlaybook`. It lives in the user folder, and every path it registers is relative to that folder and must stay inside it. It declares `Asia/Seoul`, the draft `jeonghan-home` at `home.yaml`, the completed-generation root `logs/usb`, and generation format `{YYYYMMDDHHmmss}-{world-slug}`.
 
 A draft World contains unique assets, networks, nodes, services, media definitions, one valid `defaultMedia`, and fail-closed policies. References resolve exactly once; static addresses are unique and belong to the referenced network; the gateway is directly reachable or has an explicit route. Supported presentation languages are `ko-KR` and `en-US`.
 
@@ -47,7 +47,7 @@ The current `jeonghan-home` contract declares `inventory-capture=[debian-live]` 
 
 ## Catalog interfaces
 
-`catalog/catalog/index.json` uses `schema_version: 1` and is the closed-world registry. Every referenced JSON file exists, every controlled JSON file is registered, and IDs and paths are unique. `catalog/bin/verify-catalog` exits zero only when the complete registry and semantic contract pass; it emits no media and changes no repository state.
+`engine/catalog/data/index.json` uses `schema_version: 1` and is the closed-world registry. Every referenced JSON file exists, every controlled JSON file is registered, and IDs and paths are unique. `engine/catalog/bin/verify-catalog` exits zero only when the complete registry and semantic contract pass; it emits no media and changes no repository state.
 
 A public media entry uses schema version 2 and provides stable ID, group, release version, optional architecture, safe `images/*.iso` destination, menu alias, non-empty Korean and English descriptions, interactive/live boot behavior, `profile_adapter: none`, a `locked-download` source, and mandatory redistribution metadata. The source contains a basename-only filename, HTTPS URL, and lowercase 64-character SHA-256. A bootloader also uses schema version 2 and provides stable identity, implementation, version, safe archive root, locked source, and redistribution metadata.
 
@@ -57,7 +57,7 @@ Published schemas reject extra properties. CI validates every tracked Catalog re
 
 ## Installer composition and resolved media plan
 
-`installer/usb-media/composition.json` uses `schema_version: 1` and names product/repository identity, Catalog path and index, bootloader ID, reference collection, local-entry registry, USB labels and reserves, and safe repository bundles.
+`engine/installer/usb-media/composition.json` uses `schema_version: 1` and names product/repository identity, Catalog path and index, bootloader ID, reference collection, local-entry registry, USB labels and reserves, and safe repository bundles.
 
 The resolved media plan records the repository commit, Catalog tree, product, USB properties, one bootloader, groups, ordered public/local entries, and bundles. A World-driven plan embeds the validated World plan. Public and local registries may not expose the same ID; entry IDs, source filenames, and destinations are unique.
 
@@ -75,9 +75,9 @@ The data partition label is `DEVICE-OS`. It contains staged images, bundles, Ven
 
 When the DNS adapter is selected, a separate FAT32 `DNS-ENROLL` partition stores public enrollment evidence, encrypted recovery generations, active pointers, and reinstall authorizations. FAT32 is readable by the signed Debian Installer kernel's FAT modules; exFAT is unsupported at this stage. Files must remain below FAT32's 4 GiB per-file limit. It is transport, not the long-lived secret store. The Ventoy `DEVICE-OS` data partition remains exFAT.
 
-A completed personal World generation contains immutable `world.yaml`, `world.lock.json`, `media-manifest.json`, `verification.json`, and `event.json`. The event recorder seals `{YYYYMMDDHHmmss}-{world-slug}` before invoking the target-specific writer, requires schema-version-1 redacted evidence with passed readback, then atomically renames the staged directory into `world/worlds/`. It excludes images, caches, credentials, private keys, raw serials, MAC addresses, UUIDs, and recovery material.
+A completed personal World generation contains immutable `world.yaml`, `world.lock.json`, `media-manifest.json`, `verification.json`, and `event.json`. The event recorder seals `{YYYYMMDDHHmmss}-{world-slug}` before invoking the target-specific writer, requires the writer's schema-version-1 redacted write evidence with passed readback and a device that equals the requested target, publishes `event.json` and `verification.json` at schema version 2 without the device path, then atomically renames the staged directory into `burn-history/logs/usb/`. It excludes images, caches, credentials, private keys, raw serials, MAC addresses, UUIDs, and recovery material.
 
-The recorder holds one checkout-local lock across each physical write. Failed, cancelled, and recovered interrupted attempts never create a generation; they publish schema-version-1 records under `world/events/YYYY/{event-id}.json`. A successful event lives inside its generation. Simulations, plans, builds, and capacity checks create no event. Git commits and pushes remain an explicit pull-request workflow rather than a side effect of the root writer.
+The recorder holds one checkout-local lock across each physical write. Failed, cancelled, and recovered interrupted attempts never create a generation; they publish schema-version-2 records without the device path under `burn-history/logs/usb/failed/YYYY/{event-id}.json`. The required check validates every published record against `engine/world/schemas/usb-event.schema.json` and `usb-verification.schema.json`. A successful event lives inside its generation. Simulations, plans, builds, and capacity checks create no event. Git commits and pushes remain an explicit pull-request workflow rather than a side effect of the root writer.
 
 ## DNS enrollment record
 
@@ -90,7 +90,7 @@ A generation is complete only when `public.json`, `recovery.tar.age`, the saniti
 
 ## DNS management commands
 
-`management/network-preflight --json <router-cidr>` returns schema-version-1 topology, LAN reachability, optional outbound IP/DNS/HTTPS probes, phase gates, and blockers. `--offline` reports Internet readiness as unknown. It does not establish DNS health or installation evidence.
+`engine/installer/management/network-preflight --json <router-cidr>` returns schema-version-1 topology, LAN reachability, optional outbound IP/DNS/HTTPS probes, phase gates, and blockers. `--offline` reports Internet readiness as unknown. It does not establish DNS health or installation evidence.
 
 `dnsctl health` reads a fixed node. `dnsctl plan` returns current and desired hashes plus a human diff. `dnsctl apply` requires literal `APPLY`, a caller-supplied commit equal to `HEAD`, and a clean tracked zone file; it returns nonzero for authentication, TLS, state, or API failure and appends redacted audit JSONL for completed plan/apply outcomes. It does not consume a saved plan or prove pull-request approval.
 
@@ -100,13 +100,13 @@ Restore requires an explicit target URL and `RESTORE <exact-url>`, decrypts and 
 
 | Interface | Input | Output and side effects | Error cases |
 | --- | --- | --- | --- |
-| `installer/build/verify-locks` | Reviewed `build/locks/sources.env` | Prints `source locks: valid`; changes nothing | Nonzero for moving or malformed Debian/Tailscale URLs, malformed versions, timestamps, hashes, or OCI digests |
-| `installer/installer/fetch-locked-sources` | Network access and optional ignored cache path | Downloads Technitium OCI, Tailscale archive, and dependency-license report to temporary files; atomically promotes only verified content; prints checksums | Nonzero for missing tools, network/TLS failure, remote or cached digest mismatch, or license-report mismatch; partial files are removed |
-| `sh installer/installer/refresh-guided-iso <base.iso> <output.iso>` | Existing guided ISO and current checkout's guided preseed/scripts/templates; Linux with xorriso | Disposable iteration ISO with five guided files refreshed; verifies embedded bytes, BIOS/UEFI menus and disabled automatic boot; prints SHA-256; no release manifest | Nonzero for non-guided base, missing tools/files, output collision, failed ISO replay, stale embedded file, or enabled boot timeout; candidate cannot satisfy World runtime-artifact manifest checks |
-| `installer/installer/capture-inventory <role> <address> <interface> <whole-disk>` | One fixed DNS role, address, existing NIC, and whole block device on the target HP | Writes a shell-format inventory record to stdout with hashed hardware identities and `destructive_install_enabled=false`; does not modify the disk | Exit 2 for wrong arguments/role; nonzero for absent NIC/disk, a partition instead of whole disk, unreadable/empty identity, or missing SHA-256 tool |
-| `installer/installer/build-image` | Clean committed source; amd64 Debian 13; exact Simple-CDD version; verified caches; reviewed mode: three inventories and exactly one enabled role; guided mode: three disabled network profiles; operator public keys; age recipient | Builds ISO under `installer/installer/simple-cdd/images/`; verifies critical embedded files; writes checksums, build manifest, package lists, package hashes, and SPDX SBOM under the configured artifact directory | Nonzero for unsupported host, dirty source, missing/malformed public input, anything other than one enabled role, lock/cache mismatch, build failure, stale embedded content, or missing artifact |
+| `engine/installer/build/verify-locks` | Reviewed `engine/installer/build/locks/sources.env` | Prints `source locks: valid`; changes nothing | Nonzero for moving or malformed Debian/Tailscale URLs, malformed versions, timestamps, hashes, or OCI digests |
+| `engine/installer/dns-image/fetch-locked-sources` | Network access and optional ignored cache path | Downloads Technitium OCI, Tailscale archive, and dependency-license report to temporary files; atomically promotes only verified content; prints checksums | Nonzero for missing tools, network/TLS failure, remote or cached digest mismatch, or license-report mismatch; partial files are removed |
+| `sh engine/installer/dns-image/refresh-guided-iso <base.iso> <output.iso>` | Existing guided ISO and current checkout's guided preseed/scripts/templates; Linux with xorriso | Disposable iteration ISO with five guided files refreshed; verifies embedded bytes, BIOS/UEFI menus and disabled automatic boot; prints SHA-256; no release manifest | Nonzero for non-guided base, missing tools/files, output collision, failed ISO replay, stale embedded file, or enabled boot timeout; candidate cannot satisfy World runtime-artifact manifest checks |
+| `engine/installer/dns-image/capture-inventory <role> <address> <interface> <whole-disk>` | One fixed DNS role, address, existing NIC, and whole block device on the target HP | Writes a shell-format inventory record to stdout with hashed hardware identities and `destructive_install_enabled=false`; does not modify the disk | Exit 2 for wrong arguments/role; nonzero for absent NIC/disk, a partition instead of whole disk, unreadable/empty identity, or missing SHA-256 tool |
+| `engine/installer/dns-image/build-image` | Clean committed source; amd64 Debian 13; exact Simple-CDD version; verified caches; reviewed mode: three inventories and exactly one enabled role; guided mode: three disabled network profiles; operator public keys; age recipient | Builds ISO under `engine/installer/dns-image/simple-cdd/images/`; verifies critical embedded files; writes checksums, build manifest, package lists, package hashes, and SPDX SBOM under the configured artifact directory | Nonzero for unsupported host, dirty source, missing/malformed public input, anything other than one enabled role, lock/cache mismatch, build failure, stale embedded content, or missing artifact |
 
-`DNS_APPLIANCE_INSTALL_MODE=reviewed` is the default and requires exactly one enabled embedded inventory. `guided` uses disabled network profiles from `inventory/nodes/*.conf.example` (or `DNS_APPLIANCE_INVENTORY_DIR/*.conf`). Both modes install Debian OS and the offline DNS payload together. The embedded `install-mode` and manifest `install_mode` name the selected mode; missing mode means legacy `reviewed`, and unknown modes fail.
+`DNS_APPLIANCE_INSTALL_MODE=reviewed` is the default and requires exactly one enabled embedded inventory, read from `burn-history/os-installs/<role>/hardware.conf`. `guided` uses the disabled network profiles `burn-history/os-installs/<role>/os.conf`. `DNS_APPLIANCE_INVENTORY_DIR` replaces `burn-history/os-installs` as the directory that holds the per-role folders in both modes. Both modes install Debian OS and the offline DNS payload together. The embedded `install-mode` and manifest `install_mode` name the selected mode; a missing mode means `reviewed`, and unknown modes fail.
 
 In guided mode, Debian Installer's debconf frontend asks for role and wired physical NIC, captures local DMI/NIC/disk hashes into `/run/dns-appliance/inventory`, and displays the address, gateway, disk model, serial and exact byte count. It requires `ERASE <role> /dev/<disk> <serial> <bytes>`. Capture never writes the internal disk. The `select-disk` phase rechecks the captured hardware, disk path and exact size, single eligible internal disk, installer ancestry, mounted state, confirmation and active-generation reinstall authorization before signature clearing. An additional internal disk blocks guided installation even when its identity differs. Runtime inventory and confirmation are volatile and are never embedded or committed.
 
@@ -138,7 +138,7 @@ The repository-wide distribution policy enables source release and disables gene
 
 ## Read-only status monitor
 
-`installer/management/dns-appliance-status-monitor/start` accepts server arguments after requiring Python 3. `--config <json>` is required by the Python entry point; the wrapper supplies its bundled config. `--listen` defaults to `127.0.0.1`, `--port` to `8080`, and `--check-once` prints a JSON array instead of listening.
+`engine/installer/management/dns-appliance-status-monitor/start` accepts server arguments after requiring Python 3. `--config <json>` is required by the Python entry point; the wrapper supplies its bundled config. `--listen` defaults to `127.0.0.1`, `--port` to `8080`, and `--check-once` prints a JSON array instead of listening.
 
 The configuration contains at least one node with `name`, IPv4 `address`, and DNS `query`. Invalid JSON, an empty node set, a missing field, invalid address, invalid DNS label, unavailable bind address, or occupied port terminates nonzero. Probe failures are returned as `ok:false` status data and do not trigger mutation.
 

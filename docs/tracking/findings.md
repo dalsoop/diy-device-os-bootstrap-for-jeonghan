@@ -139,6 +139,23 @@ The current mitigation is the fixed command allowlist, protected credential-file
 
 The command is restricted to isolated restore drills and is not production-qualified. Closing this requires a trusted-CA or pinned-fingerprint input, endpoint validation, failure tests for an untrusted certificate, and a successful isolated restore with verification enabled.
 
+## VM qualification tooling lives outside the repository
+
+On 2026-10-22, a rebuild from a fresh GitHub clone of `ab46d04` succeeded using
+only `docs/operations.md`. It ran in a new amd64 Debian 13 container with only
+the operator SSH public key and age recipient supplied from outside Git. The
+ISO, the exact-size raw image and the BIOS and UEFI VM installs all passed
+(internal boot, DNS over UDP and TCP, encrypted enrollment). The one
+documentation gap found, the missing `world prepare` before the macOS
+`dns-install` build, is fixed.
+
+The disposable QEMU launch, key-input and screenshot tools used for the VM
+installs, and the read-only enrollment inspection, exist only on `m5m1`
+(`/Users/m5m1/dns-guided-vm`). The repository can build every artifact but
+cannot reproduce the VM qualification by itself. Closing this requires moving
+those tools into the repository with path rejection for real devices, as
+designed in the 2026-10-21 qualification plan.
+
 ## Hosted CI conflicts with the M5-only validation policy
 
 On 2026-10-21, `.github/workflows/ci.yml` still selects GitHub-hosted

@@ -245,6 +245,13 @@ installer/installer/fetch-locked-sources
 installer/installer/build-image
 ```
 
+For the guided one-USB path, prefix the build with
+`DNS_APPLIANCE_INSTALL_MODE=guided`; the default `reviewed` mode needs the
+captured inventories. The first build on an empty cache downloads the whole
+offline package set (about 2,100 packages, 1.8 GB) from `snapshot.debian.org`
+and took about 70 minutes on `m5m1`; later builds reuse the mirror and take
+minutes.
+
 `build-image` refuses zero or multiple erase-enabled roles. Run
 `./device-os world readiness` before the build and keep only the current pilot
 set to `destructive_install_enabled=true`.
@@ -278,8 +285,15 @@ The command destroys the selected USB. Never reuse a previous device path, seria
 On macOS, build a raw image from the exact DNS artifact and manifest, then write
 it. All paths passed into the container must stay inside this checkout:
 
+An ISO built on a separate amd64 builder goes into
+`installer/installer/simple-cdd/images/`. Its `build-manifest.json`,
+`component-redistribution-registry.json` and `sbom.spdx.json` go together into
+`installer/artifacts/`. `world prepare` fetches and verifies the locked Ventoy
+release that every World image needs:
+
 ```sh
 ./device-os targets
+./device-os world prepare
 ./device-os world build-image \
   --output "$PWD/installer/artifacts/dns-install.raw" \
   --size EXACT_TARGET_BYTES \

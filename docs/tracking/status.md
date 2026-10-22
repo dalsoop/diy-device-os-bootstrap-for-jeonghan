@@ -6,8 +6,8 @@ The current release state is a source-validated prototype, not a publicly distri
 
 | Capability | Built | Highest verified state | Remaining work |
 | --- | --- | --- | --- |
-| One personal `jeonghan-home` World with DNS assets, network, nodes, services, and two media passes | Yes | Completed `inventory-capture` physical generation with full raw readback | Mount and inspect the payload, then qualify BIOS and UEFI boot |
-| World-driven exact media selection | Yes | Manifest-bound `inventory-capture` physical write and generation inspection | Repeat the qualification path for the rebuilt `dns-install` image |
+| One personal `jeonghan-home` World with DNS assets, network, nodes, services, and two media passes | Yes | Completed `inventory-capture` and `dns-install` (`20261022024140-jeonghan-home`) physical generations with full raw readback | Mount and inspect the payloads, then qualify BIOS and UEFI boot on HP hardware |
+| World-driven exact media selection | Yes | Manifest-bound `inventory-capture` and `dns-install` physical writes and generation records | Physical HP boot and install from the `dns-install` USB |
 | Public Catalog v2 for Proxmox VE, Proxmox Backup Server, TrueNAS SCALE, Pop!_OS, and Debian Live | Yes | Executable contracts, draft-2020-12 schema validation, and accepted/rejected source fixtures | Vendor-provenance archive and physical boot qualification per entry before use |
 | Data-driven `locked-download` and `runtime-artifact` resolution | Yes | Isolated success and rejection simulations | A reviewed extension mechanism for any new source kind or profile adapter |
 | HTTPS download with SHA-256 cache promotion | Yes | Source simulations | Clean online Linux preparation using the current pins |
@@ -50,5 +50,7 @@ The guided path now captures identities and exact target-specific consent inside
 Update: commit `0f0664e` passed one disposable VM install per firmware from the exact-size Ventoy raw image (`installer/evidence/2026-10-21-guided-vm-qualification.md`): guided answers typed into the real dialogs, internal-disk boot, DNS over UDP and TCP, and encrypted enrollment with no plaintext secrets. Secure Boot was off. This is not physical, firmware or Secure Boot evidence.
 
 Update (2026-10-22): after the license and redistribution policy merged, commit `63cd0f4` passed the same qualification (`installer/evidence/2026-10-22-guided-vm-qualification.md`), with the raw image license decision `personal-use`/`allow` and the license, notice and source files installed on the target. Its raw image is the current burn candidate.
+
+Physical media (2026-10-22): the `63cd0f4` raw image (SHA-256 `53c6bff1…69d`) was written to the 30,784,094,208-byte SanDisk 3.2Gen1 with `world burn-image-macos` on `m1p1`, a one-time operator exception to the M5-only rule. Two-phase raw readback passed, and generation `20261022024140-jeonghan-home` records it. The write took 18 minutes and the `cmp` readback 33 minutes. This is a physical write and readback, not HP firmware boot or install evidence.
 
 The M5 source contract suite passed, including World, Catalog, media, inventory wizard, management, Tailscale and Agent Gateway simulations. Signed Debian installer fetch rejection fixtures also pass. The first real image build exposed Simple-CDD 0.6.9 requesting a removed i386 installer; the candidate now uses signed/checksummed amd64-only custom-installer inputs and still needs a successful image build.

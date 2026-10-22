@@ -1,0 +1,15 @@
+apiVersion: device-os.bootstrap/v1alpha1
+kind: WorldPlaybook
+
+metadata:
+  name: DIY Device OS Bootstrap for Jeonghan
+
+spec:
+  timezone: Asia/Seoul
+  drafts:
+    - slug: jeonghan-home
+      path: config/home.yaml
+  generations:
+    root: records/usb
+    idFormat: "{YYYYMMDDHHmmss}-{world-slug}"
+    publishAfter: verified-physical-usb-write

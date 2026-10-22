@@ -40,36 +40,36 @@ jobs:
         run: |
           python3 -m venv /tmp/device-os-agent-ci
           /tmp/device-os-agent-ci/bin/python -m pip install \
-            --requirement agent/requirements.lock
+            --requirement engine/agent/requirements.lock
       - name: Check shell syntax
         run: |
-          bash -n agent/run
-          find device-os installer catalog -type f -perm -u+x -print0 |
+          bash -n engine/agent/run
+          find device-os engine/installer engine/catalog -type f -perm -u+x -print0 |
             xargs -0 -n1 bash -n
       - name: ShellCheck
         run: |
-          shellcheck agent/run
-          find device-os installer catalog -type f -perm -u+x -print0 |
+          shellcheck engine/agent/run
+          find device-os engine/installer engine/catalog -type f -perm -u+x -print0 |
             xargs -0 shellcheck
       - name: Check Python syntax
         run: |
-          python3 -c 'compile(open("installer/management/dns-appliance-status-monitor/server.py", encoding="utf-8").read(), "server.py", "exec")'
-          python3 -c 'compile(open("agent/server.py", encoding="utf-8").read(), "server.py", "exec")'
-          python3 -c 'compile(open("installer/installer/lib/installer_glyphs.py", encoding="utf-8").read(), "installer_glyphs.py", "exec")'
+          python3 -c 'compile(open("engine/installer/management/dns-appliance-status-monitor/server.py", encoding="utf-8").read(), "server.py", "exec")'
+          python3 -c 'compile(open("engine/agent/server.py", encoding="utf-8").read(), "server.py", "exec")'
+          python3 -c 'compile(open("engine/installer/dns-image/lib/installer_glyphs.py", encoding="utf-8").read(), "installer_glyphs.py", "exec")'
       - name: Check Ruby syntax
         run: |
-          ruby -c world/bin/resolve-world
-          ruby -c world/bin/record-usb-event
-          ruby -c world/tests/world-contract-simulation.rb
-          ruby -c world/tests/usb-event-simulation.rb
+          ruby -c engine/world/bin/resolve-world
+          ruby -c engine/world/bin/record-usb-event
+          ruby -c engine/world/tests/world-contract-simulation.rb
+          ruby -c engine/world/tests/usb-event-simulation.rb
       - name: Validate World contract
         run: |
-          world/tests/world-contract-simulation.rb
-          world/tests/usb-event-simulation.rb
+          engine/world/tests/world-contract-simulation.rb
+          engine/world/tests/usb-event-simulation.rb
       - name: Validate Catalog contracts
         run: |
-          catalog/bin/verify-catalog
-          catalog/tests/catalog-contract.sh
+          engine/catalog/bin/verify-catalog
+          engine/catalog/tests/catalog-contract.sh
       - name: Validate JSON Schema contracts
         shell: bash
         run: |
@@ -101,26 +101,26 @@ jobs:
               if selected_validator.is_valid(instance):
                   raise SystemExit(f"invalid fixture passed {name}")
 
-          catalog_index = validator("catalog/schemas/catalog-index.schema.json")
-          media_entry = validator("catalog/schemas/media-entry.schema.json")
-          bootloader = validator("catalog/schemas/bootloader.schema.json")
-          component_registry = validator("installer/schemas/component-redistribution-registry.schema.json")
-          component_review = validator("installer/schemas/component-review-record.schema.json")
-          build_manifest = validator("installer/schemas/dns-build-manifest.schema.json")
-          final_review = validator("installer/schemas/dns-final-review-record.schema.json")
-          license_check = validator("installer/schemas/license-check.schema.json")
-          raw_manifest = validator("installer/schemas/raw-image-manifest.schema.json")
+          catalog_index = validator("engine/catalog/schemas/catalog-index.schema.json")
+          media_entry = validator("engine/catalog/schemas/media-entry.schema.json")
+          bootloader = validator("engine/catalog/schemas/bootloader.schema.json")
+          component_registry = validator("engine/installer/schemas/component-redistribution-registry.schema.json")
+          component_review = validator("engine/installer/schemas/component-review-record.schema.json")
+          build_manifest = validator("engine/installer/schemas/dns-build-manifest.schema.json")
+          final_review = validator("engine/installer/schemas/dns-final-review-record.schema.json")
+          license_check = validator("engine/installer/schemas/license-check.schema.json")
+          raw_manifest = validator("engine/installer/schemas/raw-image-manifest.schema.json")
 
-          require_valid("Catalog index", catalog_index, load("catalog/catalog/index.json"))
-          for path in sorted((root / "catalog/catalog/entries").glob("*.json")):
+          require_valid("Catalog index", catalog_index, load("engine/catalog/data/index.json"))
+          for path in sorted((root / "engine/catalog/data/entries").glob("*.json")):
               require_valid(f"Catalog v2 entry {path.name}", media_entry, json.loads(path.read_text()))
-          for path in sorted((root / "catalog/catalog/bootloaders").glob("*.json")):
+          for path in sorted((root / "engine/catalog/data/bootloaders").glob("*.json")):
               require_valid(f"Catalog v2 bootloader {path.name}", bootloader, json.loads(path.read_text()))
 
-          invalid_media = load("catalog/catalog/entries/debian-live.json")
+          invalid_media = load("engine/catalog/data/entries/debian-live.json")
           invalid_media["redistribution"] = {"status": "unknown"}
           require_invalid("Catalog v2 unknown redistribution", media_entry, invalid_media)
-          invalid_bootloader = load("catalog/catalog/bootloaders/ventoy.json")
+          invalid_bootloader = load("engine/catalog/data/bootloaders/ventoy.json")
           invalid_bootloader["unexpected"] = True
           require_invalid("Catalog v2 additional property", bootloader, invalid_bootloader)
 
@@ -198,10 +198,10 @@ jobs:
           print("JSON Schema contracts: passed")
           PY
       - name: Resolve embedded Catalog
-        working-directory: installer
+        working-directory: engine/installer
         run: usb-media/resolve-catalog
       - name: Run Installer simulations
-        working-directory: installer
+        working-directory: engine/installer
         run: |
           tests/install-gate-simulation.sh
           tests/management-simulation.sh
@@ -214,4 +214,4 @@ jobs:
           tests/inventory-wizard-simulation.sh
           tests/repository-contract.sh
       - name: Run Agent Gateway simulation
-        run: /tmp/device-os-agent-ci/bin/python agent/tests/gateway_simulation.py
+        run: /tmp/device-os-agent-ci/bin/python engine/agent/tests/gateway_simulation.py

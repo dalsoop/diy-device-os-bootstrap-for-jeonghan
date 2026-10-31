@@ -50,8 +50,36 @@ for value in "$ROLE" "$ADDRESS" "$NETMASK" "$GATEWAY" "$DNS_SERVERS" "$DOMAIN" \
     }
 done
 
+# The image embeds the World's overlay selection: tailscale and/or netbird,
+# once each, one per line, in that order. Anything else stops the install
+# before the target is changed.
+overlays_file=/cdrom/simple-cdd/overlays
+[ -s "$overlays_file" ] || {
+    echo "dns-finish-install: overlay selection is missing or empty" >&2
+    exit 1
+}
+overlays=$(awk '
+    $0 == "tailscale" && !tailscale && !netbird { tailscale = 1; print; next }
+    $0 == "netbird" && !netbird { netbird = 1; print; next }
+    { bad = 1 }
+    END { exit (bad || NR == 0) }
+' "$overlays_file") || {
+    echo "dns-finish-install: overlay selection is malformed" >&2
+    exit 1
+}
+tailscale_selected=false
+netbird_selected=false
+for overlay in $overlays; do
+    case "$overlay" in
+        tailscale) tailscale_selected=true ;;
+        netbird) netbird_selected=true ;;
+    esac
+done
+
 install -d -m 0755 /target/etc/dns-appliance
 install -m 0644 "$state" /target/etc/dns-appliance/install.env
+printf '%s\n' "$overlays" > /target/etc/dns-appliance/overlays
+chmod 0644 /target/etc/dns-appliance/overlays
 install -m 0644 /cdrom/simple-cdd/sources.env /target/etc/dns-appliance/sources.env
 install -m 0644 /cdrom/simple-cdd/age-recipient /target/etc/dns-appliance/age-recipient
 install -d -m 0755 /target/usr/lib/dns-appliance /target/usr/share/dns-appliance
@@ -66,10 +94,6 @@ install -m 0644 /cdrom/simple-cdd/license-history.md \
     /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/LICENSE_HISTORY.md
 install -m 0644 /cdrom/simple-cdd/third-party-notices.md \
     /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/THIRD_PARTY_NOTICES.md
-install -m 0644 /cdrom/simple-cdd/tailscale-license.txt \
-    /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/Tailscale-BSD-3-Clause.txt
-install -m 0644 /cdrom/simple-cdd/tailscale-dependency-licenses.md \
-    /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/Tailscale-Dependencies.md
 install -m 0644 /cdrom/simple-cdd/source.md \
     /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md
 install -m 0644 /cdrom/simple-cdd/source-snapshot.tar.gz \
@@ -87,34 +111,63 @@ install -m 0644 /cdrom/simple-cdd/dns-build-manifest.schema.json \
 install -m 0644 /cdrom/simple-cdd/dns-final-review-record.schema.json \
     /target/usr/share/dns-appliance/dns-final-review-record.schema.json
 
-# Tailscale is installed from a checksum-pinned upstream static archive so the
-# appliance can be built and installed without package-repository access.
-TAILSCALE_VERSION=$(awk -F= '$1 == "TAILSCALE_VERSION" { print $2 }' \
-    /cdrom/simple-cdd/sources.env)
-[ -n "$TAILSCALE_VERSION" ] || {
-    echo "dns-finish-install: Tailscale version is missing from source locks" >&2
-    exit 1
-}
-tailscale_root=tailscale_${TAILSCALE_VERSION}_amd64
-tailscale_stage=/tmp/dns-appliance-tailscale
-rm -rf "$tailscale_stage"
-install -d -m 0755 "$tailscale_stage"
-tar -xzf /cdrom/simple-cdd/tailscale.tgz -C "$tailscale_stage"
-[ -x "$tailscale_stage/$tailscale_root/tailscale" ] || {
-    echo "dns-finish-install: pinned Tailscale client is missing" >&2
-    exit 1
-}
-[ -x "$tailscale_stage/$tailscale_root/tailscaled" ] || {
-    echo "dns-finish-install: pinned tailscaled is missing" >&2
-    exit 1
-}
-install -m 0755 "$tailscale_stage/$tailscale_root/tailscale" /target/usr/bin/tailscale
-install -m 0755 "$tailscale_stage/$tailscale_root/tailscaled" /target/usr/sbin/tailscaled
-install -m 0644 "$tailscale_stage/$tailscale_root/systemd/tailscaled.service" \
-    /target/lib/systemd/system/tailscaled.service
-install -m 0644 "$tailscale_stage/$tailscale_root/systemd/tailscaled.defaults" \
-    /target/etc/default/tailscaled
-rm -rf "$tailscale_stage"
+# Overlay clients are installed from checksum-pinned upstream static archives
+# so the appliance can be built and installed without package-repository
+# access. Only the selected clients are on the medium and installed; none is
+# enrolled here.
+if [ "$tailscale_selected" = true ]; then
+    TAILSCALE_VERSION=$(awk -F= '$1 == "TAILSCALE_VERSION" { print $2 }' \
+        /cdrom/simple-cdd/sources.env)
+    [ -n "$TAILSCALE_VERSION" ] || {
+        echo "dns-finish-install: Tailscale version is missing from source locks" >&2
+        exit 1
+    }
+    tailscale_root=tailscale_${TAILSCALE_VERSION}_amd64
+    tailscale_stage=/tmp/dns-appliance-tailscale
+    rm -rf "$tailscale_stage"
+    install -d -m 0755 "$tailscale_stage"
+    tar -xzf /cdrom/simple-cdd/tailscale.tgz -C "$tailscale_stage"
+    [ -x "$tailscale_stage/$tailscale_root/tailscale" ] || {
+        echo "dns-finish-install: pinned Tailscale client is missing" >&2
+        exit 1
+    }
+    [ -x "$tailscale_stage/$tailscale_root/tailscaled" ] || {
+        echo "dns-finish-install: pinned tailscaled is missing" >&2
+        exit 1
+    }
+    install -m 0755 "$tailscale_stage/$tailscale_root/tailscale" /target/usr/bin/tailscale
+    install -m 0755 "$tailscale_stage/$tailscale_root/tailscaled" /target/usr/sbin/tailscaled
+    install -m 0644 "$tailscale_stage/$tailscale_root/systemd/tailscaled.service" \
+        /target/lib/systemd/system/tailscaled.service
+    install -m 0644 "$tailscale_stage/$tailscale_root/systemd/tailscaled.defaults" \
+        /target/etc/default/tailscaled
+    rm -rf "$tailscale_stage"
+    install -m 0644 /cdrom/simple-cdd/tailscale-license.txt \
+        /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/Tailscale-BSD-3-Clause.txt
+    install -m 0644 /cdrom/simple-cdd/tailscale-dependency-licenses.md \
+        /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/Tailscale-Dependencies.md
+fi
+
+# NetBird ships one static client binary at the archive root. The unit is the
+# repository's copy of what `netbird service install` writes; the daemon keeps
+# its profile under /var/lib/netbird and logs under /var/log/netbird.
+if [ "$netbird_selected" = true ]; then
+    netbird_stage=/tmp/dns-appliance-netbird
+    rm -rf "$netbird_stage"
+    install -d -m 0755 "$netbird_stage"
+    tar -xzf /cdrom/simple-cdd/netbird.tar.gz -C "$netbird_stage"
+    { [ -f "$netbird_stage/netbird" ] && [ ! -L "$netbird_stage/netbird" ] &&
+        [ -x "$netbird_stage/netbird" ]; } || {
+        echo "dns-finish-install: pinned NetBird client is missing" >&2
+        exit 1
+    }
+    install -m 0755 "$netbird_stage/netbird" /target/usr/bin/netbird
+    rm -rf "$netbird_stage"
+    install -m 0644 /cdrom/simple-cdd/netbird.service /target/etc/systemd/system/netbird.service
+    install -d -m 0750 /target/var/log/netbird
+    install -m 0644 /cdrom/simple-cdd/netbird-license.txt \
+        /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/NetBird-BSD-3-Clause.txt
+fi
 
 printf '%s\n' "$ROLE" > /target/etc/hostname
 printf '127.0.0.1 localhost\n127.0.1.1 %s.%s %s\n' "$ROLE" "$DOMAIN" "$ROLE" > /target/etc/hosts
@@ -174,5 +227,10 @@ in-target systemctl enable cockpit.socket
 in-target systemctl enable nftables.service
 in-target systemctl enable prometheus-node-exporter.service
 in-target systemctl enable systemd-timesyncd.service
-in-target systemctl enable tailscaled.service
+if [ "$tailscale_selected" = true ]; then
+    in-target systemctl enable tailscaled.service
+fi
+if [ "$netbird_selected" = true ]; then
+    in-target systemctl enable netbird.service
+fi
 in-target systemctl enable dns-appliance-firstboot.service

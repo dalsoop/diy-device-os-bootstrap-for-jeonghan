@@ -5,7 +5,9 @@ generated/install-mode
 generated/operator-authorized-keys
 generated/age-recipient
 generated/technitium.oci.tar
+generated/overlays
 generated/tailscale.tgz
+generated/netbird.tar.gz
 generated/sources.env
 generated/enrollment-record.schema.json
 generated/diy-device-os-bootstrap-for-jeonghan-license.txt
@@ -13,6 +15,7 @@ generated/license-history.md
 generated/third-party-notices.md
 generated/tailscale-license.txt
 generated/tailscale-dependency-licenses.md
+generated/netbird-license.txt
 generated/source.md
 generated/source-snapshot.tar.gz
 generated/distribution-policy.json
@@ -41,3 +44,4 @@ generated/dns-final-review-record.schema.json
 ../payload/dns-appliance-backup.service
 ../payload/dns-appliance-backup.timer
 ../payload/technitium-dns.service
+../payload/netbird.service

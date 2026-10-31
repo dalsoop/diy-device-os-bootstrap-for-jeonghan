@@ -1,0 +1,22 @@
+# The unit that `netbird service install` of the pinned NetBird client writes
+# on a systemd host with its defaults: the daemon socket, the profile state
+# under /var/lib/netbird and the logs under /var/log/netbird, which
+# dns-finish-install creates. Installed only when the World selects NetBird.
+[Unit]
+Description=NetBird mesh network client
+ConditionFileIsExecutable=/usr/bin/netbird
+After=network.target syslog.target
+
+[Service]
+StartLimitInterval=5
+StartLimitBurst=10
+ExecStart=/usr/bin/netbird "service" "run" "--log-level" "info" "--daemon-addr" "unix:///var/run/netbird.sock" "--config" "/var/lib/netbird/default.json" "--log-file" "/var/log/netbird/client.log"
+StandardOutput=file:/var/log/netbird/netbird.out
+StandardError=file:/var/log/netbird/netbird.err
+Restart=always
+RestartSec=120
+EnvironmentFile=-/etc/sysconfig/netbird
+
+Environment=SYSTEMD_UNIT=netbird
+[Install]
+WantedBy=multi-user.target

@@ -24,6 +24,7 @@ jobs:
           test -r docs/licenses/LICENSE_HISTORY.md
           test -r docs/licenses/THIRD_PARTY_NOTICES.md
           test -r docs/licenses/Tailscale-BSD-3-Clause.txt
+          test -r docs/licenses/NetBird-BSD-3-Clause.txt
           missing=0
           while IFS= read -r file; do
             if ! grep -q '^# SPDX-FileCopyrightText: 2026 dalsoop$' "$file"; then
@@ -135,12 +136,23 @@ jobs:
               for kind in ("license-text", "notices", "corresponding-source", "trademark")
           ]
           components = [
-              {"id": "debian-package-closure", "version": "13.7.0@20261011T000000Z", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
+              {"id": "debian-package-closure", "version": "13.7.0@20261031T143759Z", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
               {"id": "technitium-oci", "version": "15.6.1", "digest": {"algorithm": "sha256", "value": digest}, "source_identity": {"kind": "oci-digest", "value": f"sha256:{digest}"}, "redistribution": {"status": "personal-use-only"}},
               {"id": "tailscale-archive", "version": "1.104.1", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
               {"id": "tailscale-dependency-report", "version": "1.104.1", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
+              {"id": "netbird-archive", "version": "0.82.0", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
               {"id": "repository-source-snapshot", "version": "b" * 40, "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
           ]
+          overlay_components = {
+              "tailscale": ("tailscale-archive", "tailscale-dependency-report"),
+              "netbird": ("netbird-archive",),
+          }
+
+          def components_for(overlays):
+              selected = {component_id for overlay in overlays for component_id in overlay_components[overlay]}
+              return [component for component in components
+                      if component["id"] not in {"tailscale-archive", "tailscale-dependency-report", "netbird-archive"}
+                      or component["id"] in selected]
           registry_fixture = {"schema_version": 1, "artifact_id": "dns-appliance", "components": components}
           review_fixture = {
               "schema_version": 1, "status": "redistribution-reviewed", "component_id": "technitium-oci",
@@ -154,11 +166,13 @@ jobs:
               "iso": "dns-appliance.iso", "iso_sha256": digest, "distribution_status": "personal-use-only",
               "component_registry": "component-redistribution-registry.json", "component_registry_sha256": digest,
               "distribution_policy_sha256": digest,
+              "overlays": ["tailscale", "netbird"],
               "components": [{"id": component["id"], "status": "personal-use-only"} for component in components],
               "sbom": "sbom.spdx.json", "sbom_sha256": digest, "debian_point_release": "13.7.0",
-              "debian_snapshot": "20261011T000000Z", "technitium_version": "15.6.1",
+              "debian_snapshot": "20261031T143759Z", "technitium_version": "15.6.1",
               "technitium_image_digest": f"sha256:{digest}", "technitium_archive_sha256": digest,
               "tailscale_version": "1.104.1", "tailscale_archive_sha256": digest,
+              "netbird_version": "0.82.0", "netbird_archive_sha256": digest,
               "source_revision": "b" * 40,
               "source_repository": "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan",
               "source_archive": f"https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/archive/{'b' * 40}.tar.gz",
@@ -195,6 +209,73 @@ jobs:
               invalid_fixture = copy.deepcopy(valid_fixture)
               del invalid_fixture[rejected_key]
               require_invalid(f"{name} missing {rejected_key}", selected_validator, invalid_fixture)
+
+          # The overlay selection decides the conditional manifest fields and
+          # the canonical-order component subset of the manifest and registry.
+          overlay_fields = {
+              "tailscale": ("tailscale_version", "tailscale_archive_sha256"),
+              "netbird": ("netbird_version", "netbird_archive_sha256"),
+          }
+
+          def build_for(overlays):
+              fixture = copy.deepcopy(build_fixture)
+              fixture["overlays"] = list(overlays)
+              fixture["components"] = [{"id": component["id"], "status": "personal-use-only"}
+                                       for component in components_for(overlays)]
+              for overlay, fields in overlay_fields.items():
+                  if overlay not in overlays:
+                      for field in fields:
+                          del fixture[field]
+              return fixture
+
+          for overlays in (["tailscale"], ["netbird"], ["tailscale", "netbird"]):
+              label = "+".join(overlays)
+              require_valid(f"DNS build manifest {label}", build_manifest, build_for(overlays))
+              require_valid(f"component registry {label}", component_registry,
+                            {**registry_fixture, "components": components_for(overlays)})
+              for overlay, fields in overlay_fields.items():
+                  for field in fields:
+                      changed = build_for(overlays)
+                      if overlay in overlays:
+                          del changed[field]
+                          require_invalid(f"DNS build manifest {label} missing {field}", build_manifest, changed)
+                      else:
+                          changed[field] = build_fixture[field]
+                          require_invalid(f"DNS build manifest {label} with unselected {field}", build_manifest, changed)
+              wrong_components = build_for(overlays)
+              wrong_components["components"] = build_fixture["components"] if len(overlays) == 1 else build_for(["netbird"])["components"]
+              require_invalid(f"DNS build manifest {label} with another selection's components", build_manifest, wrong_components)
+
+          for name, overlays in (
+              ("unknown overlay", ["tailscale", "wireguard"]),
+              ("empty overlays", []),
+              ("duplicate overlay", ["tailscale", "tailscale"]),
+              ("non-canonical overlay order", ["netbird", "tailscale"]),
+              ("non-array overlays", "tailscale"),
+          ):
+              changed = copy.deepcopy(build_fixture)
+              changed["overlays"] = overlays
+              require_invalid(f"DNS build manifest {name}", build_manifest, changed)
+          missing_overlays = copy.deepcopy(build_fixture)
+          del missing_overlays["overlays"]
+          require_invalid("DNS build manifest missing overlays", build_manifest, missing_overlays)
+
+          reordered = copy.deepcopy(registry_fixture)
+          reordered["components"][2], reordered["components"][4] = reordered["components"][4], reordered["components"][2]
+          require_invalid("component registry reordered", component_registry, reordered)
+          for removed in ("tailscale-dependency-report", "debian-package-closure"):
+              partial = copy.deepcopy(registry_fixture)
+              partial["components"] = [component for component in components if component["id"] != removed]
+              require_invalid(f"component registry without {removed}", component_registry, partial)
+          extra = copy.deepcopy(registry_fixture)
+          extra["components"].append(copy.deepcopy(components[4]))
+          require_invalid("component registry with a duplicate component", component_registry, extra)
+          require_invalid("component registry without overlay components", component_registry,
+                          {**registry_fixture, "components": components_for([])})
+          netbird_review = {**review_fixture, "component_id": "netbird-archive", "component_version": "0.82.0"}
+          del netbird_review["source_identity"]
+          require_valid("NetBird component review", component_review, netbird_review)
+          require_invalid("unknown component review", component_review, {**netbird_review, "component_id": "wireguard-archive"})
 
           usb_event = validator("engine/world/schemas/usb-event.schema.json")
           usb_verification = validator("engine/world/schemas/usb-verification.schema.json")

@@ -1,0 +1,117 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 dalsoop
+# SPDX-License-Identifier: GPL-3.0-only
+set -eu
+
+# The DNS image bundles only the overlay clients that the World selects.
+#   resolve               print the World's selection, one value per line, in
+#                         the canonical order tailscale, netbird
+#   check FILE            accept FILE only when it holds such a selection
+#   notices FILE NOTICES  print NOTICES without the sections of overlays that
+#                         FILE does not select
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+monorepo_root=$(CDPATH='' cd -- "$script_dir/../../.." && pwd)
+resolver=$monorepo_root/engine/world/bin/resolve-world
+
+fail() {
+    echo "overlay-selection: $*" >&2
+    exit 1
+}
+
+usage() {
+    echo "usage: overlay-selection resolve | check FILE | notices FILE NOTICES" >&2
+    exit 2
+}
+
+check_file() {
+    { [ -f "$1" ] && [ -s "$1" ]; } || fail "overlay selection is missing or empty: $1"
+    awk '
+        $0 == "tailscale" && !tailscale && !netbird { tailscale = 1; next }
+        $0 == "netbird" && !netbird { netbird = 1; next }
+        { bad = 1 }
+        END { exit (bad || NR == 0) }
+    ' "$1" || fail "overlay selection must list tailscale and/or netbird once each, one per line, in that order: $1"
+}
+
+resolve() {
+    command -v ruby >/dev/null 2>&1 || fail "ruby is required to resolve the World"
+    command -v jq >/dev/null 2>&1 || fail "jq is required"
+    [ -x "$resolver" ] || fail "World resolver is missing: $resolver"
+    plan=$(mktemp)
+    trap 'rm -f "$plan"' EXIT HUP INT TERM
+    if [ -n "${DEVICE_OS_WORLD:-}" ]; then
+        "$resolver" --world "$DEVICE_OS_WORLD" > "$plan" || fail "the selected World cannot be resolved"
+    else
+        "$resolver" > "$plan" || fail "the World cannot be resolved"
+    fi
+    selection=$(jq -r '
+        .overlays as $selected |
+        if ($selected | type) == "array" and ($selected | length) > 0 and
+           ($selected | all(.[]; . == "tailscale" or . == "netbird")) and
+           (($selected | unique | length) == ($selected | length))
+        then ["tailscale","netbird"][] | select(. as $overlay | $selected | index($overlay) != null)
+        else error("invalid overlay selection") end
+    ' "$plan" 2>/dev/null) ||
+        fail "World overlays must be a non-empty list of unique values from tailscale and netbird"
+    rm -f "$plan"
+    trap - EXIT HUP INT TERM
+    printf '%s\n' "$selection"
+}
+
+notices() {
+    check_file "$1"
+    [ -r "$2" ] || fail "notices are not readable: $2"
+    awk -v selection_file="$1" '
+        BEGIN {
+            while ((getline line < selection_file) > 0) keep[line] = 1
+            known["tailscale"] = 1
+            known["netbird"] = 1
+        }
+        /^<!-- overlay:[a-z]+:(begin|end) -->$/ {
+            name = $0
+            sub(/^<!-- overlay:/, "", name)
+            kind = name
+            sub(/:(begin|end) -->$/, "", name)
+            sub(/^[a-z]+:/, "", kind)
+            sub(/ -->$/, "", kind)
+            if (!(name in known)) { bad = 1; next }
+            if (kind == "begin") {
+                if (open != "" || begins[name]++) { bad = 1 }
+                open = name
+                if (!(name in keep)) { skipping = 1; next }
+            } else {
+                if (open != name || ends[name]++) { bad = 1 }
+                open = ""
+                if (skipping) { skipping = 0; eat_blank = 1; next }
+            }
+            print
+            next
+        }
+        /overlay:/ && /<!--/ { bad = 1 }
+        skipping { next }
+        eat_blank && $0 == "" { eat_blank = 0; next }
+        { eat_blank = 0; print }
+        END {
+            if (open != "") bad = 1
+            for (name in known) if (begins[name] != 1 || ends[name] != 1) bad = 1
+            exit bad
+        }
+    ' "$2" || fail "notices must mark every overlay section exactly once: $2"
+}
+
+case "${1:-}" in
+    resolve)
+        [ "$#" -eq 1 ] || usage
+        resolve
+        ;;
+    check)
+        [ "$#" -eq 2 ] || usage
+        check_file "$2"
+        ;;
+    notices)
+        [ "$#" -eq 3 ] || usage
+        notices "$2" "$3"
+        ;;
+    *) usage ;;
+esac

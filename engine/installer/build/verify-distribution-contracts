@@ -18,7 +18,7 @@ fail() {
 }
 
 usage() {
-    fail "usage: verify-distribution-contracts --registry FILE [--policy FILE] [--component-review FILE --sbom FILE] [--final-review FILE --build-manifest FILE --sbom FILE]"
+    fail "usage: verify-distribution-contracts --registry FILE [--policy FILE] [--sbom FILE] [--build-manifest FILE --sbom FILE] [--component-review FILE --sbom FILE] [--final-review FILE --build-manifest FILE --sbom FILE]"
 }
 
 sha256_file() {
@@ -31,8 +31,39 @@ sha256_file() {
     fi
 }
 
+# One overlay selection decides the canonical-order component subset of the
+# registry and manifest and the packages the SBOM describes. A selection is
+# non-empty, unique, from the closed set, and in the canonical order. These are
+# jq definitions; their $names are jq variables, not shell ones.
+# shellcheck disable=SC2016
+overlay_defs='
+  def canonical_overlays: ["tailscale","netbird"];
+  def overlay_selection:
+    type == "array" and length > 0 and
+    (. as $s | $s == [canonical_overlays[] | select(. as $o | $s | index($o) != null)]);
+  def selected($s; $overlay): ($s | index($overlay)) != null;
+  def component_ids($s):
+    ["debian-package-closure","technitium-oci"] +
+    (if selected($s; "tailscale") then ["tailscale-archive","tailscale-dependency-report"] else [] end) +
+    (if selected($s; "netbird") then ["netbird-archive"] else [] end) +
+    ["repository-source-snapshot"];
+  def described_ids($s):
+    ["SPDXRef-DebianPackageClosure","SPDXRef-Technitium"] +
+    (if selected($s; "tailscale") then ["SPDXRef-Tailscale","SPDXRef-TailscaleDependencyReport"] else [] end) +
+    (if selected($s; "netbird") then ["SPDXRef-NetBird"] else [] end) +
+    ["SPDXRef-DIYDeviceOSBootstrapForJeonghan"];
+  def overlay_fields($s):
+    (if selected($s; "tailscale") then ["tailscale_version","tailscale_archive_sha256"] else [] end) +
+    (if selected($s; "netbird") then ["netbird_version","netbird_archive_sha256"] else [] end);
+  def registry_selection:
+    [(.components // [])[] | .id?] as $ids |
+    [canonical_overlays[] | select(. as $o |
+      (if $o == "tailscale" then "tailscale-archive" else "netbird-archive" end) as $archive |
+      ($ids | index($archive)) != null)];
+'
+
 validate_sbom() {
-    jq -e '
+    jq -e --argjson selection "$registry_selection" "$overlay_defs"'
       def exact_keys($expected): (keys | sort) == ($expected | sort);
       def nonempty: type == "string" and length > 0;
       def package:
@@ -44,7 +75,7 @@ validate_sbom() {
         (.licenseDeclared | nonempty) and (.licenseConcluded | nonempty) and
         (.copyrightText | nonempty) and
         ((has("comment") | not) or (.comment | nonempty));
-      ["SPDXRef-DebianPackageClosure","SPDXRef-Technitium","SPDXRef-Tailscale","SPDXRef-TailscaleDependencyReport","SPDXRef-DIYDeviceOSBootstrapForJeonghan"] as $described |
+      described_ids($selection) as $described |
       exact_keys(["spdxVersion","dataLicense","SPDXID","name","documentNamespace","creationInfo","documentDescribes","packages"]) and
       .spdxVersion == "SPDX-2.3" and .dataLicense == "CC0-1.0" and
       .SPDXID == "SPDXRef-DOCUMENT" and
@@ -54,7 +85,7 @@ validate_sbom() {
       (.creationInfo.created | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
       (.creationInfo.creators | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)) and
       .documentDescribes == $described and
-      (.packages | type == "array" and length >= 5 and all(.[]; package)) and
+      (.packages | type == "array" and length >= ($described | length) and all(.[]; package)) and
       (([.packages[].SPDXID] | length) == ([.packages[].SPDXID] | unique | length)) and
       ([.packages[].SPDXID] as $ids | all($described[]; . as $id | $ids | index($id) != null))
     ' "$1" >/dev/null || fail "SPDX SBOM does not match the expected DNS document shape"
@@ -63,18 +94,19 @@ validate_sbom() {
 validate_build_manifest() {
     [ -r "$build_manifest_schema" ] ||
         fail "DNS build-manifest schema is not readable: $build_manifest_schema"
-    jq -e --slurpfile schema "$build_manifest_schema" '
+    jq -e --slurpfile schema "$build_manifest_schema" "$overlay_defs"'
       def exact_keys($expected): (keys | sort) == ($expected | sort);
       def digest: type == "string" and test("^[a-f0-9]{64}$");
+      def version: type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$");
       def status: . == "personal-use-only" or . == "redistribution-reviewed";
-      def component_status($id):
-        exact_keys(["id","status"]) and .id == $id and (.status | status);
-      ["schema_version","artifact_id","build_id","install_mode","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
+      ["schema_version","artifact_id","build_id","install_mode","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","overlays","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
       ($schema[0]["$id"] | endswith("/engine/installer/schemas/dns-build-manifest.schema.json")) and
       $schema[0].additionalProperties == false and
       (($schema[0].required | sort) == ($fields | sort)) and
-      (($schema[0].properties | keys | sort) == ($fields | sort)) and
-      exact_keys($fields) and
+      (($schema[0].properties | keys | sort) == ($fields + overlay_fields(canonical_overlays) | sort)) and
+      (.overlays | overlay_selection) and
+      (.overlays as $selection |
+      exact_keys($fields + overlay_fields($selection)) and
       .schema_version == 1 and .artifact_id == "dns-appliance" and
       (.build_id | type == "string" and length > 0) and
       (.install_mode == "reviewed" or .install_mode == "guided") and
@@ -82,23 +114,21 @@ validate_build_manifest() {
       (.iso_sha256 | digest) and (.distribution_status | status) and
       .component_registry == "component-redistribution-registry.json" and
       (.component_registry_sha256 | digest) and (.distribution_policy_sha256 | digest) and
-      (.components | type == "array" and length == 5) and
-      (.components[0] | component_status("debian-package-closure")) and
-      (.components[1] | component_status("technitium-oci")) and
-      (.components[2] | component_status("tailscale-archive")) and
-      (.components[3] | component_status("tailscale-dependency-report")) and
-      (.components[4] | component_status("repository-source-snapshot")) and
+      (.components | type == "array" and all(.[]; exact_keys(["id","status"]) and (.status | status))) and
+      ([.components[].id] == component_ids($selection)) and
       .sbom == "sbom.spdx.json" and (.sbom_sha256 | digest) and
-      (.debian_point_release | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+      (.debian_point_release | version) and
       (.debian_snapshot | test("^[0-9]{8}T[0-9]{6}Z$")) and
-      (.technitium_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+      (.technitium_version | version) and
       (.technitium_image_digest | test("^sha256:[a-f0-9]{64}$")) and
       (.technitium_archive_sha256 | digest) and
-      (.tailscale_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
-      (.tailscale_archive_sha256 | digest) and
+      ((selected($selection; "tailscale") | not) or
+        ((.tailscale_version | version) and (.tailscale_archive_sha256 | digest))) and
+      ((selected($selection; "netbird") | not) or
+        ((.netbird_version | version) and (.netbird_archive_sha256 | digest))) and
       (.source_revision | type == "string" and test("^[a-f0-9]{40}$")) and
       .source_repository == "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan" and
-      .source_archive == (.source_repository + "/archive/" + .source_revision + ".tar.gz")
+      .source_archive == (.source_repository + "/archive/" + .source_revision + ".tar.gz"))
     ' "$1" >/dev/null || fail "build manifest does not satisfy dns-build-manifest.schema.json"
 }
 
@@ -125,12 +155,12 @@ command -v jq >/dev/null 2>&1 || fail "jq is required"
 [ -r "$registry" ] || fail "component registry is not readable: $registry"
 [ -r "$policy" ] || fail "distribution policy is not readable: $policy"
 
-jq -e '
+jq -e "$overlay_defs"'
   def exact_keys($expected): (keys | sort) == ($expected | sort);
   .schema_version == 1 and
   (exact_keys(["schema_version","id","component_ids","statuses","evidence_kinds","obligation_kinds"])) and
   .id == "dns-composite-image-redistribution-v1" and
-  .component_ids == ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","repository-source-snapshot"] and
+  .component_ids == component_ids(canonical_overlays) and
   .statuses == ["personal-use-only","redistribution-reviewed"] and
   .evidence_kinds == ["license","notices","corresponding-source","trademark"] and
   .obligation_kinds == ["license-text","notices","corresponding-source","trademark"]
@@ -138,7 +168,7 @@ jq -e '
 
 policy_sha256=$(sha256_file "$policy")
 
-jq -e --slurpfile policy "$policy" '
+jq -e --slurpfile policy "$policy" "$overlay_defs"'
   def exact_keys($expected): (keys | sort) == ($expected | sort);
   def digest: type == "string" and test("^[a-f0-9]{64}$");
   def safe_id: type == "string" and test("^[a-z0-9][a-z0-9-]*$");
@@ -202,16 +232,64 @@ jq -e --slurpfile policy "$policy" '
   .schema_version == 1 and
   exact_keys(["schema_version","artifact_id","components"]) and
   .artifact_id == "dns-appliance" and
-  (.components | type == "array" and length == 5 and all(.[]; component)) and
-  ([.components[].id] == $policy[0].component_ids) and
+  (.components | type == "array" and all(.[]; component)) and
+  (registry_selection as $selection |
+    ($selection | length) > 0 and
+    ([.components[].id] == component_ids($selection))) and
+  ([.components[].id] | all(.[]; . as $id | $policy[0].component_ids | index($id) != null)) and
   (([.components[].id] | length) == ([.components[].id] | unique | length))
 ' "$registry" >/dev/null || fail "component registry is malformed or does not match policy"
+
+registry_selection=$(jq -c "$overlay_defs"' registry_selection' "$registry")
+
+if [ -n "$sbom" ]; then
+    [ -r "$sbom" ] || fail "SPDX SBOM is not readable: $sbom"
+    validate_sbom "$sbom"
+fi
+
+if [ -n "$build_manifest" ]; then
+    [ -r "$build_manifest" ] || fail "build manifest is not readable: $build_manifest"
+    [ -n "$sbom" ] || fail "a build manifest requires its SPDX SBOM"
+    validate_build_manifest "$build_manifest"
+
+    registry_sha256=$(sha256_file "$registry")
+    sbom_sha256=$(sha256_file "$sbom")
+    expected_sbom_sha256=$(jq -er '.sbom_sha256' "$build_manifest") ||
+        fail "build manifest is missing sbom_sha256"
+    [ "$sbom_sha256" = "$expected_sbom_sha256" ] ||
+        fail "SPDX SBOM SHA-256 does not match the build manifest"
+    jq -e --slurpfile manifest "$build_manifest" '
+      .name == ("dns-appliance-installer-" + $manifest[0].build_id) and
+      .documentNamespace == ($manifest[0].source_repository + "/sbom/" + $manifest[0].source_revision + "/" + .name)
+    ' "$sbom" >/dev/null || fail "SPDX SBOM identity does not match the build manifest"
+    jq -e \
+        --arg registry_sha256 "$registry_sha256" \
+        --arg policy_sha256 "$policy_sha256" \
+        --argjson selection "$registry_selection" \
+        --slurpfile registry "$registry" '
+      def component($id): $registry[0].components[] | select(.id == $id);
+      .overlays == $selection and
+      .component_registry_sha256 == $registry_sha256 and
+      .distribution_policy_sha256 == $policy_sha256 and
+      .components == ($registry[0].components | map({id,status:.redistribution.status})) and
+      .technitium_version == component("technitium-oci").version and
+      .technitium_archive_sha256 == component("technitium-oci").digest.value and
+      .technitium_image_digest == component("technitium-oci").source_identity.value and
+      ((has("tailscale_version") | not) or
+        (.tailscale_version == component("tailscale-archive").version and
+         .tailscale_archive_sha256 == component("tailscale-archive").digest.value and
+         .tailscale_version == component("tailscale-dependency-report").version)) and
+      ((has("netbird_version") | not) or
+        (.netbird_version == component("netbird-archive").version and
+         .netbird_archive_sha256 == component("netbird-archive").digest.value))
+    ' "$build_manifest" >/dev/null ||
+        fail "build manifest does not bind the component registry, policy, and overlay selection"
+fi
 
 if [ -n "$component_review" ]; then
     [ -z "$final_review" ] || fail "component and final review modes are mutually exclusive"
     [ -r "$component_review" ] || fail "component review is not readable: $component_review"
-    { [ -n "$sbom" ] && [ -r "$sbom" ]; } || fail "component review requires a readable SPDX SBOM"
-    validate_sbom "$sbom"
+    [ -n "$sbom" ] || fail "component review requires a readable SPDX SBOM"
 
     component_id=$(jq -er '.component_id' "$component_review") ||
         fail "component review is missing component_id"
@@ -266,25 +344,10 @@ fi
 if [ -n "$final_review" ]; then
     [ -z "$component_review" ] || fail "component and final review modes are mutually exclusive"
     [ -r "$final_review" ] || fail "final review is not readable: $final_review"
-    { [ -n "$build_manifest" ] && [ -r "$build_manifest" ]; } ||
-        fail "final review requires a readable build manifest"
-    { [ -n "$sbom" ] && [ -r "$sbom" ]; } || fail "final review requires a readable SPDX SBOM"
+    [ -n "$build_manifest" ] || fail "final review requires a readable build manifest"
+    [ -n "$sbom" ] || fail "final review requires a readable SPDX SBOM"
 
-    validate_build_manifest "$build_manifest"
-    validate_sbom "$sbom"
-
-    registry_sha256=$(sha256_file "$registry")
     manifest_sha256=$(sha256_file "$build_manifest")
-    sbom_sha256=$(sha256_file "$sbom")
-    expected_sbom_sha256=$(jq -er '.sbom_sha256' "$build_manifest") ||
-        fail "build manifest is missing sbom_sha256"
-    [ "$sbom_sha256" = "$expected_sbom_sha256" ] ||
-        fail "SPDX SBOM SHA-256 does not match the build manifest"
-    jq -e --slurpfile manifest "$build_manifest" '
-      .name == ("dns-appliance-installer-" + $manifest[0].build_id) and
-      .documentNamespace == ($manifest[0].source_repository + "/sbom/" + $manifest[0].source_revision + "/" + .name)
-    ' "$sbom" >/dev/null || fail "SPDX SBOM identity does not match the build manifest"
-
     jq -e \
         --arg registry_sha256 "$registry_sha256" \
         --arg manifest_sha256 "$manifest_sha256" \

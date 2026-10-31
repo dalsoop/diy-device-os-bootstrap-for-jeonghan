@@ -548,11 +548,11 @@ reject_gate 'missing from the offline DVD: zstd' "$glyphs/ok.gz" "$closure/no-zs
 reject_gate "U+C5ED '역' is not in the installer font" "$glyphs/no-yeok.gz" "$closure/complete.txt"
 reject_gate 'offline DVD package list is empty' "$glyphs/ok.gz" "$closure/empty.txt"
 
-# build-image must gate before it writes the manifest, and refresh-guided-iso
+# build-image must gate before it renders the manifest, and refresh-guided-iso
 # must gate before it promotes the candidate.
 awk '
     /gate-built-iso/ && !gate { gate = NR }
-    /build-manifest\.json/ && /^[[:space:]]*>/ && !manifest { manifest = NR }
+    /^"\$script_dir\/render-build-records" "\$@"$/ && !manifest { manifest = NR }
     /debian-packages\.txt/ && !packages { packages = NR }
     END { exit !(packages && gate && manifest && packages < gate && gate < manifest) }
 ' "$installer_dir/build-image" ||
@@ -563,6 +563,7 @@ mkdir -p "$refresh/base.iso.tree/simple-cdd" "$refresh/base.iso.tree/boot/grub" 
     "$refresh/base.iso.tree/isolinux"
 : > "$refresh/base.iso"
 printf 'guided\n' > "$refresh/base.iso.tree/simple-cdd/install-mode"
+printf 'tailscale\nnetbird\n' > "$refresh/base.iso.tree/simple-cdd/overlays"
 printf 'set timeout=-1\n' > "$refresh/base.iso.tree/boot/grub/grub.cfg"
 printf 'timeout 0\n' > "$refresh/base.iso.tree/isolinux/isolinux.cfg"
 run_refresh() {
@@ -580,4 +581,571 @@ grep -q -F "U+C5ED '역' is not in the installer font" "$refresh.log" ||
 [ ! -e "$refresh/out/missing-glyph.iso" ] ||
     simulation_fail "refresh left a rejected candidate at the output path"
 
-echo "image builder, offline preparation, boot menus, signed Debian installer fetch, installer package closure and installer glyph simulations: passed"
+# ---------------------------------------------------------------------------
+# Overlay clients follow the World: NetBird pin, selection, fetch, build
+# records, appliance installation and first boot.
+monorepo_root=$(CDPATH='' cd -- "$repo_root/../.." && pwd)
+overlay=$temporary/overlay
+mkdir -p "$overlay"
+
+# verify-locks accepts only the exact version-pinned NetBird release.
+locks=$overlay/locks
+mkdir -p "$locks/build/locks" "$locks/dns-image/simple-cdd"
+cp -p "$repo_root/build/verify-locks" "$repo_root/build/distribution-policy.json" "$locks/build/"
+cp -p "$repo_root/dns-image/simple-cdd/simple-cdd.conf" "$locks/dns-image/simple-cdd/"
+cp -p "$repo_root/build/locks/sources.env" "$locks/build/locks/sources.env"
+"$locks/build/verify-locks" > "$overlay/locks.log" 2>&1 ||
+    simulation_fail "verify-locks rejected the reviewed locks: $(cat "$overlay/locks.log")"
+grep -qx 'NETBIRD_VERSION=0.82.0' "$repo_root/build/locks/sources.env" ||
+    simulation_fail "NetBird is not pinned to 0.82.0"
+grep -qx 'NETBIRD_AMD64_URL=https://github.com/netbirdio/netbird/releases/download/v0.82.0/netbird_0.82.0_linux_amd64.tar.gz' \
+    "$repo_root/build/locks/sources.env" || simulation_fail "NetBird URL is not the pinned release asset"
+reject_lock() {
+    description=$1
+    key=$2
+    value=$3
+    awk -F= -v key="$key" -v value="$value" '
+        $1 == key { if (value != "-") print key "=" value; next }
+        { print }
+    ' "$repo_root/build/locks/sources.env" > "$locks/build/locks/sources.env"
+    if "$locks/build/verify-locks" > "$overlay/locks.log" 2>&1; then
+        simulation_fail "verify-locks accepted $description"
+    fi
+}
+release_base=https://github.com/netbirdio/netbird/releases
+reject_lock "a two-part NetBird version" NETBIRD_VERSION 0.82
+reject_lock "a moving NetBird version" NETBIRD_VERSION latest
+reject_lock "a missing NetBird version" NETBIRD_VERSION -
+reject_lock "a moving NetBird URL" NETBIRD_AMD64_URL \
+    "$release_base/latest/download/netbird_0.82.0_linux_amd64.tar.gz"
+reject_lock "a NetBird URL for another tag" NETBIRD_AMD64_URL \
+    "$release_base/download/v0.81.0/netbird_0.82.0_linux_amd64.tar.gz"
+reject_lock "a NetBird URL for another architecture" NETBIRD_AMD64_URL \
+    "$release_base/download/v0.82.0/netbird_0.82.0_linux_arm64.tar.gz"
+reject_lock "a plain-HTTP NetBird URL" NETBIRD_AMD64_URL \
+    "http://github.com/netbirdio/netbird/releases/download/v0.82.0/netbird_0.82.0_linux_amd64.tar.gz"
+reject_lock "a NetBird URL from another host" NETBIRD_AMD64_URL \
+    "https://example.test/netbirdio/netbird/releases/download/v0.82.0/netbird_0.82.0_linux_amd64.tar.gz"
+reject_lock "a missing NetBird URL" NETBIRD_AMD64_URL -
+reject_lock "an uppercase NetBird SHA-256" NETBIRD_AMD64_SHA256 \
+    B569F65DE303D21317BC716F3116002E2CF175AE22A9F6D2BED91200A2F5000B
+reject_lock "a short NetBird SHA-256" NETBIRD_AMD64_SHA256 b569f65de303d213
+reject_lock "a missing NetBird SHA-256" NETBIRD_AMD64_SHA256 -
+cp -p "$repo_root/build/locks/sources.env" "$locks/build/locks/sources.env"
+jq '.component_ids |= map(select(. != "netbird-archive"))' "$repo_root/build/distribution-policy.json" \
+    > "$locks/build/distribution-policy.json"
+if "$locks/build/verify-locks" > "$overlay/locks.log" 2>&1; then
+    simulation_fail "verify-locks accepted a policy without the NetBird component"
+fi
+
+# A disposable checkout holding the World resolver, the overlay tools and a
+# playbook with three Worlds that differ only in their overlay selection.
+tree=$overlay/tree
+mkdir -p "$tree/engine/world/bin" "$tree/engine/installer/dns-image" \
+    "$tree/engine/installer/build/locks" "$tree/burn-history"
+cp -p "$monorepo_root/engine/world/bin/resolve-world" "$tree/engine/world/bin/"
+cp -p "$repo_root/dns-image/overlay-selection" "$repo_root/dns-image/fetch-locked-sources" \
+    "$tree/engine/installer/dns-image/"
+ruby -ryaml -e '
+  source, directory = ARGV
+  world = YAML.safe_load_file(source)
+  { "jeonghan-home" => %w[tailscale netbird], "tailscale-home" => %w[tailscale],
+    "netbird-home" => %w[netbird], "reverse-home" => %w[netbird tailscale] }.each do |slug, overlays|
+    world["metadata"]["slug"] = slug
+    world["spec"]["overlays"] = overlays
+    File.write(File.join(directory, "#{slug}.yaml"), YAML.dump(world))
+  end
+' "$monorepo_root/burn-history/home.yaml" "$tree/burn-history"
+playbook() {
+    {
+        printf '%s\n' 'apiVersion: device-os.bootstrap/v1alpha1' 'kind: WorldPlaybook' \
+            'metadata:' '  name: Overlay fixture' 'spec:' '  timezone: Asia/Seoul' '  drafts:'
+        for slug in "$@"; do
+            printf '    - slug: %s\n      path: %s.yaml\n' "$slug" "$slug"
+        done
+        printf '%s\n' '  generations:' '    root: logs/usb' \
+            '    idFormat: "{YYYYMMDDHHmmss}-{world-slug}"' \
+            '    publishAfter: verified-physical-usb-write'
+    } > "$tree/burn-history/.paths.yaml"
+}
+playbook jeonghan-home tailscale-home netbird-home reverse-home
+selection_of() {
+    DEVICE_OS_WORLD=$1 "$tree/engine/installer/dns-image/overlay-selection" resolve
+}
+[ "$(selection_of jeonghan-home)" = "$(printf 'tailscale\nnetbird')" ] ||
+    simulation_fail "dual-overlay World did not resolve in canonical order"
+[ "$(selection_of tailscale-home)" = tailscale ] || simulation_fail "Tailscale-only World did not resolve"
+[ "$(selection_of netbird-home)" = netbird ] || simulation_fail "NetBird-only World did not resolve"
+[ "$(selection_of reverse-home)" = "$(printf 'tailscale\nnetbird')" ] ||
+    simulation_fail "World order leaked into the canonical image selection"
+if "$tree/engine/installer/dns-image/overlay-selection" resolve > "$overlay/select.log" 2>&1; then
+    simulation_fail "overlay selection ignored an ambiguous World without DEVICE_OS_WORLD"
+fi
+if DEVICE_OS_WORLD=missing-home "$tree/engine/installer/dns-image/overlay-selection" resolve \
+    > "$overlay/select.log" 2>&1; then
+    simulation_fail "overlay selection accepted an undeclared World"
+fi
+
+# The selection is validated again after the resolver, independent of it.
+fake_tree=$overlay/fake-tree
+mkdir -p "$fake_tree/engine/world/bin" "$fake_tree/engine/installer/dns-image"
+cp -p "$repo_root/dns-image/overlay-selection" "$fake_tree/engine/installer/dns-image/"
+cat > "$fake_tree/engine/world/bin/resolve-world" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$FAKE_WORLD_PLAN"
+EOF
+chmod 0755 "$fake_tree/engine/world/bin/resolve-world"
+for plan in '{"overlays":["wireguard"]}' '{"overlays":[]}' '{"overlays":["tailscale","tailscale"]}' \
+    '{"overlays":"tailscale"}' '{"overlays":[1]}' '{}' 'not-json'; do
+    if FAKE_WORLD_PLAN=$plan "$fake_tree/engine/installer/dns-image/overlay-selection" resolve \
+        > "$overlay/select.log" 2>&1; then
+        simulation_fail "overlay selection accepted resolver output $plan"
+    fi
+done
+FAKE_WORLD_PLAN='{"overlays":["netbird"]}' "$fake_tree/engine/installer/dns-image/overlay-selection" \
+    resolve > "$overlay/select.log" || simulation_fail "overlay selection rejected a valid resolver output"
+[ "$(cat "$overlay/select.log")" = netbird ] || simulation_fail "overlay selection changed a valid selection"
+
+# Selection files: exactly one canonical value per line.
+for content in 'tailscale\n' 'netbird\n' 'tailscale\nnetbird\n'; do
+    printf '%b' "$content" > "$overlay/selection"
+    "$repo_root/dns-image/overlay-selection" check "$overlay/selection" ||
+        simulation_fail "valid selection file rejected: $content"
+done
+for content in '' 'netbird\ntailscale\n' 'tailscale\ntailscale\n' 'wireguard\n' 'tailscale \n' '\n' \
+    'tailscale\n\nnetbird\n'; do
+    printf '%b' "$content" > "$overlay/selection"
+    if "$repo_root/dns-image/overlay-selection" check "$overlay/selection" 2>/dev/null; then
+        simulation_fail "malformed selection file accepted: $content"
+    fi
+done
+if "$repo_root/dns-image/overlay-selection" check "$overlay/absent" 2>/dev/null; then
+    simulation_fail "missing selection file accepted"
+fi
+
+# Notices bundled into the image keep only the selected overlay sections.
+for selection in tailscale netbird; do
+    printf '%s\n' "$selection" > "$overlay/selection"
+    "$repo_root/dns-image/overlay-selection" notices "$overlay/selection" \
+        "$monorepo_root/docs/licenses/THIRD_PARTY_NOTICES.md" > "$overlay/notices.md"
+    other=netbird
+    [ "$selection" = netbird ] && other=tailscale
+    grep -q "overlay:$selection:begin" "$overlay/notices.md" ||
+        simulation_fail "notices lost the selected $selection section"
+    if grep -q -i -e "overlay:$other:" -e "### $other" "$overlay/notices.md"; then
+        simulation_fail "notices kept the unselected $other section"
+    fi
+done
+printf 'tailscale\nnetbird\n' > "$overlay/selection"
+"$repo_root/dns-image/overlay-selection" notices "$overlay/selection" \
+    "$monorepo_root/docs/licenses/THIRD_PARTY_NOTICES.md" > "$overlay/notices.md"
+cmp -s "$overlay/notices.md" "$monorepo_root/docs/licenses/THIRD_PARTY_NOTICES.md" ||
+    simulation_fail "dual-overlay notices differ from the repository notices"
+grep -v 'overlay:netbird:end' "$monorepo_root/docs/licenses/THIRD_PARTY_NOTICES.md" > "$overlay/broken-notices.md"
+if "$repo_root/dns-image/overlay-selection" notices "$overlay/selection" "$overlay/broken-notices.md" \
+    > /dev/null 2>&1; then
+    simulation_fail "notices without a closing overlay marker were accepted"
+fi
+
+# fetch-locked-sources fetches only the selected clients, verifies every
+# digest, promotes atomically, and re-verifies cached copies.
+fixtures=$overlay/fixtures
+mkdir -p "$fixtures/tailscale_1.104.1_amd64" "$fixtures/netbird-root"
+printf 'tailscale archive\n' > "$fixtures/tailscale_1.104.1_amd64/tailscale"
+tar -czf "$fixtures/tailscale.tgz" -C "$fixtures" tailscale_1.104.1_amd64
+printf 'dependency report\n' > "$fixtures/licenses.md"
+printf 'netbird client\n' > "$fixtures/netbird-root/netbird"
+chmod 0755 "$fixtures/netbird-root/netbird"
+tar -czf "$fixtures/netbird.tar.gz" -C "$fixtures/netbird-root" netbird
+digest_of() {
+    sha256sum "$1" | awk '{print $1}'
+}
+awk -F= -v ts="$(digest_of "$fixtures/tailscale.tgz")" -v report="$(digest_of "$fixtures/licenses.md")" \
+    -v nb="$(digest_of "$fixtures/netbird.tar.gz")" '
+    $1 == "TAILSCALE_AMD64_SHA256" { print $1 "=" ts; next }
+    $1 == "TAILSCALE_LICENSES_SHA256" { print $1 "=" report; next }
+    $1 == "NETBIRD_AMD64_SHA256" { print $1 "=" nb; next }
+    { print }
+' "$repo_root/build/locks/sources.env" > "$tree/engine/installer/build/locks/sources.env"
+fetch_bin=$overlay/fetch-bin
+mkdir -p "$fetch_bin"
+cat > "$fetch_bin/skopeo" <<'EOF'
+#!/bin/sh
+case "$1" in
+    inspect) printf '%s\n' "$TEST_TECHNITIUM_DIGEST" ;;
+    copy)
+        for argument in "$@"; do last=$argument; done
+        destination=${last#oci-archive:}
+        printf 'oci archive\n' > "${destination%%:*}"
+        ;;
+    *) exit 64 ;;
+esac
+EOF
+cat > "$fetch_bin/curl" <<'EOF'
+#!/bin/sh
+set -eu
+output=
+url=
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --output) output=$2; shift 2 ;;
+        --proto) shift 2 ;;
+        --*) shift ;;
+        *) url=$1; shift ;;
+    esac
+done
+printf '%s\n' "$url" >> "$TEST_CURL_LOG"
+case "$url" in
+    */tailscale_*_amd64.tgz) cp "$TEST_FIXTURES/tailscale.tgz" "$output" ;;
+    */licenses/tailscale.md) cp "$TEST_FIXTURES/licenses.md" "$output" ;;
+    */netbird_*_linux_amd64.tar.gz)
+        cp "$TEST_FIXTURES/netbird.tar.gz" "$output"
+        [ "${TEST_TAMPER_NETBIRD:-false}" = false ] || printf 'tampered\n' >> "$output"
+        ;;
+    *) exit 22 ;;
+esac
+EOF
+chmod 0755 "$fetch_bin/skopeo" "$fetch_bin/curl"
+technitium_digest=$(awk -F= '$1 == "TECHNITIUM_AMD64_DIGEST" { print $2 }' "$repo_root/build/locks/sources.env")
+run_fetch() {
+    world=$1
+    cache=$2
+    shift 2
+    : > "$overlay/curl.log"
+    env PATH="$fetch_bin:$PATH" TEST_CURL_LOG="$overlay/curl.log" TEST_FIXTURES="$fixtures" \
+        TEST_TECHNITIUM_DIGEST="$technitium_digest" DEVICE_OS_WORLD="$world" \
+        DNS_APPLIANCE_CACHE_DIR="$cache" "$@" \
+        "$tree/engine/installer/dns-image/fetch-locked-sources" > "$overlay/fetch.log" 2>&1
+}
+netbird_cache_name=netbird-0.82.0-linux-amd64.tar.gz
+run_fetch jeonghan-home "$overlay/cache-both" ||
+    simulation_fail "dual-overlay fetch failed: $(cat "$overlay/fetch.log")"
+for cached in tailscale-1.104.1-amd64.tgz tailscale-1.104.1-dependency-licenses.md "$netbird_cache_name"; do
+    [ -s "$overlay/cache-both/$cached" ] || simulation_fail "dual-overlay fetch did not cache $cached"
+done
+jq -e '
+  .overlays == ["tailscale","netbird"] and
+  [.components[].id] == ["technitium-oci","tailscale-archive","tailscale-dependency-report","netbird-archive"] and
+  (.components[] | select(.id == "netbird-archive") | .version) == "0.82.0"
+' "$overlay/cache-both/component-source-evidence.json" >/dev/null ||
+    simulation_fail "dual-overlay source evidence is incomplete"
+run_fetch jeonghan-home "$overlay/cache-both" || simulation_fail "verified cache was not reusable"
+[ ! -s "$overlay/curl.log" ] || simulation_fail "a verified cache was downloaded again"
+
+run_fetch netbird-home "$overlay/cache-netbird" ||
+    simulation_fail "NetBird-only fetch failed: $(cat "$overlay/fetch.log")"
+[ -s "$overlay/cache-netbird/$netbird_cache_name" ] || simulation_fail "NetBird-only fetch missed NetBird"
+if grep -q tailscale "$overlay/curl.log" ||
+    find "$overlay/cache-netbird" -name 'tailscale*' | grep -q .; then
+    simulation_fail "NetBird-only fetch downloaded Tailscale"
+fi
+jq -e '.overlays == ["netbird"] and [.components[].id] == ["technitium-oci","netbird-archive"]' \
+    "$overlay/cache-netbird/component-source-evidence.json" >/dev/null ||
+    simulation_fail "NetBird-only source evidence names unselected components"
+
+run_fetch tailscale-home "$overlay/cache-tailscale" ||
+    simulation_fail "Tailscale-only fetch failed: $(cat "$overlay/fetch.log")"
+if grep -q netbird "$overlay/curl.log" || [ -e "$overlay/cache-tailscale/$netbird_cache_name" ]; then
+    simulation_fail "Tailscale-only fetch downloaded NetBird"
+fi
+jq -e '.overlays == ["tailscale"] and
+  [.components[].id] == ["technitium-oci","tailscale-archive","tailscale-dependency-report"]' \
+    "$overlay/cache-tailscale/component-source-evidence.json" >/dev/null ||
+    simulation_fail "Tailscale-only source evidence names unselected components"
+
+if run_fetch netbird-home "$overlay/cache-tampered" TEST_TAMPER_NETBIRD=true; then
+    simulation_fail "a NetBird download with the wrong digest was promoted"
+fi
+[ ! -e "$overlay/cache-tampered/$netbird_cache_name" ] ||
+    simulation_fail "a rejected NetBird download reached the cache"
+[ -z "$(find "$overlay/cache-tampered" -name '*.partial*' -print)" ] ||
+    simulation_fail "a rejected NetBird download left a partial file"
+printf 'tampered\n' >> "$overlay/cache-netbird/$netbird_cache_name"
+if run_fetch netbird-home "$overlay/cache-netbird"; then
+    simulation_fail "a tampered cached NetBird archive was accepted"
+fi
+if run_fetch missing-home "$overlay/cache-unresolved"; then
+    simulation_fail "fetch proceeded without a resolvable World"
+fi
+[ ! -s "$overlay/curl.log" ] || simulation_fail "fetch downloaded before resolving the World"
+
+# Only the readiness inputs of the selected overlays are required.
+readiness() {
+    env DNS_APPLIANCE_CACHE_DIR="$overlay/empty-cache" DNS_APPLIANCE_ARTIFACT_DIR="$overlay/no-artifacts" \
+        "$@" "$repo_root/dns-image/check-readiness" > "$overlay/readiness.json" 2>/dev/null || true
+}
+readiness DEVICE_OS_WORLD=jeonghan-home
+jq -e --arg netbird "$netbird_cache_name" '
+  (.blockers | index("missing locked DNS build input " + $netbird)) != null and
+  (.blockers | index("missing locked DNS build input tailscale-1.104.1-amd64.tgz")) != null and
+  (.blockers | index("missing locked DNS build input tailscale-1.104.1-dependency-licenses.md")) != null
+' "$overlay/readiness.json" >/dev/null || simulation_fail "readiness does not require every selected overlay input"
+readiness DEVICE_OS_WORLD=missing-home
+jq -e '(.blockers | index("World overlay selection cannot be resolved")) != null and
+  ([.blockers[] | select(test("tailscale|netbird"))] | length) == 0' "$overlay/readiness.json" >/dev/null ||
+    simulation_fail "readiness did not block an unresolvable overlay selection"
+
+# Build records follow the selection: registry, manifest and SBOM.
+records=$overlay/records
+mkdir -p "$records/inputs"
+for input in dns-appliance.iso technitium tailscale report netbird closure snapshot; do
+    printf '%s bytes\n' "$input" > "$records/inputs/$input"
+done
+printf '%s\n' 'bind9-dnsutils=1:9.20.15-1' 'zstd=1.5.7+dfsg-1' > "$records/inputs/packages"
+render_records() {
+    selection=$1
+    output=$2
+    shift 2
+    printf '%b' "$selection" > "$records/inputs/overlays"
+    mkdir -p "$output"
+    "$repo_root/dns-image/render-build-records" --artifact-dir "$output" \
+        --iso "$records/inputs/dns-appliance.iso" --install-mode guided --overlays "$records/inputs/overlays" \
+        --technitium-archive "$records/inputs/technitium" \
+        --closure-manifest "$records/inputs/closure" --packages "$records/inputs/packages" \
+        --source-revision "$(printf 'a%.0s' $(seq 40))" --source-snapshot "$records/inputs/snapshot" \
+        "$@" > "$records/render.log" 2>&1
+}
+tailscale_inputs="--tailscale-archive $records/inputs/tailscale --tailscale-report $records/inputs/report"
+netbird_inputs="--netbird-archive $records/inputs/netbird"
+# shellcheck disable=SC2086
+render_records 'tailscale\nnetbird\n' "$records/both" $tailscale_inputs $netbird_inputs ||
+    simulation_fail "dual-overlay records were not rendered: $(cat "$records/render.log")"
+# shellcheck disable=SC2086
+render_records 'tailscale\n' "$records/tailscale" $tailscale_inputs ||
+    simulation_fail "Tailscale-only records were not rendered: $(cat "$records/render.log")"
+# shellcheck disable=SC2086
+render_records 'netbird\n' "$records/netbird" $netbird_inputs ||
+    simulation_fail "NetBird-only records were not rendered: $(cat "$records/render.log")"
+jq -e --arg netbird "$(digest_of "$records/inputs/netbird")" '
+  .overlays == ["tailscale","netbird"] and .netbird_version == "0.82.0" and
+  .netbird_archive_sha256 == $netbird and .tailscale_version == "1.104.1" and
+  [.components[].id] == ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","netbird-archive","repository-source-snapshot"]
+' "$records/both/build-manifest.json" >/dev/null || simulation_fail "dual-overlay manifest is incomplete"
+jq -e '.overlays == ["netbird"] and (has("tailscale_version") | not) and
+  (has("tailscale_archive_sha256") | not) and
+  [.components[].id] == ["debian-package-closure","technitium-oci","netbird-archive","repository-source-snapshot"]
+' "$records/netbird/build-manifest.json" >/dev/null || simulation_fail "NetBird-only manifest names Tailscale"
+jq -e '.overlays == ["tailscale"] and (has("netbird_version") | not) and (has("netbird_archive_sha256") | not)' \
+    "$records/tailscale/build-manifest.json" >/dev/null || simulation_fail "Tailscale-only manifest names NetBird"
+jq -e '
+  .documentDescribes == ["SPDXRef-DebianPackageClosure","SPDXRef-Technitium","SPDXRef-NetBird","SPDXRef-DIYDeviceOSBootstrapForJeonghan"] and
+  ([.packages[].SPDXID] | index("SPDXRef-Tailscale")) == null and
+  (.packages[] | select(.SPDXID == "SPDXRef-NetBird") |
+    .name == "netbird-linux-static" and .versionInfo == "0.82.0" and
+    .licenseDeclared == "BSD-3-Clause" and .licenseConcluded == "NOASSERTION")
+' "$records/netbird/sbom.spdx.json" >/dev/null || simulation_fail "NetBird-only SBOM is wrong"
+jq -e '
+  .documentDescribes == ["SPDXRef-DebianPackageClosure","SPDXRef-Technitium","SPDXRef-Tailscale","SPDXRef-TailscaleDependencyReport","SPDXRef-DIYDeviceOSBootstrapForJeonghan"] and
+  ([.packages[].SPDXID] | index("SPDXRef-NetBird")) == null
+' "$records/tailscale/sbom.spdx.json" >/dev/null || simulation_fail "Tailscale-only SBOM is wrong"
+python3 - "$repo_root/schemas" "$records" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+from jsonschema import Draft202012Validator
+
+schemas, records = Path(sys.argv[1]), Path(sys.argv[2])
+for name, schema in (("build-manifest.json", "dns-build-manifest.schema.json"),
+                     ("component-redistribution-registry.json", "component-redistribution-registry.schema.json")):
+    validator = Draft202012Validator(json.loads((schemas / schema).read_text()))
+    for selection in ("both", "tailscale", "netbird"):
+        errors = list(validator.iter_errors(json.loads((records / selection / name).read_text())))
+        if errors:
+            sys.exit(f"{selection} {name} violates {schema}: {errors[0].message}")
+PY
+for selection in both tailscale netbird; do
+    "$repo_root/build/verify-distribution-contracts" \
+        --registry "$records/$selection/component-redistribution-registry.json" \
+        --build-manifest "$records/$selection/build-manifest.json" \
+        --sbom "$records/$selection/sbom.spdx.json" >/dev/null ||
+        simulation_fail "$selection build records do not verify"
+done
+reject_records() {
+    description=$1
+    shift
+    rm -rf "$records/rejected"
+    if render_records "$@"; then
+        simulation_fail "records rendered for $description"
+    fi
+    [ ! -e "$records/rejected/build-manifest.json" ] ||
+        simulation_fail "a manifest was left behind for $description"
+}
+# shellcheck disable=SC2086
+reject_records "an unselected NetBird archive" 'tailscale\n' "$records/rejected" $tailscale_inputs $netbird_inputs
+# shellcheck disable=SC2086
+reject_records "a missing NetBird archive" 'tailscale\nnetbird\n' "$records/rejected" $tailscale_inputs
+# shellcheck disable=SC2086
+reject_records "an unselected Tailscale archive" 'netbird\n' "$records/rejected" $tailscale_inputs $netbird_inputs
+# shellcheck disable=SC2086
+reject_records "a Tailscale archive without its report" 'tailscale\n' "$records/rejected" \
+    --tailscale-archive "$records/inputs/tailscale"
+# shellcheck disable=SC2086
+reject_records "a reversed selection" 'netbird\ntailscale\n' "$records/rejected" $tailscale_inputs $netbird_inputs
+# shellcheck disable=SC2086
+reject_records "an unknown overlay" 'wireguard\n' "$records/rejected" $netbird_inputs
+
+# The appliance installs exactly the embedded selection.
+finish=$overlay/finish
+make_finish_root() {
+    root=$1
+    selection=$2
+    rm -rf "$root"
+    mkdir -p "$root/cdrom/simple-cdd" "$root/run" "$root/tmp" "$root/bin"
+    for directory in usr/bin usr/sbin usr/local/sbin lib/systemd/system etc/default etc/sudoers.d \
+        etc/sysctl.d etc/systemd/system etc/ssh home/dns-operator var/lib var/log; do
+        mkdir -p "$root/target/$directory"
+    done
+    cp "$installer_dir"/payload/* "$root/cdrom/simple-cdd/"
+    cp "$repo_root/build/locks/sources.env" "$root/cdrom/simple-cdd/sources.env"
+    for generated in age-recipient technitium.oci.tar enrollment-record.schema.json \
+        diy-device-os-bootstrap-for-jeonghan-license.txt license-history.md third-party-notices.md \
+        tailscale-license.txt tailscale-dependency-licenses.md netbird-license.txt source.md \
+        source-snapshot.tar.gz distribution-policy.json distribution-status.md \
+        component-redistribution-registry.schema.json component-review-record.schema.json \
+        dns-build-manifest.schema.json dns-final-review-record.schema.json operator-authorized-keys; do
+        printf '%s\n' "$generated" > "$root/cdrom/simple-cdd/$generated"
+    done
+    mkdir -p "$root/stage/tailscale_1.104.1_amd64/systemd"
+    for program in tailscale tailscaled; do
+        printf '#!/bin/sh\n' > "$root/stage/tailscale_1.104.1_amd64/$program"
+        chmod 0755 "$root/stage/tailscale_1.104.1_amd64/$program"
+    done
+    printf '[Unit]\n' > "$root/stage/tailscale_1.104.1_amd64/systemd/tailscaled.service"
+    printf 'FLAGS=\n' > "$root/stage/tailscale_1.104.1_amd64/systemd/tailscaled.defaults"
+    tar -czf "$root/cdrom/simple-cdd/tailscale.tgz" -C "$root/stage" tailscale_1.104.1_amd64
+    cp "$fixtures/netbird.tar.gz" "$root/cdrom/simple-cdd/netbird.tar.gz"
+    if [ "$selection" != absent ]; then
+        printf '%b' "$selection" > "$root/cdrom/simple-cdd/overlays"
+    fi
+    printf '%s\n' ROLE=dns01 ADDRESS=10.77.5.1 NETMASK=255.255.0.0 GATEWAY=10.77.0.1 \
+        DNS_SERVERS=10.77.0.1 DOMAIN=home.arpa LAN_CIDR=10.77.0.0/16 \
+        MANAGEMENT_CIDR=10.77.0.0/24 CLUSTER_DOMAIN=home.arpa NIC_NAME=eno1 TARGET_DISK=/dev/sda \
+        > "$root/run/install.env"
+    cat > "$root/bin/in-target" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FINISH_LOG"
+EOF
+    chmod 0755 "$root/bin/in-target"
+    sed -e "s#/cdrom/#$root/cdrom/#g" -e "s#/target/#$root/target/#g" \
+        -e "s#/target #$root/target #g" \
+        -e "s#/run/dns-appliance/install.env#$root/run/install.env#g" \
+        -e "s#/tmp/dns-appliance-#$root/tmp/dns-appliance-#g" \
+        "$installer_dir/scripts/dns-finish-install" > "$root/dns-finish-install"
+}
+run_finish() {
+    root=$finish/$1
+    make_finish_root "$root" "$2"
+    PATH="$root/bin:$PATH" FINISH_LOG="$root/in-target.log" sh "$root/dns-finish-install" \
+        > "$root/finish.log" 2>&1
+}
+doc=usr/share/doc/diy-device-os-bootstrap-for-jeonghan
+run_finish both 'tailscale\nnetbird\n' ||
+    simulation_fail "dual-overlay installation failed: $(cat "$finish/both/finish.log")"
+[ "$(cat "$finish/both/target/etc/dns-appliance/overlays")" = "$(printf 'tailscale\nnetbird')" ] ||
+    simulation_fail "the installed system lost the overlay selection"
+for installed in usr/bin/tailscale usr/sbin/tailscaled lib/systemd/system/tailscaled.service \
+    usr/bin/netbird etc/systemd/system/netbird.service "$doc/Tailscale-BSD-3-Clause.txt" \
+    "$doc/Tailscale-Dependencies.md" "$doc/NetBird-BSD-3-Clause.txt"; do
+    [ -e "$finish/both/target/$installed" ] || simulation_fail "dual-overlay install lacks $installed"
+done
+[ -d "$finish/both/target/var/log/netbird" ] || simulation_fail "NetBird log directory is missing"
+cmp -s "$finish/both/target/etc/systemd/system/netbird.service" "$installer_dir/payload/netbird.service" ||
+    simulation_fail "the installed NetBird unit is not the repository-owned unit"
+grep -qx 'systemctl enable tailscaled.service' "$finish/both/in-target.log" ||
+    simulation_fail "tailscaled was not enabled"
+grep -qx 'systemctl enable netbird.service' "$finish/both/in-target.log" ||
+    simulation_fail "netbird was not enabled"
+
+run_finish netbird 'netbird\n' ||
+    simulation_fail "NetBird-only installation failed: $(cat "$finish/netbird/finish.log")"
+[ -x "$finish/netbird/target/usr/bin/netbird" ] || simulation_fail "NetBird-only install lacks netbird"
+for absent in usr/bin/tailscale usr/sbin/tailscaled lib/systemd/system/tailscaled.service \
+    "$doc/Tailscale-BSD-3-Clause.txt" "$doc/Tailscale-Dependencies.md"; do
+    [ ! -e "$finish/netbird/target/$absent" ] || simulation_fail "NetBird-only install has $absent"
+done
+if grep -q tailscale "$finish/netbird/in-target.log"; then
+    simulation_fail "NetBird-only install enabled Tailscale"
+fi
+
+run_finish tailscale 'tailscale\n' ||
+    simulation_fail "Tailscale-only installation failed: $(cat "$finish/tailscale/finish.log")"
+for absent in usr/bin/netbird etc/systemd/system/netbird.service "$doc/NetBird-BSD-3-Clause.txt" var/log/netbird; do
+    [ ! -e "$finish/tailscale/target/$absent" ] || simulation_fail "Tailscale-only install has $absent"
+done
+if grep -q netbird "$finish/tailscale/in-target.log"; then
+    simulation_fail "Tailscale-only install enabled NetBird"
+fi
+
+for case_name in absent empty unknown reversed duplicate; do
+    case "$case_name" in
+        absent) selection=absent ;;
+        empty) selection='' ;;
+        unknown) selection='wireguard\n' ;;
+        reversed) selection='netbird\ntailscale\n' ;;
+        duplicate) selection='netbird\nnetbird\n' ;;
+    esac
+    if run_finish "$case_name" "$selection"; then
+        simulation_fail "installation accepted a $case_name overlay selection"
+    fi
+    [ ! -e "$finish/$case_name/target/etc/dns-appliance" ] ||
+        simulation_fail "a $case_name overlay selection reached the target before aborting"
+done
+printf '#!/bin/sh\n' > "$finish/not-netbird"
+tar -czf "$finish/no-binary.tar.gz" -C "$finish" not-netbird
+make_finish_root "$finish/no-binary" 'netbird\n'
+cp "$finish/no-binary.tar.gz" "$finish/no-binary/cdrom/simple-cdd/netbird.tar.gz"
+if PATH="$finish/no-binary/bin:$PATH" FINISH_LOG="$finish/no-binary/in-target.log" \
+    sh "$finish/no-binary/dns-finish-install" > "$finish/no-binary/finish.log" 2>&1; then
+    simulation_fail "installation accepted a NetBird archive without the client"
+fi
+
+# The repository-owned unit mirrors `netbird service install` of the pinned
+# client: default daemon socket, profile state and log locations.
+unit=$installer_dir/payload/netbird.service
+grep -qx 'ExecStart=/usr/bin/netbird "service" "run" "--log-level" "info" "--daemon-addr" "unix:///var/run/netbird.sock" "--config" "/var/lib/netbird/default.json" "--log-file" "/var/log/netbird/client.log"' "$unit" ||
+    simulation_fail "NetBird unit does not run the daemon with the upstream defaults"
+grep -qx 'WantedBy=multi-user.target' "$unit" || simulation_fail "NetBird unit is not installable"
+grep -qx 'Environment=SYSTEMD_UNIT=netbird' "$unit" || simulation_fail "NetBird unit lacks its unit name"
+
+# First boot enables exactly the selected overlay daemons.
+python3 - "$installer_dir/payload/dns-appliance-firstboot" "$overlay/overlay-units" <<'PY'
+import pathlib
+import re
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text()
+function = re.search(r"^overlay_units\(\) \{\n.*?^\}", source, re.M | re.S)
+assert function, "first-boot overlay unit selection is missing"
+pathlib.Path(sys.argv[2]).write_text("set -eu\n" + function.group() + '\noverlay_units "$1"\n')
+PY
+# The literal shell text is matched; it is not expanded here.
+# shellcheck disable=SC2016
+grep -q -F 'overlay_units "$overlay_selection"' "$installer_dir/payload/dns-appliance-firstboot" ||
+    simulation_fail "first boot does not enable the selected overlay units"
+if grep -q 'enable --now tailscaled.service' "$installer_dir/payload/dns-appliance-firstboot"; then
+    simulation_fail "first boot enables Tailscale regardless of the selection"
+fi
+for case_name in 'tailscale\n|tailscaled.service' 'netbird\n|netbird.service' \
+    'tailscale\nnetbird\n|tailscaled.service netbird.service'; do
+    printf '%b' "${case_name%%|*}" > "$overlay/firstboot-selection"
+    units=$(bash "$overlay/overlay-units" "$overlay/firstboot-selection" | tr '\n' ' ')
+    [ "$units" = "${case_name#*|} " ] || simulation_fail "first boot selected '$units' for ${case_name%%|*}"
+done
+for content in '' 'wireguard\n' 'netbird\ntailscale\n' 'netbird\nnetbird\n'; do
+    printf '%b' "$content" > "$overlay/firstboot-selection"
+    if bash "$overlay/overlay-units" "$overlay/firstboot-selection" >/dev/null 2>&1; then
+        simulation_fail "first boot accepted overlay selection '$content'"
+    fi
+done
+
+# The ISO carries every possible overlay payload path; build-image creates
+# only the selected ones, and Simple-CDD skips absent extra files.
+for listed in generated/overlays generated/tailscale.tgz generated/tailscale-license.txt \
+    generated/tailscale-dependency-licenses.md generated/netbird.tar.gz generated/netbird-license.txt \
+    ../payload/netbird.service; do
+    grep -qx "$listed" "$installer_dir/simple-cdd/profiles/default.extra" ||
+        simulation_fail "default.extra does not list $listed"
+done
+
+echo "image builder, offline preparation, boot menus, signed Debian installer fetch, installer package closure, installer glyph, overlay selection, NetBird pin, overlay fetch, build record and overlay installation simulations: passed"

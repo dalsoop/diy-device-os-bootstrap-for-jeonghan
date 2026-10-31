@@ -7,7 +7,7 @@ On 2026-10-21, `device-os world readiness` reported no captured inventory for
 SSH public-key input or age recovery recipient, missing locked Technitium and
 Tailscale build inputs, and no DNS installer ISO/build manifest. The offline
 network preflight observed a management gateway of `192.168.0.1`, while the
-planned `10.0.0.1/16` router and `10.0.5.1` through `10.0.5.3` nodes were
+planned `10.77.0.1/16` router and `10.77.5.1` through `10.77.5.3` nodes were
 unreachable. A passing offline-install topology calculation does not establish
 live node reachability or Internet readiness.
 

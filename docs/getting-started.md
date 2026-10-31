@@ -70,7 +70,7 @@ These commands do not download images or write a disk.
 Check the management host's live network path separately:
 
 ```sh
-engine/installer/management/network-preflight --json 10.0.0.1/16 | jq
+engine/installer/management/network-preflight --json 10.77.0.1/16 | jq
 ```
 
 The report distinguishes LAN topology and reachability from outbound IP, DNS,
@@ -160,7 +160,7 @@ internal target disk, and capture one ignored inventory file at a time:
 
 ```sh
 sudo engine/installer/dns-image/capture-inventory \
-  dns01 10.0.5.1 enp1s0 /dev/sda \
+  dns01 10.77.5.1 enp1s0 /dev/sda \
   > burn-history/os-installs/dns01/hardware.conf
 ```
 

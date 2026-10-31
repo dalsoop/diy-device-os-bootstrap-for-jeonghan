@@ -12,7 +12,7 @@ destination=${1:-}
 install -d -m 0700 "$destination"
 
 for role in dns01 dns02 dns03; do
-    address=${role/dns0/10.0.5.}
+    address=${role/dns0/10.77.5.}
     node_dir=$destination/$role
     install -d -m 0700 "$node_dir"
     rsync -a --ignore-existing --rsync-path='sudo rsync' \

@@ -41,7 +41,7 @@ Boot a trusted Debian live environment and identify the wired interface and the
 single internal target disk. From a checkout of this repository, run:
 
 ```sh
-sudo engine/installer/dns-image/capture-inventory dns01 10.0.5.1 enp1s0 /dev/sda \
+sudo engine/installer/dns-image/capture-inventory dns01 10.77.5.1 enp1s0 /dev/sda \
   > burn-history/os-installs/dns01/hardware.conf
 ```
 
@@ -151,6 +151,6 @@ DNS_CLUSTER_ACCESS_OUTPUT=/secure/cluster-access.json.age \
   engine/installer/management/cluster-bootstrap
 ```
 
-Cockpit is then available as `dns-operator` at `https://10.0.5.1:9090` through
-`https://10.0.5.3:9090`; retrieve each generated password from the imported
+Cockpit is then available as `dns-operator` at `https://10.77.5.1:9090` through
+`https://10.77.5.3:9090`; retrieve each generated password from the imported
 recovery directory and verify the recorded certificate fingerprint first.

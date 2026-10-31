@@ -46,11 +46,11 @@ token. The command requires the exact target URL in its confirmation string:
 
 ```sh
 engine/installer/management/restore-node \
-  --url https://10.0.5.1:53443 \
+  --url https://10.77.5.1:53443 \
   --token-file /secure/restore-token \
   --backup /secure/dns-backups/dns01/example.zip.age \
   --identity /secure/dns-recovery-age-key.txt \
-  --confirm 'RESTORE https://10.0.5.1:53443'
+  --confirm 'RESTORE https://10.77.5.1:53443'
 ```
 
 After restore, verify UDP/TCP canaries on that node before touching another.

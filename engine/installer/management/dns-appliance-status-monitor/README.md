@@ -16,6 +16,6 @@ The server binds to localhost by default and is not exposed to other devices.
 
 Edit `config.json` if node addresses or the canary name change. To expose the
 page on the LAN, bind explicitly to a management-host address, for example
-`./start --listen 10.0.0.X`, only after adding suitable firewall and access
+`./start --listen 10.77.0.X`, only after adding suitable firewall and access
 controls.
 

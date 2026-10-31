@@ -139,8 +139,8 @@ Edit `burn-history/home.yaml` to change desired devices or media. Keep real hard
 From the management host, inspect the expected `/16` topology, node reachability, and Internet readiness separately:
 
 ```sh
-engine/installer/management/network-preflight --json 10.0.0.1/16 | jq
-engine/installer/management/network-preflight --offline --json 10.0.0.1/16 | jq
+engine/installer/management/network-preflight --json 10.77.0.1/16 | jq
+engine/installer/management/network-preflight --offline --json 10.77.0.1/16 | jq
 ```
 
 The offline form marks outbound DNS and HTTPS readiness unknown. Internet is required to fetch public artifacts and enroll Tailscale, but the already-built DNS installer boots and installs offline. A passing Internet probe does not establish LAN routing, node health, or DNS readiness.
@@ -154,7 +154,7 @@ DNS_APPLIANCE_INSTALL_MODE=guided engine/installer/dns-image/build-image
 DNS_APPLIANCE_INSTALL_MODE=guided engine/installer/dns-image/check-readiness
 ```
 
-Only operator SSH public keys and the public age recipient enter the image. Keep the corresponding private keys outside the checkout on the management host. The default network profiles retain the planned `10.0.0.0/16` LAN and `10.0.5.1` through `.3`; do not deploy them on a `192.168.0.0/24` LAN without a coordinated network/profile change.
+Only operator SSH public keys and the public age recipient enter the image. Keep the corresponding private keys outside the checkout on the management host. The default network profiles retain the planned `10.77.0.0/16` LAN and `10.77.5.1` through `.3`; do not deploy them on a `192.168.0.0/24` LAN without a coordinated network/profile change.
 
 For changes limited to the guided Debian Installer flow (`install-gate`,
 `prepare-installer`, `disk-identity`, guided templates, or the shared preseed),
@@ -219,7 +219,7 @@ The resulting media contains Debian Live only. Boot each HP computer deliberatel
 
 ```sh
 sudo engine/installer/dns-image/capture-inventory \
-  dns01 10.0.5.1 enp1s0 /dev/sda \
+  dns01 10.77.5.1 enp1s0 /dev/sda \
   > burn-history/os-installs/dns01/hardware.conf
 ```
 
@@ -352,7 +352,7 @@ TAILSCALE_OAUTH_CLIENT_SECRET_FILE=/secure/tailscale/client-secret \
 
 Confirm each node's hostname, `tag:dns-appliance`, Tailscale address, peer reachability, `accept-dns=false`, and absence of routes, exit-node behavior, Tailscale SSH, Serve, and Funnel.
 
-For remote DNS, use the three enrolled nodes' Tailscale IPv4 addresses as tailnet nameservers, not their `10.0.5.x` LAN addresses. No subnet routing is required. First allow the intended client identities to reach `tag:dns-appliance` on both UDP and TCP 53 in the tailnet policy. The appliance recursion ACL includes `100.64.0.0/10`; nftables accepts DNS on `tailscale0` and rejects that source range on other network interfaces.
+For remote DNS, use the three enrolled nodes' Tailscale IPv4 addresses as tailnet nameservers, not their `10.77.5.x` LAN addresses. No subnet routing is required. First allow the intended client identities to reach `tag:dns-appliance` on both UDP and TCP 53 in the tailnet policy. The appliance recursion ACL includes `100.64.0.0/10`; nftables accepts DNS on `tailscale0` and rejects that source range on other network interfaces.
 
 Before changing tailnet DNS, run `dig @<node-tailscale-ip> home.arpa SOA` and `dig @<node-tailscale-ip> example.com A` from an approved remote client for each node, then repeat both with `+tcp`. Check that an unauthorized peer cannot query them. These live checks require installed, enrolled appliances and are separate from source simulations.
 
@@ -363,7 +363,7 @@ Choose restricted nameservers for `home.arpa` when only internal names should us
 Check health, create a plan, compare it with the reviewed zone change, then apply from the exact approved clean commit using the command's literal confirmation:
 
 ```sh
-export TECHNITIUM_URL=https://10.0.5.1:53443
+export TECHNITIUM_URL=https://10.77.5.1:53443
 export TECHNITIUM_TOKEN_FILE=/secure/dns/reader-token
 export TECHNITIUM_CA_FILE=/secure/dns/technitium-ca.pem
 engine/installer/management/dnsctl health

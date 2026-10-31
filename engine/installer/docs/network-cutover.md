@@ -2,9 +2,9 @@
 
 ## Address prerequisite
 
-The selected addresses assume one `10.0.0.0/16` LAN. The router interface must
-therefore be `10.0.0.1/16` (`255.255.0.0`) or provide an explicit routed path to
-`10.0.5.0/24`. A factory-default `/24` router configuration does not satisfy
+The selected addresses assume one `10.77.0.0/16` LAN. The router interface must
+therefore be `10.77.0.1/16` (`255.255.0.0`) or provide an explicit routed path to
+`10.77.5.0/24`. A factory-default `/24` router configuration does not satisfy
 this design.
 
 Before changing the router, retain a wired management client and a documented
@@ -12,7 +12,7 @@ way to restore its previous LAN address and mask. Record the old DHCP DNS values
 Run the static check from the management machine:
 
 ```sh
-engine/installer/management/network-preflight 10.0.0.1/16
+engine/installer/management/network-preflight 10.77.0.1/16
 ```
 
 The default run records the management host's default gateway and also checks
@@ -38,15 +38,15 @@ installed.
 4. From two independent clients, query every node over UDP and TCP:
 
    ```sh
-   for ip in 10.0.5.1 10.0.5.2 10.0.5.3; do
+   for ip in 10.77.5.1 10.77.5.2 10.77.5.3; do
      dig +short "@$ip" canary.home.arpa A
      dig +tcp +short "@$ip" canary.home.arpa A
    done
    ```
 
 5. Confirm NTP, Cockpit, node metrics, an encrypted backup, and cluster state.
-6. Configure router DHCP DNS in this order: `10.0.5.1`, `10.0.5.2`,
-   `10.0.5.3`. Technitium clustering synchronizes configuration; DHCP must still
+6. Configure router DHCP DNS in this order: `10.77.5.1`, `10.77.5.2`,
+   `10.77.5.3`. Technitium clustering synchronizes configuration; DHCP must still
    advertise multiple resolver addresses for client-side redundancy.
 7. Renew one test client's DHCP lease and verify public and `home.arpa` names.
 8. Renew the remaining clients only after the canary remains healthy.

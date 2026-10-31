@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 set -euo pipefail
 
-url=${TECHNITIUM_URL:-https://10.0.5.1:53443}
+url=${TECHNITIUM_URL:-https://10.77.5.1:53443}
 token_file=${TECHNITIUM_TOKEN_FILE:-}
 ca_file=${TECHNITIUM_CA_FILE:-}
 state_home=${XDG_STATE_HOME:-${HOME:?HOME is required}/.local/state}

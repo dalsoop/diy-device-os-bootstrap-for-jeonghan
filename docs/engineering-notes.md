@@ -129,11 +129,11 @@ and compares all of them before live target inspection or any write.
 
 ## Network reachability depends on the router prefix
 
-**Symptom:** the management host can reach `10.0.0.1` but not `10.0.5.1` through `10.0.5.3`.
+**Symptom:** the management host can reach `10.77.0.1` but not `10.77.5.1` through `10.77.5.3`.
 
-**Cause:** the router may still treat the LAN as `10.0.0.0/24`; sharing the first octet does not make `10.0.5.0/24` directly reachable.
+**Cause:** the router may still treat the LAN as `10.77.0.0/24`; sharing the first octet does not make `10.77.5.0/24` directly reachable.
 
-**Response:** preserve a wired recovery client and old router values, then configure a `10.0.0.0/16` LAN or an explicit route. Prove node reachability before changing DHCP DNS advertisement.
+**Response:** preserve a wired recovery client and old router values, then configure a `10.77.0.0/16` LAN or an explicit route. Prove node reachability before changing DHCP DNS advertisement.
 
 ## Simple-CDD requests a removed trixie i386 installer
 

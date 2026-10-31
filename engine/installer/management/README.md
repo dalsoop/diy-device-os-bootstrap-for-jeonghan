@@ -54,7 +54,7 @@ TAILSCALE_OAUTH_CLIENT_SECRET_FILE=/secure/tailscale/client-secret \
   engine/installer/management/tailscale-enroll --all
 ```
 
-The nodes must already be reachable at `10.0.5.1` through `10.0.5.3` by the
+The nodes must already be reachable at `10.77.5.1` through `10.77.5.3` by the
 operator SSH key. Enrollment requires Internet access to the Tailscale control
 plane but does not change the appliances' local DNS resolver or routing role.
 

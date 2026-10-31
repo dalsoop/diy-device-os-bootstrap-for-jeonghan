@@ -5,7 +5,7 @@ set -euo pipefail
 
 output=text
 check_internet=true
-router_cidr=10.0.0.1/16
+router_cidr=10.77.0.1/16
 router_cidr_set=false
 
 usage() {
@@ -70,7 +70,7 @@ if router.version != 4:
     raise SystemExit("network-preflight: only IPv4 is supported")
 
 nodes = {
-    role: ipaddress.ip_address(f"10.0.5.{index}")
+    role: ipaddress.ip_address(f"10.77.5.{index}")
     for index, role in enumerate(roles, start=1)
 }
 missing = [str(address) for address in nodes.values() if address not in router.network]

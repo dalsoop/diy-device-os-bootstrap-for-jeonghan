@@ -47,7 +47,7 @@ $ORIGIN home.arpa.
 $TTL 300
 @ IN SOA dns01.home.arpa. hostmaster.home.arpa. ( 2 3600 600 604800 300 )
 @ IN NS dns01.home.arpa.
-canary IN A 10.0.9.9
+canary IN A 10.77.9.9
 EOF
 
 PATH="$temporary/bin:$PATH" \
@@ -158,7 +158,7 @@ expect_apply_rejected dnsctl_apply_rejects_uncommitted_zone \
 git -C "$zone_repo" checkout -q -- zones/home.arpa.zone
 
 cp "$temporary/current.zone" "$temporary/current.zone.reviewed"
-printf '%s\n' 'drift IN A 10.0.9.8' >> "$temporary/current.zone"
+printf '%s\n' 'drift IN A 10.77.9.8' >> "$temporary/current.zone"
 expect_apply_rejected dnsctl_apply_rejects_live_zone_drift \
     --plan "$temporary/reviewed.plan" --plan-sha256 "$plan_sha" --confirm APPLY
 jq -s -e 'map(select(.result == "drifted")) | length == 1' \
@@ -179,13 +179,13 @@ pass dnsctl_apply_consumes_the_reviewed_plan
 expect_apply_rejected dnsctl_apply_rejects_replayed_plan \
     --plan "$temporary/reviewed.plan" --plan-sha256 "$plan_sha" --confirm APPLY
 
-printf '%s\n' 'next IN A 10.0.9.10' >> "$zone_repo/zones/home.arpa.zone"
+printf '%s\n' 'next IN A 10.77.9.10' >> "$zone_repo/zones/home.arpa.zone"
 git -C "$zone_repo" -c user.name=test -c user.email=test@example.invalid \
     commit -q -am next
 dnsctl_in_repo plan zones/home.arpa.zone --out "$temporary/stale.plan" \
     > /dev/null 2>&1
 stale_sha=$(sha256_of "$temporary/stale.plan")
-printf '%s\n' 'later IN A 10.0.9.11' >> "$zone_repo/zones/home.arpa.zone"
+printf '%s\n' 'later IN A 10.77.9.11' >> "$zone_repo/zones/home.arpa.zone"
 git -C "$zone_repo" -c user.name=test -c user.email=test@example.invalid \
     commit -q -am later
 expect_apply_rejected dnsctl_apply_rejects_other_source_commit \
@@ -206,18 +206,18 @@ grep -q '^authorize_erase=true$' "$enrollment/reinstall/dns01.allow"
 pass reinstall_authorization_is_generation_bound
 
 if PATH="$temporary/bin:$PATH" \
-    "$repo_root/management/network-preflight" 10.0.0.1/24 >/dev/null 2>&1; then
+    "$repo_root/management/network-preflight" 10.77.0.1/24 >/dev/null 2>&1; then
     echo "FAIL /24 unexpectedly contains the DNS node addresses" >&2
     exit 1
 fi
 PATH="$temporary/bin:$PATH" \
-    "$repo_root/management/network-preflight" --offline 10.0.0.1/16 \
+    "$repo_root/management/network-preflight" --offline 10.77.0.1/16 \
     > "$temporary/network.txt"
-grep -q '10.0.0.0/16 contains router and all DNS nodes' "$temporary/network.txt"
+grep -q '10.77.0.0/16 contains router and all DNS nodes' "$temporary/network.txt"
 pass network_preflight_rejects_24_and_accepts_16
 
 PATH="$temporary/bin:$PATH" \
-    "$repo_root/management/network-preflight" --json --offline 10.0.0.1/16 \
+    "$repo_root/management/network-preflight" --json --offline 10.77.0.1/16 \
     > "$temporary/network.json"
 jq -e '
   .schema_version == 1 and
@@ -247,7 +247,7 @@ pathlib.Path(sys.argv[2], "render-env").write_text(
 PY
 for include_password in true false; do
     fixture_dir="$temporary" ROLE=dns01 CLUSTER_DOMAIN=home.arpa \
-        ADDRESS=10.0.5.1 LAN_CIDR=10.0.0.0/16 technitium_token="$temporary/token" \
+        ADDRESS=10.77.5.1 LAN_CIDR=10.77.0.0/16 technitium_token="$temporary/token" \
         sh "$temporary/render-env" "$include_password"
     python3 - "$temporary/technitium.env" "$include_password" <<'PY'
 import ipaddress
@@ -261,7 +261,7 @@ assert stat.S_IMODE(path.stat().st_mode) == 0o600
 assert config["DNS_SERVER_RECURSION"] == "UseSpecifiedNetworkACL"
 networks = [ipaddress.ip_network(value) for value in config["DNS_SERVER_RECURSION_NETWORK_ACL"].split(",")]
 allowed = lambda address: any(ipaddress.ip_address(address) in network for network in networks)
-for address in ("127.0.0.1", "10.0.5.1", "10.0.255.254", "100.64.0.0", "100.100.1.2", "100.127.255.255"):
+for address in ("127.0.0.1", "10.77.5.1", "10.77.255.254", "100.64.0.0", "100.100.1.2", "100.127.255.255"):
     assert allowed(address), f"expected recursion for {address}"
 for address in ("1.1.1.1", "10.1.0.1", "100.63.255.255", "100.128.0.0", "192.168.0.1", "::1"):
     assert not allowed(address), f"unexpected recursion for {address}"

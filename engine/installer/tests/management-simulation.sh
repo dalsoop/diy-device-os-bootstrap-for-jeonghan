@@ -227,7 +227,10 @@ jq -e '
   .internet.checked == false and
   .internet.ready == null and
   .network_gates.offline_dns_install.ready == true and
-  .network_gates.media_download.ready == null
+  .network_gates.media_download.ready == null and
+  .network_gates.post_install_netbird.internet_required == true and
+  .network_gates.post_install_netbird.ready == null and
+  .network_gates.post_install_netbird == .network_gates.post_install_tailscale
 ' "$temporary/network.json" >/dev/null
 pass network_preflight_offline_json_is_explicit
 

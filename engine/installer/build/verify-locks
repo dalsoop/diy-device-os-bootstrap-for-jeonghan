@@ -5,6 +5,7 @@ set -eu
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 policy=$script_dir/distribution-policy.json
+simple_cdd_conf=$script_dir/../dns-image/simple-cdd/simple-cdd.conf
 # shellcheck disable=SC1091
 . "$script_dir/locks/sources.env"
 
@@ -21,6 +22,18 @@ printf '%s' "$DEBIAN_NETINST_SHA256" | grep -Eq '^[0-9a-f]{64}$' ||
     fail "invalid Debian SHA-256"
 printf '%s' "$DEBIAN_SNAPSHOT" | grep -Eq '^[0-9]{8}T[0-9]{6}Z$' ||
     fail "invalid Debian snapshot timestamp"
+[ -r "$simple_cdd_conf" ] || fail "Simple-CDD configuration is missing"
+check_snapshot_mirror() {
+    mirror_count=$(grep -c "^$1=" "$simple_cdd_conf" || true)
+    if [ "$mirror_count" != 1 ] ||
+        ! grep -qxF "$1=\"https://snapshot.debian.org/archive/$2/$DEBIAN_SNAPSHOT/\"" \
+            "$simple_cdd_conf"; then
+        fail "Simple-CDD $1 does not name the locked Debian snapshot"
+    fi
+}
+check_snapshot_mirror debian_mirror debian
+check_snapshot_mirror security_mirror debian-security
+check_snapshot_mirror updates_mirror debian
 printf '%s' "$SIMPLE_CDD_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
     fail "invalid Simple-CDD version"
 printf '%s' "$TECHNITIUM_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||

@@ -84,9 +84,10 @@ tasksel
 # Not listed (not on this appliance's install path, or best-effort extras
 # whose absence leaves a working appliance):
 # - os-prober (grub-installer, `|| true`; grub-installer/only_debian is true)
-# - installation-report (save-logs), laptop-detect and unattended-upgrades
-#   (pkgsel; pkgsel/update-policy defaults to none), popularity-contest
+# - installation-report (save-logs) and laptop-detect, popularity-contest
 #   (declined in default.preseed)
+# - pkgsel's own unattended-upgrades request (pkgsel/update-policy defaults to
+#   none); the appliance installs unattended-upgrades through dns.packages
 # - ca-certificates (apt-setup, only for HTTPS mirrors; dns.packages has it)
 # - virtual-machine guest tools from 08hw-detect, hardware firmware from
 #   50install-firmware, pcmciautils, pbbuttonsd, opal-prd, libfribidi0

@@ -234,3 +234,83 @@ if [ "$netbird_selected" = true ]; then
     in-target systemctl enable netbird.service
 fi
 in-target systemctl enable dns-appliance-firstboot.service
+
+# Unattended Debian upgrades with peer-guarded staggered reboots. The install
+# time and the reboot window are fixed per role in Asia/Seoul, like the fixed
+# role addresses; each install runs one hour before the role's reboot window.
+update_schedule() {
+    case "$1" in
+        dns01) printf '02:00 03:00\n' ;;
+        dns02) printf '02:30 03:30\n' ;;
+        dns03) printf '03:00 04:00\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+# Prints the single IPv4 address of an embedded role profile.
+peer_address() {
+    awk -F= '
+        $1 == "address" { count++; value = $2 }
+        END {
+            n = split(value, octet, ".")
+            bad = (count != 1 || n != 4)
+            for (i = 1; i <= n; i++)
+                if (octet[i] !~ /^[0-9]+$/ || length(octet[i]) > 3 || octet[i] + 0 > 255) bad = 1
+            if (bad) exit 1
+            print value
+        }
+    ' "$1"
+}
+
+install_unattended_upgrades() {
+    schedule=$(update_schedule "$1") || {
+        echo "dns-finish-install: no update schedule for role $1" >&2
+        exit 1
+    }
+    install_time=${schedule% *}
+    reboot_time=${schedule#* }
+
+    # The reboot guard probes the other two roles at the addresses of the
+    # role profiles embedded in this image.
+    peers=/target/etc/dns-appliance/peers
+    : > "$peers.tmp"
+    for peer in dns01 dns02 dns03; do
+        [ "$peer" != "$1" ] || continue
+        peer_ip=$(peer_address "/cdrom/simple-cdd/$peer.conf") || {
+            echo "dns-finish-install: embedded profile $peer has no single valid address" >&2
+            exit 1
+        }
+        printf '%s %s\n' "$peer" "$peer_ip" >> "$peers.tmp"
+    done
+    chmod 0644 "$peers.tmp"
+    mv "$peers.tmp" "$peers"
+
+    # The installer leaves the install medium as the only apt source; the
+    # appliance updates from the Debian archive over HTTPS instead.
+    if [ -f /target/etc/apt/sources.list ]; then
+        sed -e 's/^deb cdrom:/# deb cdrom:/' -e 's/^deb-src cdrom:/# deb-src cdrom:/' \
+            /target/etc/apt/sources.list > /target/etc/apt/sources.list.tmp
+        chmod 0644 /target/etc/apt/sources.list.tmp
+        mv /target/etc/apt/sources.list.tmp /target/etc/apt/sources.list
+    fi
+    install -d -m 0755 /target/etc/apt/sources.list.d /target/etc/apt/apt.conf.d \
+        /target/etc/systemd/system/apt-daily-upgrade.service.d \
+        /target/etc/systemd/system/apt-daily-upgrade.timer.d
+    install -m 0644 /cdrom/simple-cdd/debian.sources /target/etc/apt/sources.list.d/debian.sources
+    install -m 0644 /cdrom/simple-cdd/apt-unattended-upgrades.conf \
+        /target/etc/apt/apt.conf.d/52dns-appliance-unattended-upgrades
+    install -m 0644 /cdrom/simple-cdd/apt-daily-upgrade-refresh.conf \
+        /target/etc/systemd/system/apt-daily-upgrade.service.d/60-dns-appliance.conf
+    sed "s#@@INSTALL_TIME@@#$install_time#g" /cdrom/simple-cdd/apt-daily-upgrade.timer.conf \
+        > /target/etc/systemd/system/apt-daily-upgrade.timer.d/60-dns-appliance.conf
+    chmod 0644 /target/etc/systemd/system/apt-daily-upgrade.timer.d/60-dns-appliance.conf
+    sed "s#@@REBOOT_TIME@@#$reboot_time#g" /cdrom/simple-cdd/dns-appliance-reboot.timer \
+        > /target/etc/systemd/system/dns-appliance-reboot.timer
+    chmod 0644 /target/etc/systemd/system/dns-appliance-reboot.timer
+    install -m 0644 /cdrom/simple-cdd/dns-appliance-reboot.service \
+        /target/etc/systemd/system/dns-appliance-reboot.service
+    install -m 0750 /cdrom/simple-cdd/dns-appliance-reboot /target/usr/local/sbin/dns-appliance-reboot
+    in-target systemctl enable dns-appliance-reboot.timer
+}
+
+install_unattended_upgrades "$ROLE"

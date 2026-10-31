@@ -70,5 +70,16 @@ mv "$output_dir/health.json.tmp" "$output_dir/health.json"
 } > "$metrics_dir/dns-appliance.prom.tmp"
 mv "$metrics_dir/dns-appliance.prom.tmp" "$metrics_dir/dns-appliance.prom"
 
+# Reboot guard state from dns-appliance-reboot: pending reboot, consecutive
+# skipped reboot windows and the last skip time. Unreadable state removes the
+# metrics rather than leaving stale values.
+reboot_metrics=$metrics_dir/dns-appliance-reboot.prom
+if /usr/local/sbin/dns-appliance-reboot metrics > "$reboot_metrics.tmp"; then
+    mv "$reboot_metrics.tmp" "$reboot_metrics"
+else
+    rm -f "$reboot_metrics.tmp" "$reboot_metrics"
+    echo "dns-appliance-health: reboot metrics are unavailable" >&2
+fi
+
 [ "$dns_udp" -eq 1 ] && [ "$dns_tcp" -eq 1 ] &&
     [ "$technitium" -eq 1 ] && [ "$cockpit" -eq 1 ]

@@ -1298,6 +1298,10 @@ make_finish_root() {
     printf 'FLAGS=\n' > "$root/stage/tailscale_1.104.1_amd64/systemd/tailscaled.defaults"
     tar -czf "$root/cdrom/simple-cdd/tailscale.tgz" -C "$root/stage" tailscale_1.104.1_amd64
     cp "$fixtures/netbird.tar.gz" "$root/cdrom/simple-cdd/netbird.tar.gz"
+    for number in 1 2 3; do
+        printf 'role=dns0%s\naddress=10.77.5.%s\n' "$number" "$number" \
+            > "$root/cdrom/simple-cdd/dns0$number.conf"
+    done
     if [ "$selection" != absent ]; then
         printf '%b' "$selection" > "$root/cdrom/simple-cdd/overlays"
     fi

@@ -20,18 +20,50 @@ registry, build manifest, and final review record.
 | Ventoy | Ventoy-developed modules are described upstream as GPLv3+; the archive also contains separately licensed components | <https://github.com/ventoy/Ventoy/tree/master/License> and <https://github.com/ventoy/Ventoy> |
 | Debian installation and live media | Debian media contains packages under many DFSG-compatible licenses; no single SPDX expression describes the complete image | <https://www.debian.org/CD/vendors/info> and <https://sources.debian.org/> |
 | Technitium DNS Server | The upstream DNS Server repository publishes the GNU GPL version 3 | <https://github.com/TechnitiumSoftware/DnsServer/blob/master/LICENSE> and <https://github.com/TechnitiumSoftware/DnsServer> |
-| Tailscale client and daemon | The upstream client repository publishes BSD-3-Clause and a separate dependency-license inventory | <https://github.com/tailscale/tailscale/blob/main/LICENSE> and <https://github.com/tailscale/tailscale/tree/main/licenses> |
 | Proxmox VE and Backup Server | Proxmox states that the majority of its code is AGPLv3 or another FLOSS license; an installer contains separately licensed components | <https://www.proxmox.com/en/about/open-source> and <https://git.proxmox.com/> |
 | Pop!_OS | The ISO is a distribution of independently licensed Ubuntu, System76, firmware, and other components | <https://github.com/pop-os/pop/blob/master/LICENSING.md> and <https://github.com/pop-os> |
 | TrueNAS SCALE | The image contains independently licensed open-source components and may present edition- or component-specific terms | <https://github.com/truenas> and the notices delivered with the exact image |
 
-The complete Tailscale BSD-3-Clause text associated with the pinned client
-source is stored at `docs/licenses/Tailscale-BSD-3-Clause.txt`. The DNS
-builder also fetches and verifies the dependency-license report from the exact
-pinned Tailscale tag, includes it in the ISO, and installs it beside the project
-notices. These inclusions preserve useful material but do not by themselves
-approve redistribution. GNU GPL version 3 text used by this project and the
-GPL-licensed upstream components is stored at the repository root `LICENSE`.
+GNU GPL version 3 text used by this project and the GPL-licensed upstream
+components is stored at the repository root `LICENSE`.
+
+## Overlay clients
+
+The DNS image bundles only the overlay clients that the World selects in
+`overlays`. The copy of this file inside a DNS image keeps only the sections of
+the selected clients; the marker comments delimit those sections.
+
+<!-- overlay:tailscale:begin -->
+### Tailscale client and daemon
+
+The upstream client repository publishes BSD-3-Clause
+(<https://github.com/tailscale/tailscale/blob/main/LICENSE>) and a separate
+dependency-license inventory
+(<https://github.com/tailscale/tailscale/tree/main/licenses>). The complete
+Tailscale BSD-3-Clause text associated with the pinned client source is stored
+at `docs/licenses/Tailscale-BSD-3-Clause.txt`. The DNS builder also fetches and
+verifies the dependency-license report from the exact pinned Tailscale tag,
+includes it in the ISO, and installs it beside the project notices. These
+inclusions preserve useful material but do not by themselves approve
+redistribution.
+<!-- overlay:tailscale:end -->
+
+<!-- overlay:netbird:begin -->
+### NetBird client
+
+The NetBird repository licenses everything except its `management/`,
+`signal/`, `relay/` and `combined/` directories under BSD-3-Clause; those
+directories are AGPL-3.0. The pinned client archive contains only the
+`netbird` client, which is built from the `client/` tree and imports none of
+the AGPL-3.0 directories. The repository's root license text at tag `v0.82.0`
+(<https://raw.githubusercontent.com/netbirdio/netbird/v0.82.0/LICENSE>,
+SHA-256 `8343fe949e32a30e2261c4f0967365271d08c4644e879dec5b998d1af666fdb3`) is
+stored unchanged at `docs/licenses/NetBird-BSD-3-Clause.txt` and installed
+beside the project notices. NetBird publishes no dependency-license report for
+the Go modules compiled into the static client, so its third-party dependency
+licenses are not enumerated here; that gap blocks a future redistribution
+review but not personal use.
+<!-- overlay:netbird:end -->
 
 ## Generated media and systems
 

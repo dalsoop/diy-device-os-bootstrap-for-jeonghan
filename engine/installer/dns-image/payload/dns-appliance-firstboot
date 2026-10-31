@@ -13,6 +13,7 @@ technitium_log_dir=/var/log/technitium
 image_archive=/usr/lib/dns-appliance/technitium.oci.tar
 schema=/usr/share/dns-appliance/enrollment-record.schema.json
 age_recipient_file=/etc/dns-appliance/age-recipient
+overlay_selection=/etc/dns-appliance/overlays
 mount_point=/mnt/dns-enroll
 
 fail() {
@@ -20,7 +21,20 @@ fail() {
     exit 1
 }
 
+# Prints the daemon unit of each selected overlay; fails unless the file lists
+# tailscale and/or netbird once each, one per line, in that order.
+overlay_units() {
+    awk '
+        $0 == "tailscale" && !tailscale && !netbird { tailscale = 1; print "tailscaled.service"; next }
+        $0 == "netbird" && !netbird { netbird = 1; print "netbird.service"; next }
+        { bad = 1 }
+        END { exit (bad || NR == 0) }
+    ' "$1"
+}
+
 [ -r "$install_state" ] || fail "missing $install_state"
+[ -r "$overlay_selection" ] || fail "missing $overlay_selection"
+overlay_daemons=$(overlay_units "$overlay_selection") || fail "invalid overlay selection in $overlay_selection"
 [ -r "$source_lock" ] || fail "missing $source_lock"
 [ -r "$age_recipient_file" ] || fail "missing $age_recipient_file"
 [ -s "$image_archive" ] || fail "missing pinned Technitium OCI archive"
@@ -140,7 +154,9 @@ write_technitium_env "$include_bootstrap_password"
 systemctl mask systemd-resolved.service >/dev/null 2>&1 || true
 systemctl enable --now cockpit.socket nftables.service prometheus-node-exporter.service
 systemctl enable --now systemd-timesyncd.service || true
-systemctl enable --now tailscaled.service
+for unit in $overlay_daemons; do
+    systemctl enable --now "$unit"
+done
 systemctl enable --now technitium-dns.service
 
 wait_for() {

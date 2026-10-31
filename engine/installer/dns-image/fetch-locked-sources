@@ -13,6 +13,7 @@ archive=$cache_dir/technitium-dns-$TECHNITIUM_VERSION-amd64.oci.tar
 image_ref=$TECHNITIUM_IMAGE@$TECHNITIUM_AMD64_DIGEST
 tailscale_archive=$cache_dir/tailscale-$TAILSCALE_VERSION-amd64.tgz
 tailscale_licenses=$cache_dir/tailscale-$TAILSCALE_VERSION-dependency-licenses.md
+netbird_archive=$cache_dir/netbird-$NETBIRD_VERSION-linux-amd64.tar.gz
 source_evidence=${DNS_APPLIANCE_SOURCE_EVIDENCE:-$cache_dir/component-source-evidence.json}
 
 fail() {
@@ -23,8 +24,42 @@ fail() {
 command -v skopeo >/dev/null 2>&1 || fail "skopeo is required"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
+command -v ruby >/dev/null 2>&1 || fail "ruby is required"
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
+
+# Only the overlay clients selected by the World are fetched.
+overlays=$("$script_dir/overlay-selection" resolve) ||
+    fail "cannot resolve the World overlay selection"
+tailscale_selected=false
+netbird_selected=false
+for overlay in $overlays; do
+    case "$overlay" in
+        tailscale) tailscale_selected=true ;;
+        netbird) netbird_selected=true ;;
+        *) fail "unknown overlay: $overlay" ;;
+    esac
+done
 mkdir -p "$cache_dir"
+
+# Downloads to a temporary file, verifies the reviewed digest, then promotes
+# it; a cached copy is verified again on every run.
+fetch_verified() {
+    url=$1
+    sha256=$2
+    destination=$3
+    if [ ! -s "$destination" ]; then
+        partial=$destination.partial.$$
+        trap 'rm -f "$partial"' EXIT HUP INT TERM
+        curl --fail --location --proto '=https' --tlsv1.2 --output "$partial" "$url" ||
+            fail "download failed: $url"
+        printf '%s  %s\n' "$sha256" "$partial" | sha256sum -c - >/dev/null 2>&1 ||
+            fail "downloaded file does not match its locked SHA-256: $url"
+        mv "$partial" "$destination"
+        trap - EXIT HUP INT TERM
+    fi
+    printf '%s  %s\n' "$sha256" "$destination" | sha256sum -c - ||
+        fail "cached file does not match its locked SHA-256: $destination"
+}
 
 remote_digest=$(skopeo inspect --override-os linux --override-arch amd64 \
     --format '{{.Digest}}' "docker://$image_ref")
@@ -46,56 +81,52 @@ archive_digest=$(skopeo inspect --format '{{.Digest}}' "oci-archive:$archive")
 
 sha256sum "$archive"
 
-if [ ! -s "$tailscale_archive" ]; then
-    tailscale_partial=$tailscale_archive.partial
-    trap 'rm -f "$tailscale_partial"' EXIT HUP INT TERM
-    curl --fail --location --proto '=https' --tlsv1.2 \
-        --output "$tailscale_partial" "$TAILSCALE_AMD64_URL"
-    printf '%s  %s\n' "$TAILSCALE_AMD64_SHA256" "$tailscale_partial" |
-        sha256sum -c -
-    mv "$tailscale_partial" "$tailscale_archive"
-    trap - EXIT HUP INT TERM
+if [ "$tailscale_selected" = true ]; then
+    fetch_verified "$TAILSCALE_AMD64_URL" "$TAILSCALE_AMD64_SHA256" "$tailscale_archive"
+    fetch_verified "$TAILSCALE_LICENSES_URL" "$TAILSCALE_LICENSES_SHA256" "$tailscale_licenses"
 fi
-
-printf '%s  %s\n' "$TAILSCALE_AMD64_SHA256" "$tailscale_archive" |
-    sha256sum -c -
-
-if [ ! -s "$tailscale_licenses" ]; then
-    licenses_partial=$tailscale_licenses.partial
-    trap 'rm -f "$licenses_partial"' EXIT HUP INT TERM
-    curl --fail --location --proto '=https' --tlsv1.2 \
-        --output "$licenses_partial" "$TAILSCALE_LICENSES_URL"
-    printf '%s  %s\n' "$TAILSCALE_LICENSES_SHA256" "$licenses_partial" |
-        sha256sum -c -
-    mv "$licenses_partial" "$tailscale_licenses"
-    trap - EXIT HUP INT TERM
+if [ "$netbird_selected" = true ]; then
+    fetch_verified "$NETBIRD_AMD64_URL" "$NETBIRD_AMD64_SHA256" "$netbird_archive"
 fi
-
-printf '%s  %s\n' "$TAILSCALE_LICENSES_SHA256" "$tailscale_licenses" |
-    sha256sum -c -
 
 archive_sha256=$(sha256sum "$archive" | awk '{print $1}')
-tailscale_sha256=$(sha256sum "$tailscale_archive" | awk '{print $1}')
-licenses_sha256=$(sha256sum "$tailscale_licenses" | awk '{print $1}')
+tailscale_sha256=
+licenses_sha256=
+netbird_sha256=
+if [ "$tailscale_selected" = true ]; then
+    tailscale_sha256=$(sha256sum "$tailscale_archive" | awk '{print $1}')
+    licenses_sha256=$(sha256sum "$tailscale_licenses" | awk '{print $1}')
+fi
+if [ "$netbird_selected" = true ]; then
+    netbird_sha256=$(sha256sum "$netbird_archive" | awk '{print $1}')
+fi
 evidence_dir=$(dirname -- "$source_evidence")
 mkdir -p "$evidence_dir"
 evidence_partial=$source_evidence.partial.$$
 trap 'rm -f "$evidence_partial"' EXIT HUP INT TERM
-jq -n \
+printf '%s\n' "$overlays" | jq -R . | jq -s \
     --arg technitium_version "$TECHNITIUM_VERSION" \
     --arg technitium_archive_sha256 "$archive_sha256" \
     --arg technitium_source_identity "$TECHNITIUM_AMD64_DIGEST" \
     --arg tailscale_version "$TAILSCALE_VERSION" \
     --arg tailscale_archive_sha256 "$tailscale_sha256" \
     --arg tailscale_report_sha256 "$licenses_sha256" \
-    '{
+    --arg netbird_version "$NETBIRD_VERSION" \
+    --arg netbird_archive_sha256 "$netbird_sha256" \
+    '. as $overlays | {
       schema_version: 1,
       evidence_only: true,
-      components: [
-        {id:"technitium-oci",version:$technitium_version,digest:{algorithm:"sha256",value:$technitium_archive_sha256},source_identity:{kind:"oci-digest",value:$technitium_source_identity}},
-        {id:"tailscale-archive",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_archive_sha256}},
-        {id:"tailscale-dependency-report",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_report_sha256}}
-      ]
+      overlays: $overlays,
+      components: (
+        [{id:"technitium-oci",version:$technitium_version,digest:{algorithm:"sha256",value:$technitium_archive_sha256},source_identity:{kind:"oci-digest",value:$technitium_source_identity}}] +
+        (if ($overlays | index("tailscale")) != null then [
+          {id:"tailscale-archive",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_archive_sha256}},
+          {id:"tailscale-dependency-report",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_report_sha256}}
+        ] else [] end) +
+        (if ($overlays | index("netbird")) != null then [
+          {id:"netbird-archive",version:$netbird_version,digest:{algorithm:"sha256",value:$netbird_archive_sha256}}
+        ] else [] end)
+      )
     }' > "$evidence_partial"
 mv "$evidence_partial" "$source_evidence"
 trap - EXIT HUP INT TERM

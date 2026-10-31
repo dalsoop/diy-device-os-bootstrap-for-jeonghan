@@ -68,6 +68,7 @@ jq -e '
   [.entries[].id] == ["dns-appliance"] and
   .world.world.slug == "jeonghan-home" and
   .world.media.id == "dns-install" and
+  .world.overlays == ["tailscale","netbird"] and
   .usb.default_language == "ko_KR" and
   .usb.enrollment_reserve_mib == 2048
 ' "$temporary/world-catalog.json" >/dev/null ||

@@ -26,7 +26,7 @@ printf '%s\n' "$personal" | jq -e '
   ([.selected_artifacts[].id] | index("ventoy")) != null and
   ([.selected_artifacts[].id] | index("dns-appliance")) != null and
   ([.selected_artifacts[] | select(.kind == "component") | .id] ==
-    ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","repository-source-snapshot"]) and
+    ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","netbird-archive","repository-source-snapshot"]) and
   ([.selected_artifacts[] | select(.id == "dns-appliance") | .kind] ==
     ["runtime-artifact","final-artifact"]) and
   (.warnings | length) == ([.selected_artifacts[] | select(.status == "personal-use-only")] | length) and
@@ -46,6 +46,36 @@ USB_MEDIA_CATALOG="$temporary/writer-catalog.json" $checker --mode personal-use 
 if $checker --mode personal-use --catalog "$temporary/writer-catalog.json" --json >/dev/null 2>&1; then
     fail "personal-use accepted an explicit --catalog"
 fi
+
+# A World-driven catalog lists only the components of the World's overlays.
+monorepo_root=$(CDPATH='' cd -- "$repo_root/../.." && pwd)
+ruby "$monorepo_root/engine/world/bin/resolve-world" --output "$temporary/world-plan.json"
+DEVICE_MEDIA_WORLD_PLAN="$temporary/world-plan.json" USB_MEDIA_CATALOG="$temporary/world-catalog.json" \
+    "$repo_root/usb-media/resolve-catalog" >/dev/null
+world_components() {
+    jq --argjson overlays "$1" '.world.overlays = $overlays' "$temporary/world-catalog.json" \
+        > "$temporary/world-catalog-variant.json"
+    USB_MEDIA_CATALOG="$temporary/world-catalog-variant.json" $checker --mode personal-use --json \
+        > "$temporary/world-personal.json" || true
+}
+world_components '["tailscale","netbird"]'
+jq -e '.decision == "allow" and [.selected_artifacts[] | select(.kind == "component") | .id] ==
+  ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","netbird-archive","repository-source-snapshot"]' \
+    "$temporary/world-personal.json" >/dev/null || fail "dual-overlay World components are wrong"
+world_components '["netbird"]'
+jq -e '.decision == "allow" and [.selected_artifacts[] | select(.kind == "component") | .id] ==
+  ["debian-package-closure","technitium-oci","netbird-archive","repository-source-snapshot"]' \
+    "$temporary/world-personal.json" >/dev/null || fail "NetBird-only World listed unselected components"
+world_components '["netbird","tailscale"]'
+jq -e '.decision == "allow" and [.selected_artifacts[] | select(.kind == "component") | .id] ==
+  ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","netbird-archive","repository-source-snapshot"]' \
+    "$temporary/world-personal.json" >/dev/null || fail "World overlay order changed the canonical components"
+for invalid_overlays in '["tailscale","tailscale"]' '["wireguard"]' '[]' 'null'; do
+    world_components "$invalid_overlays"
+    jq -e '.decision == "deny" and
+      ([.blockers[].message] | index("resolved catalog carries an invalid World overlay selection")) != null' \
+        "$temporary/world-personal.json" >/dev/null || fail "World overlays $invalid_overlays were accepted"
+done
 mock_bin=$temporary/bin
 mkdir -p "$mock_bin"
 cat > "$mock_bin/uname" <<'EOF'
@@ -413,7 +443,7 @@ jq -e '
   ([.blockers[].message] | index("SPDX SBOM violates the exact DNS contract: dns-appliance")) != null and
   ([.blockers[].message] | index("final review is malformed: dns-appliance")) != null and
   ([.selected_artifacts[] | select(.kind == "component") | .id] ==
-    ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","repository-source-snapshot"])
+    ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","netbird-archive","repository-source-snapshot"])
 ' "$temporary/malformed-evidence.json" >/dev/null || fail "malformed evidence was not independently aggregated"
 
 mkdir -p "$temporary/missing-runtime"
@@ -429,7 +459,7 @@ jq -e '
   ([.blockers[].message] | index("component registry is missing: dns-appliance")) != null and
   ([.blockers[].message] | index("SPDX SBOM is missing: dns-appliance")) != null and
   ([.blockers[].message] | index("exact final review is missing: dns-appliance")) != null and
-  ([.selected_artifacts[] | select(.kind == "component")] | length) == 5
+  ([.selected_artifacts[] | select(.kind == "component")] | length) == 6
 ' "$temporary/missing-evidence.json" >/dev/null || fail "missing evidence was not independently aggregated"
 
 if "$checker" --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
@@ -462,6 +492,58 @@ jq -e '
   ([.blockers[].message] | index("exact final review is missing: dns-appliance")) != null
 ' "$temporary/independent-registry.json" >/dev/null ||
     fail "available registry was not exact-validated without manifest or review"
+
+# A valid manifest names the image's components through its overlays; the
+# registry and SBOM beside it must describe the same selection.
+overlay_runtime=$temporary/overlay-runtime
+mkdir -p "$overlay_runtime/inputs" "$overlay_runtime/netbird" "$overlay_runtime/tailscale"
+for input in dns-appliance.iso technitium tailscale report netbird closure snapshot; do
+    printf '%s\n' "$input" > "$overlay_runtime/inputs/$input"
+done
+printf 'zstd=1.5.7+dfsg-1\n' > "$overlay_runtime/inputs/packages"
+render_overlay_records() {
+    printf '%s\n' "$1" > "$overlay_runtime/inputs/overlays"
+    output=$2
+    shift 2
+    "$repo_root/dns-image/render-build-records" --artifact-dir "$output" \
+        --iso "$overlay_runtime/inputs/dns-appliance.iso" --install-mode guided \
+        --overlays "$overlay_runtime/inputs/overlays" \
+        --technitium-archive "$overlay_runtime/inputs/technitium" \
+        --closure-manifest "$overlay_runtime/inputs/closure" --packages "$overlay_runtime/inputs/packages" \
+        --source-revision "$(printf 'b%.0s' {1..40})" \
+        --source-snapshot "$overlay_runtime/inputs/snapshot" "$@"
+}
+render_overlay_records netbird "$overlay_runtime/netbird" \
+    --netbird-archive "$overlay_runtime/inputs/netbird"
+render_overlay_records tailscale "$overlay_runtime/tailscale" \
+    --tailscale-archive "$overlay_runtime/inputs/tailscale" \
+    --tailscale-report "$overlay_runtime/inputs/report"
+overlay_prebuilt() {
+    "$checker" --mode prebuilt-release --catalog "$temporary/reviewed-catalog.json" \
+        "${artifact_args[@]/#dns-appliance=*/dns-appliance=$overlay_runtime/inputs/dns-appliance.iso}" \
+        --manifest "dns-appliance=$overlay_runtime/netbird/build-manifest.json" \
+        --review "dns-appliance=$overlay_runtime/netbird/missing-review.json" \
+        --release-root "$temporary/release" --json > "$temporary/overlay-prebuilt.json" || true
+}
+overlay_prebuilt
+jq -e '
+  [.selected_artifacts[] | select(.kind == "component") | .id] ==
+    ["debian-package-closure","technitium-oci","netbird-archive","repository-source-snapshot"] and
+  ([.blockers[].message] | index("runtime build manifest violates the exact DNS contract: dns-appliance")) == null and
+  ([.blockers[].message | select(contains("overlays"))] | length) == 0
+' "$temporary/overlay-prebuilt.json" >/dev/null ||
+    fail "a NetBird-only image was not evaluated with exactly its components"
+cp "$overlay_runtime/netbird/component-redistribution-registry.json" "$overlay_runtime/netbird-registry.json"
+cp "$overlay_runtime/tailscale/component-redistribution-registry.json" \
+    "$overlay_runtime/netbird/component-redistribution-registry.json"
+overlay_prebuilt
+jq -e '([.blockers[].message] | index("dns-appliance component registry does not match the build manifest overlays")) != null' \
+    "$temporary/overlay-prebuilt.json" >/dev/null || fail "a registry of another overlay selection was accepted"
+cp "$overlay_runtime/netbird-registry.json" "$overlay_runtime/netbird/component-redistribution-registry.json"
+cp "$overlay_runtime/tailscale/sbom.spdx.json" "$overlay_runtime/netbird/sbom.spdx.json"
+overlay_prebuilt
+jq -e '([.blockers[].message] | index("dns-appliance SPDX SBOM does not describe the build manifest overlays")) != null' \
+    "$temporary/overlay-prebuilt.json" >/dev/null || fail "an SBOM of another overlay selection was accepted"
 
 jq '.obligations = [
   {kind:"license-text",disposition:"not-required"},

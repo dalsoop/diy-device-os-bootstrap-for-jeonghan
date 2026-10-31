@@ -25,6 +25,38 @@ warnings_file=$temporary/warnings.jsonl
 artifact_map=$temporary/artifact-map.tsv
 manifest_map=$temporary/manifest-map.tsv
 review_map=$temporary/review-map.tsv
+# A DNS image's overlay selection decides its canonical-order component subset
+# and the packages its SBOM describes (see verify-distribution-contracts).
+# These are jq definitions; their $names are jq variables, not shell ones.
+# shellcheck disable=SC2016
+overlay_defs='
+  def canonical_overlays: ["tailscale","netbird"];
+  def overlay_selection:
+    type == "array" and length > 0 and
+    (. as $s | $s == [canonical_overlays[] | select(. as $o | $s | index($o) != null)]);
+  def world_overlays:
+    type == "array" and length > 0 and all(.[]; . == "tailscale" or . == "netbird") and
+    (unique | length) == length;
+  def selected($s; $overlay): ($s | index($overlay)) != null;
+  def component_ids($s):
+    ["debian-package-closure","technitium-oci"] +
+    (if selected($s; "tailscale") then ["tailscale-archive","tailscale-dependency-report"] else [] end) +
+    (if selected($s; "netbird") then ["netbird-archive"] else [] end) +
+    ["repository-source-snapshot"];
+  def described_ids($s):
+    ["SPDXRef-DebianPackageClosure","SPDXRef-Technitium"] +
+    (if selected($s; "tailscale") then ["SPDXRef-Tailscale","SPDXRef-TailscaleDependencyReport"] else [] end) +
+    (if selected($s; "netbird") then ["SPDXRef-NetBird"] else [] end) +
+    ["SPDXRef-DIYDeviceOSBootstrapForJeonghan"];
+  def overlay_fields($s):
+    (if selected($s; "tailscale") then ["tailscale_version","tailscale_archive_sha256"] else [] end) +
+    (if selected($s; "netbird") then ["netbird_version","netbird_archive_sha256"] else [] end);
+  def sbom_selection:
+    (.documentDescribes // []) as $ids |
+    [canonical_overlays[] | select(. as $o |
+      (if $o == "tailscale" then "SPDXRef-Tailscale" else "SPDXRef-NetBird" end) as $id |
+      ($ids | index($id)) != null)];
+'
 : > "$artifact_map"
 : > "$manifest_map"
 : > "$review_map"
@@ -196,18 +228,30 @@ load_catalog() {
 }
 
 enumerate_personal() {
-    local id sha status kind component
+    local id sha status kind component components
     id=$(jq -r '.bootloader.id' "$catalog")
     sha=$(jq -r '.bootloader.source.sha256 // empty' "$catalog")
     status=$(jq -r '.bootloader.redistribution.status' "$catalog")
     add_artifact "$id" bootloader "$sha" "$status"
+    # A World-driven catalog selects the overlay clients of the DNS image; the
+    # reference collection names no World, so every known component may apply.
+    if jq -e 'has("world") and .world != null' "$catalog" >/dev/null; then
+        if ! components=$(jq -r "$overlay_defs"'
+            if (.world.overlays | world_overlays) then component_ids(.world.overlays)[]
+            else error("invalid World overlays") end' "$catalog" 2>/dev/null); then
+            block artifact-unreviewed "resolved catalog carries an invalid World overlay selection"
+            components=$(jq -r '.component_ids[]' "$repo_root/build/distribution-policy.json")
+        fi
+    else
+        components=$(jq -r '.component_ids[]' "$repo_root/build/distribution-policy.json")
+    fi
     while IFS=$'\t' read -r id kind sha status; do
         [ "$sha" = - ] && sha=
         add_artifact "$id" "$kind" "$sha" "$status"
         if [ "$kind" = runtime-artifact ]; then
             while IFS= read -r component; do
                 add_artifact "$component" component "" "$status"
-            done < <(jq -r '.component_ids[]' "$repo_root/build/distribution-policy.json")
+            done <<<"$components"
             add_artifact "$id" final-artifact "" "$status"
         fi
     done < <(jq -r '.entries[] |
@@ -235,46 +279,45 @@ valid_file_path() {
 }
 
 validate_dns_build_manifest() {
-    jq -e --slurpfile schema "$repo_root/schemas/dns-build-manifest.schema.json" '
+    jq -e --slurpfile schema "$repo_root/schemas/dns-build-manifest.schema.json" "$overlay_defs"'
       def exact_keys($expected): (keys | sort) == ($expected | sort);
       def digest: type == "string" and test("^[a-f0-9]{64}$");
+      def version: type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$");
       def status: . == "personal-use-only" or . == "redistribution-reviewed";
-      def component_status($id):
-        exact_keys(["id","status"]) and .id == $id and (.status | status);
-      ["schema_version","artifact_id","build_id","install_mode","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
+      ["schema_version","artifact_id","build_id","install_mode","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","overlays","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
       ($schema[0]["$id"] | endswith("/engine/installer/schemas/dns-build-manifest.schema.json")) and
       $schema[0].additionalProperties == false and
       (($schema[0].required | sort) == ($fields | sort)) and
-      (($schema[0].properties | keys | sort) == ($fields | sort)) and
-      exact_keys($fields) and
+      (($schema[0].properties | keys | sort) == ($fields + overlay_fields(canonical_overlays) | sort)) and
+      (.overlays | overlay_selection) and
+      (.overlays as $selection |
+      exact_keys($fields + overlay_fields($selection)) and
       .schema_version == 1 and .artifact_id == "dns-appliance" and
       (.build_id | type == "string" and length > 0) and
       (.iso | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._+-]*\\.iso$")) and
       (.iso_sha256 | digest) and (.distribution_status | status) and
       .component_registry == "component-redistribution-registry.json" and
       (.component_registry_sha256 | digest) and (.distribution_policy_sha256 | digest) and
-      (.components | type == "array" and length == 5) and
-      (.components[0] | component_status("debian-package-closure")) and
-      (.components[1] | component_status("technitium-oci")) and
-      (.components[2] | component_status("tailscale-archive")) and
-      (.components[3] | component_status("tailscale-dependency-report")) and
-      (.components[4] | component_status("repository-source-snapshot")) and
+      (.components | type == "array" and all(.[]; exact_keys(["id","status"]) and (.status | status))) and
+      ([.components[].id] == component_ids($selection)) and
       .sbom == "sbom.spdx.json" and (.sbom_sha256 | digest) and
-      (.debian_point_release | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+      (.debian_point_release | version) and
       (.debian_snapshot | test("^[0-9]{8}T[0-9]{6}Z$")) and
-      (.technitium_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+      (.technitium_version | version) and
       (.technitium_image_digest | test("^sha256:[a-f0-9]{64}$")) and
       (.technitium_archive_sha256 | digest) and
-      (.tailscale_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
-      (.tailscale_archive_sha256 | digest) and
+      ((selected($selection; "tailscale") | not) or
+        ((.tailscale_version | version) and (.tailscale_archive_sha256 | digest))) and
+      ((selected($selection; "netbird") | not) or
+        ((.netbird_version | version) and (.netbird_archive_sha256 | digest))) and
       (.source_revision | type == "string" and test("^[a-f0-9]{40}$")) and
       .source_repository == "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan" and
-      .source_archive == (.source_repository + "/archive/" + .source_revision + ".tar.gz")
+      .source_archive == (.source_repository + "/archive/" + .source_revision + ".tar.gz"))
     ' "$1" >/dev/null 2>&1
 }
 
 validate_dns_sbom() {
-    jq -e '
+    jq -e "$overlay_defs"'
       def exact_keys($expected): (keys | sort) == ($expected | sort);
       def nonempty: type == "string" and length > 0;
       def package:
@@ -285,7 +328,8 @@ validate_dns_sbom() {
         (.downloadLocation | nonempty) and .filesAnalyzed == false and
         (.licenseDeclared | nonempty) and (.licenseConcluded | nonempty) and
         (.copyrightText | nonempty) and ((has("comment") | not) or (.comment | nonempty));
-      ["SPDXRef-DebianPackageClosure","SPDXRef-Technitium","SPDXRef-Tailscale","SPDXRef-TailscaleDependencyReport","SPDXRef-DIYDeviceOSBootstrapForJeonghan"] as $described |
+      (sbom_selection | length) > 0 and
+      (described_ids(sbom_selection) as $described |
       exact_keys(["spdxVersion","dataLicense","SPDXID","name","documentNamespace","creationInfo","documentDescribes","packages"]) and
       .spdxVersion == "SPDX-2.3" and .dataLicense == "CC0-1.0" and .SPDXID == "SPDXRef-DOCUMENT" and
       (.name | type == "string" and startswith("dns-appliance-installer-") and length > 25) and
@@ -294,9 +338,9 @@ validate_dns_sbom() {
       (.creationInfo.created | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
       (.creationInfo.creators | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)) and
       .documentDescribes == $described and
-      (.packages | type == "array" and length >= 5 and all(.[]; package)) and
+      (.packages | type == "array" and length >= ($described | length) and all(.[]; package)) and
       (([.packages[].SPDXID] | length) == ([.packages[].SPDXID] | unique | length)) and
-      ([.packages[].SPDXID] as $ids | all($described[]; . as $id | $ids | index($id) != null))
+      ([.packages[].SPDXID] as $ids | all($described[]; . as $id | $ids | index($id) != null)))
     ' "$1" >/dev/null 2>&1
 }
 
@@ -421,7 +465,7 @@ check_prebuilt_entry() {
 
 check_dns_runtime() {
     local entry=$1 artifact=$2 actual=$3 root_real=$4 id manifest review dir registry sbom expected manifest_sha registry_sha review_record
-    local component component_digest component_status sbom_sha
+    local component component_digest component_status sbom_sha components
     local manifest_ok=0 registry_ok=0 sbom_ok=0 review_ok=0
     id=$(jq -r '.id' <<<"$entry")
     manifest=$(assigned_path "$id" "$manifest_map")
@@ -462,6 +506,19 @@ check_dns_runtime() {
                 block review-digest-mismatch "$id component registry digest differs from the build manifest" "$id"
         fi
     fi
+    # The manifest's overlay selection names the image's components; without a
+    # valid manifest every known component may apply.
+    if [ "$manifest_ok" -eq 1 ]; then
+        components=$(jq -r "$overlay_defs"' component_ids(.overlays)[]' "$manifest")
+        if [ "$registry_ok" -eq 1 ] &&
+            ! jq -e --slurpfile registry "$registry" \
+                "$overlay_defs"'[$registry[0].components[].id] == component_ids(.overlays)' \
+                "$manifest" >/dev/null 2>&1; then
+            block review-digest-mismatch "$id component registry does not match the build manifest overlays" "$id"
+        fi
+    else
+        components=$(jq -r '.component_ids[]' "$repo_root/build/distribution-policy.json")
+    fi
     while IFS= read -r component; do
         component_digest=
         component_status=personal-use-only
@@ -478,7 +535,7 @@ check_dns_runtime() {
         add_artifact "$component" component "$component_digest" "$component_status"
         [ "$component_status" = redistribution-reviewed ] ||
             block component-unreviewed "$component is not redistribution-reviewed" "$component"
-    done < <(jq -r '.component_ids[]' "$repo_root/build/distribution-policy.json")
+    done <<<"$components"
     if ! valid_file_path "$sbom" "SPDX SBOM $id"; then
         block artifact-unreviewed "SPDX SBOM is missing: $id" "$id"
     elif ! jq -e 'type == "object"' "$sbom" >/dev/null 2>&1; then
@@ -486,6 +543,11 @@ check_dns_runtime() {
     else
         if validate_dns_sbom "$sbom"; then
             sbom_ok=1
+            if [ "$manifest_ok" -eq 1 ] &&
+                ! jq -e --slurpfile manifest "$manifest" \
+                    "$overlay_defs"'sbom_selection == $manifest[0].overlays' "$sbom" >/dev/null 2>&1; then
+                block review-digest-mismatch "$id SPDX SBOM does not describe the build manifest overlays" "$id"
+            fi
         else
             block artifact-unreviewed "SPDX SBOM violates the exact DNS contract: $id" "$id"
         fi

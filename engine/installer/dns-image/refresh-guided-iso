@@ -38,6 +38,11 @@ extract_base() {
 extract_base install-mode
 [ "$(cat "$temporary_dir/install-mode")" = guided ] ||
     fail "base ISO is not a guided installer image"
+# The refreshed appliance setup step installs the embedded overlay selection,
+# so a base ISO without one cannot be refreshed into a working installer.
+extract_base overlays
+"$script_dir/overlay-selection" check "$temporary_dir/overlays" ||
+    fail "base ISO carries no valid overlay selection"
 
 for source in \
     "$script_dir/scripts/install-gate" \

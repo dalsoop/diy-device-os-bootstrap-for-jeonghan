@@ -8,7 +8,7 @@
   "properties": {
     "schema_version": { "const": 1 },
     "status": { "const": "redistribution-reviewed" },
-    "component_id": { "enum": ["debian-package-closure", "technitium-oci", "tailscale-archive", "tailscale-dependency-report", "repository-source-snapshot"] },
+    "component_id": { "enum": ["debian-package-closure", "technitium-oci", "tailscale-archive", "tailscale-dependency-report", "netbird-archive", "repository-source-snapshot"] },
     "component_version": { "type": "string", "minLength": 1 },
     "artifact_sha256": { "$ref": "#/$defs/sha256" },
     "source_identity": { "$ref": "#/$defs/sourceIdentity" },

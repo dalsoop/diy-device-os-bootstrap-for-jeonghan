@@ -6,6 +6,7 @@
     "technitium-oci",
     "tailscale-archive",
     "tailscale-dependency-report",
+    "netbird-archive",
     "repository-source-snapshot"
   ],
   "statuses": [

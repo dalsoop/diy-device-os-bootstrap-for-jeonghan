@@ -58,6 +58,13 @@ case "$TAILSCALE_LICENSES_URL" in
 esac
 printf '%s' "$TAILSCALE_LICENSES_SHA256" | grep -Eq '^[0-9a-f]{64}$' ||
     fail "invalid Tailscale dependency-license SHA-256"
+netbird_version=${NETBIRD_VERSION:-}
+printf '%s' "$netbird_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
+    fail "invalid NetBird version"
+[ "${NETBIRD_AMD64_URL:-}" = "https://github.com/netbirdio/netbird/releases/download/v${netbird_version}/netbird_${netbird_version}_linux_amd64.tar.gz" ] ||
+    fail "NetBird URL is not the version-pinned GitHub release asset"
+printf '%s' "${NETBIRD_AMD64_SHA256:-}" | grep -Eq '^[0-9a-f]{64}$' ||
+    fail "invalid NetBird SHA-256"
 [ "$SOURCE_REPOSITORY" = https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan ] ||
     fail "source repository is not locked"
 [ "$DISTRIBUTION_POLICY_ID" = dns-composite-image-redistribution-v1 ] ||
@@ -67,7 +74,7 @@ command -v jq >/dev/null 2>&1 || fail "jq is required"
 [ -r "$policy" ] || fail "distribution policy is missing"
 jq -e --arg id "$DISTRIBUTION_POLICY_ID" '
   .schema_version == 1 and .id == $id and
-  .component_ids == ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","repository-source-snapshot"] and
+  .component_ids == ["debian-package-closure","technitium-oci","tailscale-archive","tailscale-dependency-report","netbird-archive","repository-source-snapshot"] and
   .statuses == ["personal-use-only","redistribution-reviewed"] and
   .evidence_kinds == ["license","notices","corresponding-source","trademark"] and
   .obligation_kinds == ["license-text","notices","corresponding-source","trademark"]

@@ -112,6 +112,8 @@ for file in \
     engine/installer/dns-image/payload/dns-appliance-backup \
     engine/installer/dns-image/payload/dns-appliance-technitium-run \
     engine/installer/dns-image/fetch-locked-sources \
+    engine/installer/dns-image/overlay-selection \
+    engine/installer/dns-image/render-build-records \
     engine/installer/dns-image/disk-identity \
     engine/installer/dns-image/write-usb-linux \
     engine/installer/management/cluster-bootstrap \
@@ -204,7 +206,8 @@ for required in \
     LICENSE \
     docs/licenses/LICENSE_HISTORY.md \
     docs/licenses/THIRD_PARTY_NOTICES.md \
-    docs/licenses/Tailscale-BSD-3-Clause.txt; do
+    docs/licenses/Tailscale-BSD-3-Clause.txt \
+    docs/licenses/NetBird-BSD-3-Clause.txt; do
     [ -r "$monorepo_root/$required" ] || {
         echo "repository-contract: missing $required" >&2
         exit 1
@@ -223,8 +226,10 @@ grep -q 'iifname "tailscale0"' "$repo_root/dns-image/payload/nftables.conf"
 grep -q 'preauthorized:true' "$repo_root/management/tailscale-enroll"
 grep -q 'TAILSCALE_LICENSES_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'tailscale-dependency-licenses.md' "$repo_root/dns-image/build-image"
-grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/dns-image/build-image"
-grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/dns-image/build-image"
+grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/dns-image/render-build-records"
+grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/dns-image/render-build-records"
+grep -q 'NETBIRD_AMD64_SHA256' "$repo_root/build/locks/sources.env"
+grep -q 'overlay-selection" resolve' "$repo_root/dns-image/build-image"
 grep -q '/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md' \
     "$repo_root/dns-image/scripts/dns-finish-install"
 grep -q 'preseed/late_command string /bin/sh /cdrom/simple-cdd/dns-finish-install' \

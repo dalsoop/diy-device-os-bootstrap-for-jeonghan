@@ -9,17 +9,46 @@
     "schema_version": { "const": 1 },
     "artifact_id": { "const": "dns-appliance" },
     "components": {
+      "description": "The canonical-order component subset implied by the image's overlay selection: Tailscale only, NetBird only, or both.",
       "type": "array",
-      "minItems": 5,
-      "maxItems": 5,
-      "prefixItems": [
-        { "$ref": "#/$defs/debianClosure" },
-        { "$ref": "#/$defs/technitiumOCI" },
-        { "$ref": "#/$defs/tailscaleArchive" },
-        { "$ref": "#/$defs/tailscaleDependencyReport" },
-        { "$ref": "#/$defs/repositorySourceSnapshot" }
-      ],
-      "items": false
+      "oneOf": [
+        {
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "$ref": "#/$defs/debianClosure" },
+            { "$ref": "#/$defs/technitiumOCI" },
+            { "$ref": "#/$defs/tailscaleArchive" },
+            { "$ref": "#/$defs/tailscaleDependencyReport" },
+            { "$ref": "#/$defs/repositorySourceSnapshot" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            { "$ref": "#/$defs/debianClosure" },
+            { "$ref": "#/$defs/technitiumOCI" },
+            { "$ref": "#/$defs/netbirdArchive" },
+            { "$ref": "#/$defs/repositorySourceSnapshot" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 6,
+          "maxItems": 6,
+          "prefixItems": [
+            { "$ref": "#/$defs/debianClosure" },
+            { "$ref": "#/$defs/technitiumOCI" },
+            { "$ref": "#/$defs/tailscaleArchive" },
+            { "$ref": "#/$defs/tailscaleDependencyReport" },
+            { "$ref": "#/$defs/netbirdArchive" },
+            { "$ref": "#/$defs/repositorySourceSnapshot" }
+          ],
+          "items": false
+        }
+      ]
     }
   },
   "$defs": {
@@ -130,7 +159,7 @@
       "properties": {
         "schema_version": { "const": 1 },
         "status": { "const": "redistribution-reviewed" },
-        "component_id": { "enum": ["debian-package-closure", "technitium-oci", "tailscale-archive", "tailscale-dependency-report", "repository-source-snapshot"] },
+        "component_id": { "enum": ["debian-package-closure", "technitium-oci", "tailscale-archive", "tailscale-dependency-report", "netbird-archive", "repository-source-snapshot"] },
         "component_version": { "type": "string", "minLength": 1 },
         "artifact_sha256": { "$ref": "#/$defs/sha256" },
         "source_identity": { "$ref": "#/$defs/sourceIdentity" },
@@ -179,6 +208,7 @@
     },
     "tailscaleArchive": { "allOf": [{ "$ref": "#/$defs/ordinaryComponent" }, { "properties": { "id": { "const": "tailscale-archive" } } }] },
     "tailscaleDependencyReport": { "allOf": [{ "$ref": "#/$defs/ordinaryComponent" }, { "properties": { "id": { "const": "tailscale-dependency-report" } } }] },
+    "netbirdArchive": { "allOf": [{ "$ref": "#/$defs/ordinaryComponent" }, { "properties": { "id": { "const": "netbird-archive" } } }] },
     "repositorySourceSnapshot": { "allOf": [{ "$ref": "#/$defs/ordinaryComponent" }, { "properties": { "id": { "const": "repository-source-snapshot" } } }] }
   }
 }

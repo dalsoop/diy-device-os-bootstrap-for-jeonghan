@@ -9,6 +9,10 @@ metadata:
 spec:
   defaultMedia: dns-install
 
+  overlays:
+    - tailscale
+    - netbird
+
   assets:
     - id: hp-dns-01
       type: computer

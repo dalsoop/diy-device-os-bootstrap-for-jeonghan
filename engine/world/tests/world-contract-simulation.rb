@@ -39,6 +39,8 @@ fail_test("default media selection changed") unless resolved.dig("media", "entri
 fail_test("default World identity changed") unless resolved.dig("world", "slug") == "jeonghan-home"
 fail_test("default World source changed") unless resolved.dig("source", "world") == "burn-history/home.yaml"
 fail_test("default playbook source changed") unless resolved.dig("source", "playbook") == "burn-history/.paths.yaml"
+fail_test("default overlay selection changed") unless resolved["overlays"] == %w[tailscale netbird]
+fail_test("World plan schema version changed") unless resolved["schema_version"] == 1
 
 inventory_stdout, inventory_stderr, inventory_status = run_resolver(
   ROOT.join(".paths.yaml"), "--media", "inventory-capture"
@@ -47,7 +49,35 @@ fail_test("inventory media was rejected: #{inventory_stderr}") unless inventory_
 inventory = JSON.parse(inventory_stdout)
 fail_test("inventory media selection changed") unless inventory.dig("media", "entries") == ["debian-live"]
 
+def with_fixture(mutation)
+  Dir.mktmpdir("world-contract-") do |directory|
+    root = Pathname(directory)
+    FileUtils.cp(ROOT.join(".paths.yaml"), root.join(".paths.yaml"))
+    fixture = load_yaml(ROOT.join("home.yaml"))
+    mutation.call(fixture)
+    write_yaml(root.join("home.yaml"), fixture)
+    yield run_resolver(root.join(".paths.yaml"))
+  end
+end
+
+{
+  "single tailscale overlay" => %w[tailscale],
+  "single netbird overlay" => %w[netbird],
+  "dual overlays in reverse order" => %w[netbird tailscale]
+}.each do |label, selection|
+  with_fixture(lambda { |world| world["spec"]["overlays"] = selection }) do |out, err, fixture_status|
+    fail_test("valid fixture was rejected: #{label}: #{err}") unless fixture_status.success?
+    fail_test("overlay order or selection changed: #{label}") unless JSON.parse(out)["overlays"] == selection
+  end
+end
+
 mutations = {
+  "missing overlays" => lambda { |world| world["spec"].delete("overlays") },
+  "empty overlays" => lambda { |world| world["spec"]["overlays"] = [] },
+  "duplicate overlay" => lambda { |world| world["spec"]["overlays"] = %w[tailscale tailscale] },
+  "unknown overlay" => lambda { |world| world["spec"]["overlays"] = %w[tailscale wireguard] },
+  "non-array overlays" => lambda { |world| world["spec"]["overlays"] = "tailscale" },
+  "non-string overlay" => lambda { |world| world["spec"]["overlays"] = [1] },
   "duplicate node ID" => lambda { |world| world["spec"]["nodes"][1]["id"] = "dns01" },
   "unknown asset reference" => lambda { |world| world["spec"]["nodes"][0]["assetRef"] = "missing-asset" },
   "address outside network" => lambda { |world| world["spec"]["nodes"][0]["ipv4"] = "192.168.50.10" },
@@ -60,13 +90,7 @@ mutations = {
 }
 
 mutations.each do |label, mutation|
-  Dir.mktmpdir("world-contract-") do |directory|
-    root = Pathname(directory)
-    FileUtils.cp(ROOT.join(".paths.yaml"), root.join(".paths.yaml"))
-    fixture = load_yaml(ROOT.join("home.yaml"))
-    mutation.call(fixture)
-    write_yaml(root.join("home.yaml"), fixture)
-    _out, _err, fixture_status = run_resolver(root.join(".paths.yaml"))
+  with_fixture(mutation) do |_out, _err, fixture_status|
     fail_test("invalid fixture was accepted: #{label}") if fixture_status.success?
   end
 end

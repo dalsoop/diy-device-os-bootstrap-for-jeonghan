@@ -19,6 +19,7 @@ This module holds the World tools for Jeonghan's single accumulating home-infras
 - Static addresses are unique and belong to their network. A gateway is directly reachable or has an explicit route.
 - `defaultMedia` names one declared media definition. A selected entry exists in the public Catalog or reviewed Installer-local registry.
 - `inventory-capture` selects only `debian-live`; default `dns-install` selects only `dns-appliance` until an intentional World edit changes them.
+- `overlays` is required: a non-empty list of unique values from `tailscale` and `netbird`, with no default. The plan carries it in World order under the same `schema_version`.
 - World intent never authorizes erasure. Every policy must retain exact hardware matching, one internal target disk, target-specific confirmation, and no automatic boot timeout.
 - A DNS media selection retains guarded unattended policy; a non-DNS selection does not reserve the DNS enrollment partition.
 - Completed generation IDs use `{YYYYMMDDHHmmss}-{world-slug}` in `Asia/Seoul`, captured at the physical USB creation event after sealing and before the target-specific write.

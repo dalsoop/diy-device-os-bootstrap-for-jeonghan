@@ -1,0 +1,155 @@
+#!/bin/bash
+# SPDX-FileCopyrightText: 2026 dalsoop
+# SPDX-License-Identifier: GPL-3.0-only
+set -euo pipefail
+
+# Guarded reboot into installed updates.
+#
+#   dns-appliance-reboot window   run by dns-appliance-reboot.timer at the
+#                                 role's reboot window
+#   dns-appliance-reboot metrics  print the node-exporter textfile metrics
+#                                 (dns-appliance-health writes them)
+#
+# Every window probes both peer roles and adds each peer that answers to a
+# persistent seen set. When a reboot is required, only seen peers can block:
+# a peer that has never answered (not yet installed) does not, a seen peer
+# that does not answer now does. A blocked window logs the failing peers,
+# counts the consecutive skip and records its time; the next attempt is the
+# next day's window. Peer addresses come from /etc/dns-appliance/peers,
+# written at installation from the embedded role profiles.
+
+state_dir=${DNS_APPLIANCE_REBOOT_STATE_DIR:-/var/lib/dns-appliance}
+reboot_required_file=${DNS_APPLIANCE_REBOOT_REQUIRED_FILE:-/run/reboot-required}
+peers_file=${DNS_APPLIANCE_PEERS_FILE:-/etc/dns-appliance/peers}
+seen_file=$state_dir/reboot-seen-peers
+skips_file=$state_dir/reboot-skips-consecutive
+last_skip_file=$state_dir/reboot-last-skip
+
+fail() {
+    echo "dns-appliance-reboot: $*" >&2
+    exit 1
+}
+
+journal() {
+    priority=$1
+    shift
+    logger -t dns-appliance-reboot -p "user.$priority" -- "$*"
+}
+
+# Prints a non-negative integer state value, 0 when the file is absent.
+read_count() {
+    if [ ! -e "$1" ]; then
+        printf '0\n'
+        return
+    fi
+    value=$(cat "$1")
+    [[ "$value" =~ ^(0|[1-9][0-9]{0,18})$ ]] || fail "malformed state in $1"
+    printf '%s\n' "$value"
+}
+
+# Atomically replaces a state file; an empty value leaves an empty file.
+write_state() {
+    install -d -m 0755 "$state_dir"
+    if [ -n "$2" ]; then
+        printf '%s\n' "$2"
+    fi > "$1.tmp"
+    mv "$1.tmp" "$1"
+}
+
+# One UDP query with a short timeout, retried once. Any DNS response counts
+# as an answer, the same test dns-appliance-health applies to itself.
+dns_query() {
+    dig +notcp +time=2 +tries=1 +short "@$1" localhost A >/dev/null 2>&1
+}
+peer_answers() {
+    dns_query "$1" || dns_query "$1"
+}
+
+load_peers() {
+    [ -r "$peers_file" ] || fail "cannot read $peers_file"
+    peer_roles=()
+    peer_addresses=()
+    local role address extra
+    while read -r role address extra; do
+        [[ "$role" =~ ^dns0[123]$ ]] || fail "malformed peer role in $peers_file"
+        [[ "$address" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] ||
+            fail "malformed peer address for $role in $peers_file"
+        [ -z "$extra" ] || fail "malformed peer line for $role in $peers_file"
+        peer_roles+=("$role")
+        peer_addresses+=("$address")
+    done < "$peers_file"
+    [ "${#peer_roles[@]}" -gt 0 ] || fail "$peers_file lists no peers"
+}
+
+is_seen() {
+    [ -e "$seen_file" ] && grep -qx -- "$1" "$seen_file"
+}
+
+window() {
+    load_peers
+    local skips index role address answering=() failed=() seen_list
+    skips=$(read_count "$skips_file")
+    read_count "$last_skip_file" >/dev/null
+
+    for index in "${!peer_roles[@]}"; do
+        role=${peer_roles[$index]}
+        address=${peer_addresses[$index]}
+        if peer_answers "$address"; then
+            answering+=("$role")
+        elif is_seen "$role"; then
+            failed+=("$role ($address)")
+        fi
+    done
+
+    # Seen peers stay seen permanently.
+    seen_list=$(
+        {
+            [ ! -e "$seen_file" ] || cat "$seen_file"
+            [ "${#answering[@]}" -eq 0 ] || printf '%s\n' "${answering[@]}"
+        } | awk 'NF' | LC_ALL=C sort -u
+    )
+    write_state "$seen_file" "$seen_list"
+
+    if [ ! -e "$reboot_required_file" ]; then
+        seen_list=${seen_list//$'\n'/ }
+        journal info "no reboot required; seen peers: ${seen_list:-none}"
+        return 0
+    fi
+
+    if [ "${#failed[@]}" -eq 0 ]; then
+        write_state "$skips_file" 0
+        journal notice "reboot required and no seen peer is failing; rebooting"
+        systemctl reboot
+        return 0
+    fi
+
+    skips=$((skips + 1))
+    write_state "$skips_file" "$skips"
+    write_state "$last_skip_file" "$(date +%s)"
+    journal warning "reboot skipped: seen peer(s) not answering: ${failed[*]}; consecutive skips: $skips"
+}
+
+metrics() {
+    local pending=0 skips last_skip
+    [ ! -e "$reboot_required_file" ] || pending=1
+    skips=$(read_count "$skips_file")
+    last_skip=$(read_count "$last_skip_file")
+    printf '# HELP dns_appliance_reboot_pending Whether installed updates require a reboot (1) or not (0).\n'
+    printf '# TYPE dns_appliance_reboot_pending gauge\n'
+    printf 'dns_appliance_reboot_pending %s\n' "$pending"
+    printf '# HELP dns_appliance_reboot_skipped_consecutive Consecutive reboot windows skipped because a seen peer did not answer.\n'
+    printf '# TYPE dns_appliance_reboot_skipped_consecutive gauge\n'
+    printf 'dns_appliance_reboot_skipped_consecutive %s\n' "$skips"
+    printf '# HELP dns_appliance_reboot_last_skip_timestamp_seconds Unix time of the last skipped reboot window (0 when never skipped).\n'
+    printf '# TYPE dns_appliance_reboot_last_skip_timestamp_seconds gauge\n'
+    printf 'dns_appliance_reboot_last_skip_timestamp_seconds %s\n' "$last_skip"
+}
+
+case "${1:-}" in
+    window) window ;;
+    metrics) metrics ;;
+    *)
+        echo "usage: dns-appliance-reboot window|metrics" >&2
+        exit 2
+        ;;
+esac

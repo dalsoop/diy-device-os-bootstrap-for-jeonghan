@@ -45,3 +45,10 @@ generated/dns-final-review-record.schema.json
 ../payload/dns-appliance-backup.timer
 ../payload/technitium-dns.service
 ../payload/netbird.service
+../payload/debian.sources
+../payload/apt-unattended-upgrades.conf
+../payload/apt-daily-upgrade-refresh.conf
+../payload/apt-daily-upgrade.timer.conf
+../payload/dns-appliance-reboot
+../payload/dns-appliance-reboot.service
+../payload/dns-appliance-reboot.timer

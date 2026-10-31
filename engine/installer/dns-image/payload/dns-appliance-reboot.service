@@ -1,0 +1,8 @@
+[Unit]
+Description=Reboot into installed updates when every seen peer answers
+After=network-online.target apt-daily-upgrade.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dns-appliance-reboot window

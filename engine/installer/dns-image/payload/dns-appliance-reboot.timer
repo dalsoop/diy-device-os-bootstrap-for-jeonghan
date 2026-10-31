@@ -1,0 +1,12 @@
+[Unit]
+Description=DNS appliance reboot window
+
+# The role's reboot window, rendered by dns-finish-install. A missed window is
+# not run at boot; the next attempt is the next day's window.
+[Timer]
+OnCalendar=*-*-* @@REBOOT_TIME@@:00 Asia/Seoul
+RandomizedDelaySec=0
+Persistent=false
+
+[Install]
+WantedBy=timers.target

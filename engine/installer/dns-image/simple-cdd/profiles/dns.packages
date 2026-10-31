@@ -19,6 +19,7 @@ rsync
 smartmontools
 sudo
 systemd-timesyncd
+unattended-upgrades
 unzip
 uuid-runtime
 zstd

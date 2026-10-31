@@ -4,6 +4,7 @@
 set -euo pipefail
 
 state_file=/etc/dns-appliance/install.env
+overlay_selection=/etc/dns-appliance/overlays
 output_dir=/var/lib/dns-appliance
 metrics_dir=/var/lib/prometheus/node-exporter
 token_file=/var/lib/dns-appliance/secrets/technitium-static-token
@@ -39,22 +40,54 @@ technitium=$(probe probe_technitium)
 cockpit=$(probe curl --fail --silent --insecure --max-time 4 https://127.0.0.1:9090/ping)
 time_sync=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || printf 'no')
 [ "$time_sync" = yes ] && ntp=1 || ntp=0
-tailscale_json=$(tailscale status --json 2>/dev/null || printf '{}')
-tailscale_state=$(printf '%s' "$tailscale_json" | jq -r '.BackendState // "Unavailable"')
-tailscale_ip=$(printf '%s' "$tailscale_json" | jq -r '.Self.TailscaleIPs[0] // ""')
-tailscale_hostname=$(printf '%s' "$tailscale_json" | jq -r '.Self.HostName // ""')
-tailscale_tags=$(printf '%s' "$tailscale_json" | jq -c '.Self.Tags // []')
-[ "$tailscale_state" = Running ] && tailscale=1 || tailscale=0
+
+# Each selected overlay, and only those, is reported: its state, overlay
+# address and hostname (and tags for Tailscale). An unreachable daemon reports
+# "Unavailable" and up 0.
+overlay_status() {
+    case "$1" in
+        tailscale)
+            tailscale status --json 2>/dev/null |
+                jq -c '{state: (.BackendState // "Unavailable"), ip: (.Self.TailscaleIPs[0] // ""),
+                        hostname: (.Self.HostName // ""), tags: (.Self.Tags // [])}
+                       | {up: (if .state == "Running" then 1 else 0 end)} + .'
+            ;;
+        netbird)
+            netbird status --json 2>/dev/null |
+                jq -c '{state: (if .management.connected == true then "Connected" else "Disconnected" end),
+                        ip: (((.netbirdIp // "") | split("/")[0]) // ""),
+                        hostname: (((.fqdn // "") | rtrimstr(".") | split(".")[0]) // "")}
+                       | {up: (if .state == "Connected" then 1 else 0 end)} + .'
+            ;;
+    esac
+}
+selected_overlays=$(awk '
+    $0 == "tailscale" && !tailscale && !netbird { tailscale = 1; print; next }
+    $0 == "netbird" && !netbird { netbird = 1; print; next }
+    { bad = 1 }
+    END { exit (bad || NR == 0) }
+' "$overlay_selection") || {
+    echo "dns-appliance-health: invalid overlay selection in $overlay_selection" >&2
+    exit 1
+}
+overlays='{}'
+for overlay in $selected_overlays; do
+    status=$(overlay_status "$overlay") || status=
+    if [ -z "$status" ]; then
+        status=$(jq -cn --arg name "$overlay" \
+            '{up: 0, state: "Unavailable", ip: "", hostname: ""} + (if $name == "tailscale" then {tags: []} else {} end)')
+    fi
+    overlays=$(jq -cn --argjson overlays "$overlays" --arg name "$overlay" --argjson status "$status" \
+        '$overlays + {($name): $status}')
+done
 
 install -d -m 0755 "$output_dir" "$metrics_dir"
 jq -n --arg hostname "$ROLE" --arg address "$ADDRESS" \
     --argjson dns_udp "$dns_udp" --argjson dns_tcp "$dns_tcp" \
     --argjson technitium "$technitium" --argjson cockpit "$cockpit" \
-    --argjson ntp "$ntp" --argjson tailscale "$tailscale" \
-    --arg tailscale_state "$tailscale_state" --arg tailscale_ip "$tailscale_ip" \
-    --arg tailscale_hostname "$tailscale_hostname" --argjson tailscale_tags "$tailscale_tags" \
+    --argjson ntp "$ntp" --argjson overlays "$overlays" \
     --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{hostname:$hostname,address:$address,dns_udp:$dns_udp,dns_tcp:$dns_tcp,technitium:$technitium,cockpit:$cockpit,ntp_synchronized:$ntp,tailscale:{up:$tailscale,state:$tailscale_state,ip:$tailscale_ip,hostname:$tailscale_hostname,tags:$tailscale_tags},checked_at:$checked_at}' \
+    '{hostname:$hostname,address:$address,dns_udp:$dns_udp,dns_tcp:$dns_tcp,technitium:$technitium,cockpit:$cockpit,ntp_synchronized:$ntp,overlays:$overlays,checked_at:$checked_at}' \
     > "$output_dir/health.json.tmp"
 mv "$output_dir/health.json.tmp" "$output_dir/health.json"
 
@@ -66,7 +99,8 @@ mv "$output_dir/health.json.tmp" "$output_dir/health.json"
     printf 'dns_appliance_service_up{service="technitium"} %s\n' "$technitium"
     printf 'dns_appliance_service_up{service="cockpit"} %s\n' "$cockpit"
     printf 'dns_appliance_service_up{service="ntp"} %s\n' "$ntp"
-    printf 'dns_appliance_service_up{service="tailscale"} %s\n' "$tailscale"
+    printf '%s' "$overlays" |
+        jq -r 'to_entries[] | "dns_appliance_service_up{service=\"\(.key)\"} \(.value.up)"'
 } > "$metrics_dir/dns-appliance.prom.tmp"
 mv "$metrics_dir/dns-appliance.prom.tmp" "$metrics_dir/dns-appliance.prom"
 

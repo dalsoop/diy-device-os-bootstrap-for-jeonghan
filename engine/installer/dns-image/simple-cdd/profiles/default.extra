@@ -30,6 +30,7 @@ generated/dns-final-review-record.schema.json
 ../disk-identity
 ../scripts/guided.templates
 ../payload/nftables.conf
+../payload/nftables-own-table.conf
 ../payload/sshd-hardening.conf
 ../payload/operator-sudoers
 ../payload/timesyncd.conf

@@ -69,9 +69,30 @@ file, plan-bound apply that rejects a wrong confirmation, plan hash, endpoint,
 source commit, modified zone, live-zone drift, or replay without importing,
 generation-bound reinstall authorization, and
 the `/16` network prerequisite, generated first-boot recursion permissions for
-LAN and Tailscale clients, and the firewall's Tailscale source-address guard.
-It also verifies root-only environment-file permissions and bootstrap-password
-omission after enrollment. It stubs network calls and never contacts a DNS server.
+the LAN and each selected overlay, the firewall rendered by
+`dns-finish-install` for Tailscale-only, NetBird-only, and both (own table, no
+`flush ruleset`, exact prerouting and input rules in order, source-range
+guards), its rejection of unrendered markers and invalid inputs, and the
+health report's per-overlay `health.json` entries and metrics with the reboot
+metrics unchanged. It also verifies root-only environment-file permissions and
+bootstrap-password omission after enrollment. It stubs network calls and never
+contacts a DNS server.
+
+`firewall-namespace-simulation.sh` loads the rendered firewall into a
+throwaway network namespace whose veth interfaces are named `wt0`,
+`tailscale0`, and `eno1`, and sends real packets from a second namespace to
+listeners on every tested port. Each selection passes `nft -c`. With
+`iifname "wt0" accept` (and `iifname "tailscale0" accept`) inserted at the top
+of the input and forward chains, as the NetBird client does, TCP 8080 and 5380
+stay dropped on the selected overlay interfaces while DNS 53 and TCP 22, 9090,
+9100, 53443 answer; an unselected overlay interface reaches nothing, and the
+LAN rules hold (DNS from the LAN, SSH only from the management network, TCP
+8080 from neither). A control without the prerouting chain
+shows the inserted rule would open TCP 8080. Loading twice, the `nftables.service`
+drop-in's stop (also with the table absent), and its reload leave stand-in
+`inet netbird` and `ip ts-filter` tables unchanged. It needs CAP_NET_ADMIN,
+re-runs itself through passwordless `sudo`, fails rather than skips when
+namespaces cannot be created, and changes nothing outside its namespaces.
 
 `media-catalog-simulation.sh` also checks capacity planning with
 checksum-matched sparse cache files, a runtime artifact with a matching

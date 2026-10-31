@@ -13,11 +13,19 @@ evidence.
   USB targets, direct, mapper-backed, and `/dev/disk` alias mounts, active
   swap, sysfs holders, the synchronization step, and zero writes on every
   rejection.
-- `tests/management-simulation.sh` passes all 18 cases, including explicit
+- `tests/management-simulation.sh` passes all 21 cases, including explicit
   offline Internet state, saved immutable DNS plans, plan-bound apply with
   hash, endpoint, commit, zone, drift, and replay rejection, generated
-  LAN/Tailscale recursion permissions, public-client rejection, and the
-  firewall's Tailscale source-address guard.
+  recursion permissions for the LAN and each selected overlay, public-client
+  rejection, the rendered firewall for each overlay selection (own table, no
+  ruleset flush, prerouting and input rules, source-range guards, marker and
+  input rejection), and per-overlay health output.
+- `tests/firewall-namespace-simulation.sh` passes in privileged network
+  namespaces: with a NetBird-style `iifname "wt0" accept` at the top of the
+  input chain, ports outside the allowed set stay dropped on `wt0` and
+  `tailscale0` while DNS and the management ports answer, and loading,
+  reloading, and stopping the firewall leave stand-in overlay tables
+  unchanged.
 - `tests/tailscale-enrollment-simulation.sh` passes without printing either
   OAuth or auth-key material.
 - `tests/netbird-enrollment-simulation.sh` passes every success, refusal, and
@@ -88,7 +96,11 @@ evidence.
   enroll with `netbird-enroll`, verify the reported settings, that the setup
   key is gone from the dashboard, that only the admin group reaches the
   management ports over `wt0`, and reconnection after reboot. Inspect
-  `nft list ruleset` and record every rule the overlay clients added.
+  `nft list ruleset` and record every rule the overlay clients added; confirm
+  `overlay_prerouting` in `inet dns_appliance` names every selected overlay
+  interface, that a port outside the allowed set is unreachable over `wt0` and
+  `tailscale0`, and that the clients' tables and connectivity remain after
+  `systemctl reload nftables` and `systemctl restart nftables`.
 - Confirm `apt-daily-upgrade.timer` and `dns-appliance-reboot.timer` at the
   role's times, an unattended upgrade run against the Debian archive, a
   guarded reboot with peers answering, and a skipped reboot (journal entry,

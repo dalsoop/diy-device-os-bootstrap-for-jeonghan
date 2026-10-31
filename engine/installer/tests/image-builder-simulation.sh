@@ -1364,6 +1364,20 @@ if grep -q netbird "$finish/tailscale/in-target.log"; then
     simulation_fail "Tailscale-only install enabled NetBird"
 fi
 
+# The installed firewall covers exactly the selected overlay interfaces, and
+# nftables.service stops and reloads only the appliance table.
+for case_name in 'both|"tailscale0", "wt0"' 'netbird|"wt0"' 'tailscale|"tailscale0"'; do
+    target=$finish/${case_name%%|*}/target
+    grep -qxF "        iifname != { ${case_name#*|} } accept" "$target/etc/nftables.conf" ||
+        simulation_fail "the ${case_name%%|*} install does not limit exactly its overlay interfaces"
+    if grep -q '@@' "$target/etc/nftables.conf"; then
+        simulation_fail "the ${case_name%%|*} install left a firewall marker"
+    fi
+    cmp -s "$installer_dir/payload/nftables-own-table.conf" \
+        "$target/etc/systemd/system/nftables.service.d/60-dns-appliance.conf" ||
+        simulation_fail "the ${case_name%%|*} install lacks the nftables.service drop-in"
+done
+
 for case_name in absent empty unknown reversed duplicate; do
     case "$case_name" in
         absent) selection=absent ;;
@@ -1430,7 +1444,7 @@ done
 # only the selected ones, and Simple-CDD skips absent extra files.
 for listed in generated/overlays generated/tailscale.tgz generated/tailscale-license.txt \
     generated/tailscale-dependency-licenses.md generated/netbird.tar.gz generated/netbird-license.txt \
-    ../payload/netbird.service; do
+    ../payload/netbird.service ../payload/nftables.conf ../payload/nftables-own-table.conf; do
     grep -qx "$listed" "$installer_dir/simple-cdd/profiles/default.extra" ||
         simulation_fail "default.extra does not list $listed"
 done

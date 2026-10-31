@@ -25,10 +25,18 @@ This directory contains the first implementation of the Debian OS installer:
 - `scripts/install-gate` refuses partitioning unless one inventory entry and one
   internal disk match exactly.
 - `payload/` holds the Technitium container service, first-boot enrollment,
-  health, backup, firewall, NTP, SSH, Cockpit integration, the NetBird unit,
-  and the unattended-upgrade configuration: deb822 Debian sources, the
-  per-role `apt-daily-upgrade` timer and refresh drop-ins, and the
+  health (with one status entry per selected overlay), backup, the firewall
+  template and its `nftables.service` drop-in, NTP, SSH, Cockpit integration,
+  the NetBird unit, and the unattended-upgrade configuration: deb822 Debian
+  sources, the per-role `apt-daily-upgrade` timer and refresh drop-ins, and the
   `dns-appliance-reboot` script, service, and timer.
+
+The firewall is the single nftables table `inet dns_appliance`, rendered at
+installation for the selected overlays; loading, reloading, and stopping it
+never touch the overlay clients' tables. DNS and the management ports on
+`tailscale0` and `wt0` are limited in its prerouting chain, which the NetBird
+client's inserted `iifname "wt0" accept` cannot bypass; the overlay access
+policy decides which peers reach them.
 
 The generated image installs Debian, OpenSSH, Cockpit, nftables, Podman, a
 digest-pinned Technitium image, the checksum-pinned overlay clients the World

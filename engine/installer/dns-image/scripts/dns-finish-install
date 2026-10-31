@@ -50,6 +50,101 @@ for value in "$ROLE" "$ADDRESS" "$NETMASK" "$GATEWAY" "$DNS_SERVERS" "$DOMAIN" \
     }
 done
 
+# Prints an overlay selection file's values; fails unless it lists tailscale
+# and/or netbird once each, one per line, in that order.
+canonical_overlays() {
+    awk '
+        $0 == "tailscale" && !tailscale && !netbird { tailscale = 1; print; next }
+        $0 == "netbird" && !netbird { netbird = 1; print; next }
+        { bad = 1 }
+        END { exit (bad || NR == 0) }
+    ' "$1"
+}
+
+# Succeeds when the single argument is one IPv4 CIDR.
+ipv4_cidr() {
+    printf '%s\n' "$1" | awk -F/ '
+        NR > 1 || NF != 2 || $2 !~ /^[0-9]+$/ || length($2) > 2 || $2 + 0 > 32 { bad = 1 }
+        {
+            n = split($1, octet, ".")
+            if (n != 4) bad = 1
+            for (i = 1; i <= n; i++)
+                if (octet[i] !~ /^[0-9]+$/ || length(octet[i]) > 3 || octet[i] + 0 > 255) bad = 1
+        }
+        END { exit bad }
+    '
+}
+
+# Prints the single IPv4 address of an embedded role profile.
+peer_address() {
+    awk -F= '
+        $1 == "address" { count++; value = $2 }
+        END {
+            n = split(value, octet, ".")
+            bad = (count != 1 || n != 4)
+            for (i = 1; i <= n; i++)
+                if (octet[i] !~ /^[0-9]+$/ || length(octet[i]) > 3 || octet[i] + 0 > 255) bad = 1
+            if (bad) exit 1
+            print value
+        }
+    ' "$1"
+}
+
+# Renders the firewall template $1 for the overlay selection file $2 into $3:
+# the role profile's LAN and management CIDRs, the three cluster addresses from
+# the embedded role profiles, and only the selected overlays' lines and
+# interfaces. A marker left after rendering stops the install.
+render_firewall() {
+    for cidr in "$LAN_CIDR" "$MANAGEMENT_CIDR"; do
+        ipv4_cidr "$cidr" || {
+            echo "dns-finish-install: '$cidr' is not an IPv4 CIDR" >&2
+            exit 1
+        }
+    done
+    firewall_selection=$(canonical_overlays "$2") || {
+        echo "dns-finish-install: overlay selection $2 is malformed" >&2
+        exit 1
+    }
+    firewall_tailscale=false
+    firewall_netbird=false
+    firewall_interfaces=
+    for overlay in $firewall_selection; do
+        case "$overlay" in
+            tailscale) firewall_tailscale=true; interface='"tailscale0"' ;;
+            netbird) firewall_netbird=true; interface='"wt0"' ;;
+        esac
+        firewall_interfaces="${firewall_interfaces:+$firewall_interfaces, }$interface"
+    done
+    firewall_peers=
+    for peer in dns01 dns02 dns03; do
+        peer_ip=$(peer_address "/cdrom/simple-cdd/$peer.conf") || {
+            echo "dns-finish-install: embedded profile $peer has no single valid address" >&2
+            exit 1
+        }
+        firewall_peers="${firewall_peers:+$firewall_peers, }$peer_ip"
+    done
+    awk -v lan="$LAN_CIDR" -v management="$MANAGEMENT_CIDR" -v peers="$firewall_peers" \
+        -v interfaces="$firewall_interfaces" -v tailscale="$firewall_tailscale" \
+        -v netbird="$firewall_netbird" '
+        /@@TAILSCALE@@/ { if (tailscale != "true") next; sub(/@@TAILSCALE@@/, "") }
+        /@@NETBIRD@@/ { if (netbird != "true") next; sub(/@@NETBIRD@@/, "") }
+        {
+            gsub(/@@LAN_CIDR@@/, lan)
+            gsub(/@@MANAGEMENT_CIDR@@/, management)
+            gsub(/@@CLUSTER_PEERS@@/, peers)
+            gsub(/@@OVERLAY_INTERFACES@@/, interfaces)
+            print
+        }
+    ' "$1" > "$3.tmp"
+    if grep -q '@@' "$3.tmp"; then
+        rm -f "$3.tmp"
+        echo "dns-finish-install: firewall template $1 has an unrendered marker" >&2
+        exit 1
+    fi
+    chmod 0644 "$3.tmp"
+    mv "$3.tmp" "$3"
+}
+
 # The image embeds the World's overlay selection: tailscale and/or netbird,
 # once each, one per line, in that order. Anything else stops the install
 # before the target is changed.
@@ -58,12 +153,7 @@ overlays_file=/cdrom/simple-cdd/overlays
     echo "dns-finish-install: overlay selection is missing or empty" >&2
     exit 1
 }
-overlays=$(awk '
-    $0 == "tailscale" && !tailscale && !netbird { tailscale = 1; print; next }
-    $0 == "netbird" && !netbird { netbird = 1; print; next }
-    { bad = 1 }
-    END { exit (bad || NR == 0) }
-' "$overlays_file") || {
+overlays=$(canonical_overlays "$overlays_file") || {
     echo "dns-finish-install: overlay selection is malformed" >&2
     exit 1
 }
@@ -194,10 +284,13 @@ in-target chown -R dns-operator:dns-operator /home/dns-operator/.ssh
 install -d -m 0755 /target/etc/ssh/sshd_config.d
 install -m 0644 /cdrom/simple-cdd/sshd-hardening.conf \
     /target/etc/ssh/sshd_config.d/60-dns-appliance.conf
-sed -e "s#@@LAN_CIDR@@#$LAN_CIDR#g" \
-    -e "s#@@MANAGEMENT_CIDR@@#$MANAGEMENT_CIDR#g" \
-    /cdrom/simple-cdd/nftables.conf > /target/etc/nftables.conf
-chmod 0644 /target/etc/nftables.conf
+
+# The appliance firewall owns only its table; the drop-in keeps stop and
+# reload from flushing the overlay clients' tables.
+render_firewall /cdrom/simple-cdd/nftables.conf /target/etc/dns-appliance/overlays /target/etc/nftables.conf
+install -d -m 0755 /target/etc/systemd/system/nftables.service.d
+install -m 0644 /cdrom/simple-cdd/nftables-own-table.conf \
+    /target/etc/systemd/system/nftables.service.d/60-dns-appliance.conf
 
 install -m 0440 /cdrom/simple-cdd/operator-sudoers /target/etc/sudoers.d/operator
 in-target visudo -cf /etc/sudoers.d/operator
@@ -245,21 +338,6 @@ update_schedule() {
         dns03) printf '03:00 04:00\n' ;;
         *) return 1 ;;
     esac
-}
-
-# Prints the single IPv4 address of an embedded role profile.
-peer_address() {
-    awk -F= '
-        $1 == "address" { count++; value = $2 }
-        END {
-            n = split(value, octet, ".")
-            bad = (count != 1 || n != 4)
-            for (i = 1; i <= n; i++)
-                if (octet[i] !~ /^[0-9]+$/ || length(octet[i]) > 3 || octet[i] + 0 > 255) bad = 1
-            if (bad) exit 1
-            print value
-        }
-    ' "$1"
 }
 
 install_unattended_upgrades() {

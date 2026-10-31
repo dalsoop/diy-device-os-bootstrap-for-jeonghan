@@ -28,6 +28,19 @@ first-boot enrollment.
   client (socket `/var/run/netbird.sock`, profile under `/var/lib/netbird/`,
   logs under `/var/log/netbird/`). Re-read the pinned client source before
   changing it or the pin.
+- The appliance firewall owns only `table inet dns_appliance`. Never add
+  `flush ruleset` or another table to `payload/nftables.conf`, and keep the
+  `nftables.service` drop-in (`payload/nftables-own-table.conf`) that stops by
+  deleting only that table: the overlay clients keep their own tables.
+  `dns-finish-install` renders the file from the role profile, the installed
+  overlay selection, and the embedded role profiles; a leftover marker fails.
+- Overlay port limits stay in the prerouting chain `overlay_prerouting`, the
+  same check for every selected overlay interface. The NetBird client inserts
+  `iifname "wt0" accept` at the top of every foreign input and forward chain,
+  so input-chain limits alone do not hold on `wt0`. Run
+  `tests/firewall-namespace-simulation.sh` after any firewall change.
+- The recursion ACL and the health report follow `/etc/dns-appliance/overlays`:
+  each selected overlay's range and status, and no other.
 - Installed nodes take Debian point-release and security updates unattended at
   fixed per-role times and reboot only through `dns-appliance-reboot`, which
   skips the window while any seen peer fails to answer DNS. Keep install one

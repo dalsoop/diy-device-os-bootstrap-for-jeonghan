@@ -141,8 +141,12 @@ The resulting host has:
   over HTTPS, installed at dns01 02:00, dns02 02:30, dns03 03:00 and rebooted
   into at dns01 03:00, dns02 03:30, dns03 04:00 (`Asia/Seoul`) only while every
   peer that has answered DNS still answers;
-- nftables allowing DNS and cluster TLS from the LAN while SSH, Cockpit, and
-  metrics are restricted to `management_cidr`;
+- an nftables firewall in its own table `inet dns_appliance` allowing DNS from
+  the LAN and cluster TLS from the three role addresses while SSH, Cockpit,
+  metrics, and Technitium administration are restricted to `management_cidr`,
+  plus DNS and those management ports on each selected overlay interface,
+  limited in a prerouting chain; `nftables.service` stop and reload never
+  touch the overlay clients' tables;
 - the installation facts in `/etc/dns-appliance/install.env`.
 
 First boot generates credentials, starts and probes DNS/Cockpit, switches the

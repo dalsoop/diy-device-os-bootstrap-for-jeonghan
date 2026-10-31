@@ -67,6 +67,15 @@ user, an unmounted or read-only medium, or a missing internal disk saves
 nothing. An existing file is replaced only after `overwrite`. It does not prove
 that Debian Live renders Hangul or that real HP sysfs values match the fixture.
 
+`status-monitor-simulation.sh` runs the status monitor's `--check-once`
+against a fake node exporter on `127.0.0.1:9100`, a name resolved through the
+hosts file, an unused loopback address, and an unresolvable `.invalid` name. It
+proves that the reboot metrics are parsed (including a zero last-skip time read
+as never skipped), that unknown values are `null`, that name-resolution failure
+is reported per node, that the monitor only sends `GET /metrics`, that the HTML
+page highlights only a node with skipped reboots, and that an `address` field or
+an invalid host is rejected. It contacts no real node.
+
 This simulation is necessary but not sufficient. It does not replace building
 the ISO, booting Debian Installer under BIOS and UEFI, or the physical `dns01`
 pilot.

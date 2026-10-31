@@ -475,7 +475,7 @@ def world_capacity(
 
 @mcp.tool(annotations=READ_ONLY_NETWORK, structured_output=True)
 def network_preflight(
-    router_cidr: str = "10.0.0.1/16", check_internet: bool = True
+    router_cidr: str = "10.77.0.1/16", check_internet: bool = True
 ) -> dict[str, object]:
     """Check topology, LAN reachability, and fixed Internet connectivity probes."""
     return gateway.network_preflight(router_cidr, check_internet)

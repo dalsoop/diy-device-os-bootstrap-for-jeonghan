@@ -39,7 +39,7 @@ for role in dns01 dns02 dns03; do
     }
 done
 
-declare -A address=( [dns01]=10.0.5.1 [dns02]=10.0.5.2 [dns03]=10.0.5.3 )
+declare -A address=( [dns01]=10.77.5.1 [dns02]=10.77.5.2 [dns03]=10.77.5.3 )
 declare -A token
 
 api() {
@@ -149,7 +149,7 @@ trap - EXIT HUP INT TERM
 
 for role in dns01 dns02 dns03; do
     dig +time=2 +tries=1 +short "@${address[$role]}" canary.home.arpa A |
-        grep -qx '10.0.9.9' || {
+        grep -qx '10.77.9.9' || {
             echo "cluster-bootstrap: $role canary probe failed" >&2
             exit 1
         }

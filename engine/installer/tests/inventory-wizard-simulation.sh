@@ -120,7 +120,7 @@ wizard '1\n1\n2\ndns01\n' || { cat "$temporary/out" >&2; failure korean_capture;
 saved=$medium/inventory-dns01.conf
 grep -q '1단계' "$temporary/out"
 grep -qx 'role=dns01' "$saved"
-grep -qx 'address=10.0.5.1' "$saved"
+grep -qx 'address=10.77.5.1' "$saved"
 grep -qx 'destructive_install_enabled=false' "$saved"
 grep -qx "expected_mac_sha256=$(sha256_text 52:54:00:12:34:56)" "$saved"
 grep -qx "expected_disk_serial_sha256=$(sha256_text TEST-DISK-01)" "$saved"

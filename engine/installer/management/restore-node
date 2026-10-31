@@ -10,7 +10,7 @@ backup=
 identity=
 confirmation=
 usage() {
-    echo "usage: $0 --url https://10.0.5.1:53443 --token-file /secure/token --backup file.zip.age --identity age-key.txt --confirm 'RESTORE https://10.0.5.1:53443'" >&2
+    echo "usage: $0 --url https://10.77.5.1:53443 --token-file /secure/token --backup file.zip.age --identity age-key.txt --confirm 'RESTORE https://10.77.5.1:53443'" >&2
     exit 2
 }
 

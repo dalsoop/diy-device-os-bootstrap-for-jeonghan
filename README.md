@@ -69,8 +69,8 @@ committed; `logs/` records what happened and is never edited. Everything in
 
 The home definition is
 [`burn-history/home.yaml`](burn-history/home.yaml).
-It defines `dns01`, `dns02`, and `dns03` at `10.0.5.1` through `10.0.5.3`, with
-the router at `10.0.0.1`. Hardware captures (`burn-history/os-installs/<role>/hardware.conf`) and keys
+It defines `dns01`, `dns02`, and `dns03` at `10.77.5.1` through `10.77.5.3`, with
+the router at `10.77.0.1`. Hardware captures (`burn-history/os-installs/<role>/hardware.conf`) and keys
 (`burn-history/keys/`) stay ignored; generated media, credentials, and recovery material stay
 outside Git in the documented ignored locations or the principal secret store.
 

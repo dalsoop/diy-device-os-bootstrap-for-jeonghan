@@ -40,8 +40,8 @@ these per-role folders. The node inventory example is
   verification.
 - Do not edit hashes merely to satisfy the installer. Recapture only after an
   intentional hardware change.
-- Fixed addresses are `dns01=10.0.5.1`, `dns02=10.0.5.2`, and
-  `dns03=10.0.5.3` unless a coordinated contract decision changes the design.
+- Fixed addresses are `dns01=10.77.5.1`, `dns02=10.77.5.2`, and
+  `dns03=10.77.5.3` unless a coordinated contract decision changes the design.
 - Verify guided profiles with isolated install-gate fixtures; verify real
   captures only on the matching machine before enabling its one-at-a-time
   physical pilot.

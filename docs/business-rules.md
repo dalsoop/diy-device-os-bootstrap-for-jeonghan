@@ -41,7 +41,7 @@ Failed, cancelled, and recovered interrupted physical attempts receive separate 
 
 ## DNS appliance rules
 
-The home DNS topology uses router `10.0.0.1` and nodes `dns01=10.0.5.1`, `dns02=10.0.5.2`, and `dns03=10.0.5.3` on one routed `10.0.0.0/16` LAN. A router still limited to `10.0.0.0/24` satisfies neither address reachability nor deployment readiness unless an explicit route reaches `10.0.5.0/24`.
+The home DNS topology uses router `10.77.0.1` and nodes `dns01=10.77.5.1`, `dns02=10.77.5.2`, and `dns03=10.77.5.3` on one routed `10.77.0.0/16` LAN. A router still limited to `10.77.0.0/24` satisfies neither address reachability nor deployment readiness unless an explicit route reaches `10.77.5.0/24`.
 
 Real inventory must be captured on each target and remains outside Git. An example inventory cannot authorize a write. For the first physical rollout, exactly one role is enabled; the next role remains disabled until the prior node passes firmware, internal-disk boot, identity, DNS UDP/TCP, host-management, certificate, time, and enrollment checks.
 

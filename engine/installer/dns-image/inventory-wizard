@@ -144,12 +144,12 @@ esac
 installer_disk=$(media_disk "${entry%% *}")
 
 say "1단계. 이 장비의 역할을 고르세요." "Step 1. Choose this machine's role."
-echo "  1) dns01  10.0.5.1"
-echo "  2) dns02  10.0.5.2"
-echo "  3) dns03  10.0.5.3"
+echo "  1) dns01  10.77.5.1"
+echo "  2) dns02  10.77.5.2"
+echo "  3) dns03  10.77.5.3"
 choose 3
 role=dns0$choice
-address=10.0.5.$choice
+address=10.77.5.$choice
 echo
 
 interfaces=$(wired_interfaces)
@@ -202,7 +202,7 @@ fi
 
 say "4단계. 확인" "Step 4. Review"
 say "  역할        $role" "  Role        $role"
-say "  주소        $address/16 (게이트웨이 10.0.0.1)" "  Address     $address/16 (gateway 10.0.0.1)"
+say "  주소        $address/16 (게이트웨이 10.77.0.1)" "  Address     $address/16 (gateway 10.77.0.1)"
 say "  네트워크    $interface" "  Interface   $interface"
 say "  디스크      /dev/$disk" "  Disk        /dev/$disk"
 say "  일련번호·MAC 같은 식별값은 SHA-256 해시로만 저장됩니다." \

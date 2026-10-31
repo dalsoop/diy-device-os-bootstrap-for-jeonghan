@@ -147,6 +147,7 @@ for file in \
     engine/installer/tests/image-builder-simulation.sh \
     engine/installer/tests/macos-writer-simulation.sh \
     engine/installer/tests/management-simulation.sh \
+    engine/installer/tests/status-monitor-simulation.sh \
     engine/installer/tests/documentation-check-simulation.sh \
     engine/world/bin/resolve-world \
     engine/world/bin/record-usb-event \
@@ -256,6 +257,20 @@ python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/schemas/raw-image-manifest.schema.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/management/dns-appliance-status-monitor/config.json"
+# The status monitor reaches nodes by role name, so the management host's
+# resolver (hosts file or an overlay's own DNS) decides the path.
+python3 -c '
+import json, sys
+nodes = json.load(open(sys.argv[1]))["nodes"]
+if [sorted(node) for node in nodes] != [["host", "name", "query"]] * 3:
+    sys.exit("repository-contract: status monitor nodes must use exactly name, host, and query")
+if [(node["name"], node["host"]) for node in nodes] != [(role, role) for role in ("dns01", "dns02", "dns03")]:
+    sys.exit("repository-contract: status monitor nodes must use host dns01, dns02, and dns03")
+' "$repo_root/management/dns-appliance-status-monitor/config.json"
+grep -q 'node field address is not accepted' \
+    "$repo_root/management/dns-appliance-status-monitor/server.py"
+grep -q 'dns_appliance_reboot_skipped_consecutive' \
+    "$repo_root/management/dns-appliance-status-monitor/server.py"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/usb-media/composition.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \

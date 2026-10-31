@@ -91,3 +91,6 @@ Remaining:
 - Whether the Agent Gateway account may read the NetBird daemon socket for `tunnel_status` is unverified.
 - The appliances reach the Debian archive over the Internet for updates; this outbound dependency is part of the deployed state.
 - USB generation `20261022024140-jeonghan-home` is retired and must not be used to install a node.
+- A World that selects only one overlay has not been built: `build-image` relies on Simple-CDD skipping the unselected client's absent extras, read from its source but not observed. `jeonghan-home` selects both overlays.
+- The post-build embedded-file check does not yet cover the unattended-upgrade and reboot payload files; a missing file would fail at installation instead of at build time.
+- The Ventoy USB's `licenses/` folder carries the full third-party notices, which name both overlays even for a single-overlay image; the ISO and the copied license texts follow the selection.

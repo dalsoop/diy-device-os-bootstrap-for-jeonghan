@@ -246,6 +246,11 @@ if check_internet:
 all_nodes_reachable = all(item["reachable"] for item in node_results.values())
 lan_ready = router_reachable and all_nodes_reachable
 internet_ready = internet["ready"]
+# Overlay enrollment reaches the provider's control plane over the Internet
+# and the appliances over LAN SSH; every overlay shares that readiness.
+overlay_enrollment_ready = (
+    internet_ready and all_nodes_reachable if internet_ready is not None else None
+)
 blockers = []
 if not router_reachable:
     blockers.append("router-unreachable")
@@ -280,9 +285,11 @@ report = {
         },
         "post_install_tailscale": {
             "internet_required": True,
-            "ready": internet_ready and all_nodes_reachable
-            if internet_ready is not None
-            else None,
+            "ready": overlay_enrollment_ready,
+        },
+        "post_install_netbird": {
+            "internet_required": True,
+            "ready": overlay_enrollment_ready,
         },
         "dns_cutover": {
             "internet_required": False,

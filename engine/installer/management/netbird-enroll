@@ -1,0 +1,243 @@
+#!/bin/bash
+# SPDX-FileCopyrightText: 2026 dalsoop
+# SPDX-License-Identifier: GPL-3.0-only
+set -euo pipefail
+umask 077
+
+management_url=${NETBIRD_MANAGEMENT_URL:-https://api.netbird.io}
+appliance_group=${NETBIRD_APPLIANCE_GROUP:-dns-appliances}
+ssh_user=${NETBIRD_SSH_USER:-dns-operator}
+token_file=${NETBIRD_API_TOKEN_FILE:-}
+# The NetBird API accepts setup-key lifetimes from one day upward.
+setup_key_lifetime=86400
+requested_role=
+
+usage() {
+    echo "usage: $0 (--all | --role dns01|dns02|dns03)" >&2
+    echo "set NETBIRD_API_TOKEN_FILE to a protected file holding a NetBird personal access token" >&2
+    exit 2
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --all) requested_role=all; shift ;;
+        --role)
+            [ "$#" -ge 2 ] || usage
+            requested_role=$2
+            shift 2
+            ;;
+        *) usage ;;
+    esac
+done
+
+case "$requested_role" in
+    all|dns01|dns02|dns03) ;;
+    *) usage ;;
+esac
+
+fail() {
+    echo "netbird-enroll: $*" >&2
+    exit 1
+}
+
+for command in curl jq ssh; do
+    command -v "$command" >/dev/null 2>&1 || fail "$command is required"
+done
+printf '%s' "$management_url" |
+    grep -Eq '^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?$' ||
+    fail "NETBIRD_MANAGEMENT_URL must be an HTTPS origin without a path"
+printf '%s' "$appliance_group" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]*$' ||
+    fail "invalid NETBIRD_APPLIANCE_GROUP"
+printf '%s' "$ssh_user" | grep -Eq '^[a-z_][a-z0-9_-]*$' || fail "invalid NETBIRD_SSH_USER"
+if [ -z "$token_file" ] || [ ! -r "$token_file" ]; then
+    fail "NetBird API token file is missing or unreadable"
+fi
+
+api_token=$(sed -n '1p' "$token_file")
+printf '%s' "$api_token" | grep -Eq '^nbp_[A-Za-z0-9]{36}$' || fail "invalid NetBird API token"
+
+# api METHOD PATH [CURL_ARGUMENTS...] calls the management REST API. The token
+# travels only in a header supplied through curl's configuration on stdin.
+api() {
+    method=$1
+    path=$2
+    shift 2
+    printf 'header = "Authorization: Token %s"\n' "$api_token" |
+        curl --config - --fail --silent --show-error --request "$method" \
+            -H 'Accept: application/json' "$@" "$management_url/api/$path"
+}
+
+current_key_id=
+undeleted_key_ids=
+
+key_is_absent() {
+    keys=$(api GET setup-keys 2>/dev/null) || return 1
+    printf '%s' "$keys" |
+        jq -e --arg id "$1" 'type == "array" and all(.[]; .id != $id)' >/dev/null
+}
+
+# delete_current_key deletes the outstanding setup key and confirms that it no
+# longer exists. An unconfirmed deletion is remembered by ID for the exit report.
+delete_current_key() {
+    [ -n "$current_key_id" ] || return 0
+    key_id=$current_key_id
+    current_key_id=
+    if api DELETE "setup-keys/$key_id" >/dev/null 2>&1 && key_is_absent "$key_id"; then
+        return 0
+    fi
+    undeleted_key_ids="$undeleted_key_ids $key_id"
+    return 1
+}
+
+cleanup() {
+    status=$?
+    delete_current_key || true
+    unset api_token
+    if [ -n "$undeleted_key_ids" ]; then
+        for key_id in $undeleted_key_ids; do
+            echo "netbird-enroll: deletion of setup key $key_id could not be confirmed; delete it in the NetBird dashboard" >&2
+        done
+        [ "$status" -ne 0 ] || status=1
+    fi
+    exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+remote() {
+    host=$1
+    shift
+    ssh -o BatchMode=yes -o ConnectTimeout=10 "$ssh_user@$host" "$@"
+}
+
+groups=$(api GET groups) || fail "could not list NetBird groups"
+group_id=$(printf '%s' "$groups" | jq -er --arg name "$appliance_group" '
+    [.[] | select(.name == $name) | .id]
+    | if length == 1 then .[0] else empty end
+    | select(type == "string" and test("^[A-Za-z0-9_-]+$"))
+') || fail "NetBird group $appliance_group is absent or ambiguous"
+unset groups
+
+status_for() {
+    remote "$1" sudo netbird status --json 2>/dev/null || printf '{}'
+}
+
+property_failed() {
+    fail "$1 failed verification: $2"
+}
+
+# verify_node ROLE HOST STATUS checks the enrolled node and prints its NetBird
+# IPv4 address. Every failure names the role and the failed property.
+verify_node() {
+    role=$1
+    host=$2
+    node_status=$3
+    printf '%s' "$node_status" | jq -e '.management.connected == true' >/dev/null 2>&1 ||
+        property_failed "$role" "management connection"
+    printf '%s' "$node_status" |
+        jq -e --arg role "$role" '(.fqdn | type == "string") and (.fqdn | split(".")[0] == $role)' \
+        >/dev/null 2>&1 || property_failed "$role" hostname
+    ip=$(printf '%s' "$node_status" | jq -er '
+        .netbirdIp | strings | split("/")[0]
+        | select(test("^10\\.78\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"))
+    ' 2>/dev/null) || property_failed "$role" "NetBird address outside 10.78.0.0/16"
+
+    config=$(remote "$host" sudo netbird debug config 2>/dev/null) ||
+        property_failed "$role" "readable client configuration"
+    printf '%s' "$config" | jq -e '.disableDns == true' >/dev/null 2>&1 ||
+        property_failed "$role" "DNS management is not disabled"
+    printf '%s' "$config" | jq -e '.disableClientRoutes == true' >/dev/null 2>&1 ||
+        property_failed "$role" "client routes are not disabled"
+    printf '%s' "$config" | jq -e '.disableServerRoutes == true' >/dev/null 2>&1 ||
+        property_failed "$role" "server routes are not disabled"
+    printf '%s' "$config" | jq -e '.serverSSHAllowed == false' >/dev/null 2>&1 ||
+        property_failed "$role" "SSH server is not disabled"
+
+    peers=$(api GET "peers?ip=$ip") || fail "could not read the NetBird peer record of $role"
+    peer=$(printf '%s' "$peers" | jq -ec --arg ip "$ip" '
+        [.[] | select(.ip == $ip)] | if length == 1 then .[0] else empty end
+    ') || property_failed "$role" "single peer record for $ip"
+    peer_id=$(printf '%s' "$peer" | jq -er '.id | strings | select(test("^[A-Za-z0-9_-]+$"))') ||
+        property_failed "$role" "peer ID"
+    peer_groups=$(printf '%s' "$peer" | jq -c '[.groups[]?.id]')
+    printf '%s' "$peer_groups" | jq -e --arg group "$group_id" 'index($group) != null' \
+        >/dev/null || property_failed "$role" "appliance group membership"
+
+    routes=$(api GET routes) || fail "could not read NetBird routes"
+    routers=$(api GET networks/routers) || fail "could not read NetBird network routers"
+    for routing in "$routes" "$routers"; do
+        printf '%s' "$routing" | jq -e --arg peer "$peer_id" --argjson groups "$peer_groups" '
+            type == "array" and all(.[];
+                .peer != $peer and
+                ((.peer_groups // []) | all(. as $group | $groups | index($group) == null)))
+        ' >/dev/null || property_failed "$role" "routing peer of a network route or exit node"
+    done
+
+    resolver=$(remote "$host" cat /etc/resolv.conf 2>/dev/null) ||
+        property_failed "$role" "readable resolver configuration"
+    nameservers=$(printf '%s\n' "$resolver" | awk '$1 == "nameserver" { print $2 }')
+    [ "$nameservers" = 127.0.0.1 ] ||
+        property_failed "$role" "resolver must name only 127.0.0.1"
+
+    verified_ip=$ip
+}
+
+create_key() {
+    role=$1
+    payload=$(jq -cn --arg name "$role DNS appliance bootstrap" --arg group "$group_id" \
+        --argjson lifetime "$setup_key_lifetime" '{
+        name:$name, type:"one-off", expires_in:$lifetime, auto_groups:[$group],
+        usage_limit:1, ephemeral:false, allow_extra_dns_labels:false
+    }')
+    response=$(api POST setup-keys -H 'Content-Type: application/json' \
+        --data-binary "$payload") || fail "could not create a one-off setup key for $role"
+    current_key_id=$(printf '%s' "$response" |
+        jq -er '.id | strings | select(test("^[A-Za-z0-9_-]+$"))') ||
+        fail "setup-key response for $role did not contain an ID"
+    printf '%s' "$response" | jq -e --arg group "$group_id" '
+        .type == "one-off" and .usage_limit == 1 and .ephemeral == false and
+        .revoked == false and .auto_groups == [$group]
+    ' >/dev/null || fail "setup key $current_key_id for $role has unexpected properties"
+    created_key=$(printf '%s' "$response" | jq -er '.key | strings |
+        select(test("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"))') ||
+        fail "setup-key response for $role did not contain a key"
+    unset response
+}
+
+enroll_one() {
+    role=$1
+    host=$2
+    before=$(status_for "$host")
+    if printf '%s' "$before" | jq -e '.management.connected == true' >/dev/null 2>&1; then
+        verify_node "$role" "$host" "$before"
+        echo "netbird-enroll: $role already enrolled at $verified_ip"
+        return 0
+    fi
+
+    create_key "$role"
+    setup_key=$created_key
+    unset created_key
+    remote_command="set -eu; temporary=\$(mktemp /tmp/netbird-setup-key.XXXXXX); trap 'rm -f \"\$temporary\"' EXIT; trap 'exit 1' HUP INT TERM; chmod 0600 \"\$temporary\"; cat > \"\$temporary\"; sudo netbird up --setup-key-file \"\$temporary\" --management-url $management_url --hostname $role --disable-dns=true --disable-client-routes=true --disable-server-routes=true --allow-server-ssh=false"
+    printf '%s\n' "$setup_key" | remote "$host" "$remote_command" >/dev/null ||
+        fail "remote NetBird enrollment failed for $role"
+    unset setup_key remote_command
+    delete_current_key || true
+
+    after=$(status_for "$host")
+    verify_node "$role" "$host" "$after"
+    echo "netbird-enroll: enrolled and verified $role at $verified_ip"
+    [ -z "$undeleted_key_ids" ] || exit 1
+}
+
+case "$requested_role" in
+    all)
+        enroll_one dns01 10.77.5.1
+        enroll_one dns02 10.77.5.2
+        enroll_one dns03 10.77.5.3
+        ;;
+    dns01) enroll_one dns01 10.77.5.1 ;;
+    dns02) enroll_one dns02 10.77.5.2 ;;
+    dns03) enroll_one dns03 10.77.5.3 ;;
+esac

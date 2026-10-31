@@ -16,6 +16,15 @@ This module runs from a trusted management host after appliance installation.
   existing SSH, delete its remote file, attempt API revocation, and verify
   restrictive preferences. Revocation is currently best-effort; investigate a
   failed or interrupted enrollment until the one-hour key has expired.
+- The NetBird API token never leaves the management host and travels only in
+  a curl-config header. `netbird-enroll` creates one one-off, single-use key
+  per node in the appliance group, sends only that key over existing SSH,
+  deletes it after use and on failure, and fails naming the key ID when the
+  deletion is unconfirmed. It verifies DNS management, client and server
+  routes, and the NetBird SSH server disabled, no routing-peer role, an
+  address in `10.78.0.0/16`, and an unchanged resolver. Verify `netbird up`
+  flags and status or configuration field names against the pinned client
+  source before changing them.
 - Backup collection transfers only already-encrypted files. A collected file is
   not a verified restore.
 - Restore requires an exact target URL confirmation. The current command uses

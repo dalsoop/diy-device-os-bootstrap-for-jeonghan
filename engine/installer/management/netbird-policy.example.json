@@ -1,0 +1,53 @@
+[
+  {
+    "name": "admins to DNS appliances (TCP)",
+    "description": "Send each object to POST /api/policies after replacing every <group-id:NAME> with the ID of group NAME.",
+    "enabled": true,
+    "rules": [
+      {
+        "name": "admins to DNS appliances (TCP)",
+        "enabled": true,
+        "action": "accept",
+        "bidirectional": false,
+        "protocol": "tcp",
+        "ports": ["22", "53", "9090", "9100", "53443"],
+        "sources": ["<group-id:admins>"],
+        "destinations": ["<group-id:dns-appliances>"]
+      }
+    ]
+  },
+  {
+    "name": "admins to DNS appliances (UDP)",
+    "description": "Send each object to POST /api/policies after replacing every <group-id:NAME> with the ID of group NAME.",
+    "enabled": true,
+    "rules": [
+      {
+        "name": "admins to DNS appliances (UDP)",
+        "enabled": true,
+        "action": "accept",
+        "bidirectional": false,
+        "protocol": "udp",
+        "ports": ["53"],
+        "sources": ["<group-id:admins>"],
+        "destinations": ["<group-id:dns-appliances>"]
+      }
+    ]
+  },
+  {
+    "name": "DNS appliance cluster",
+    "description": "Send each object to POST /api/policies after replacing every <group-id:NAME> with the ID of group NAME.",
+    "enabled": true,
+    "rules": [
+      {
+        "name": "DNS appliance cluster",
+        "enabled": true,
+        "action": "accept",
+        "bidirectional": false,
+        "protocol": "tcp",
+        "ports": ["53443"],
+        "sources": ["<group-id:dns-appliances>"],
+        "destinations": ["<group-id:dns-appliances>"]
+      }
+    ]
+  }
+]

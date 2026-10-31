@@ -361,6 +361,9 @@ jobs:
           tests/install-gate-simulation.sh
           tests/management-simulation.sh
           tests/tailscale-enrollment-simulation.sh
+          tests/netbird-enrollment-simulation.sh
+          tests/status-monitor-simulation.sh
+          tests/appliance-update-simulation.sh
           tests/dns-license-simulation.sh
           tests/license-policy-simulation.sh
           tests/media-catalog-simulation.sh

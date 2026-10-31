@@ -79,20 +79,27 @@ Build on an amd64 Debian 13 machine with `simple-cdd` installed:
 
 ```sh
 sudo apt-get install simple-cdd debian-cd debian-archive-keyring \
-  reprepro rsync xorriso isolinux syslinux-common skopeo jq curl
+  reprepro rsync xorriso isolinux syslinux-common skopeo jq curl ruby
 engine/installer/dns-image/fetch-locked-sources
 engine/installer/dns-image/build-image
 ```
 
 The builder refuses macOS, non-amd64 hosts, missing SSH keys, incomplete
-inventory, placeholders in enabled roles, malformed hashes, and a completely
-disabled inventory. Build output is written under
-`engine/installer/dns-image/simple-cdd/images/` and remains ignored by Git.
+inventory, placeholders in enabled roles, malformed hashes, a completely
+disabled inventory, and a World whose overlay selection cannot be resolved.
+Build output is written under `engine/installer/dns-image/simple-cdd/images/`
+and remains ignored by Git.
 
-The source lock currently selects Debian 13.7, the `20261011T000000Z` Debian
-snapshot, Simple-CDD 0.6.9, and the Technitium 15.6.1 linux/amd64 manifest
-digest, plus Tailscale 1.104.1 for linux/amd64 by SHA-256. Build evidence is
-emitted under ignored `engine/installer/artifacts/`.
+The source lock currently selects Debian 13.7, the `20261031T143759Z` Debian
+snapshot (whose security archive carries `linux` 6.12.113-1, the fix for
+CVE-2026-98432; the installed kernel version is established only by a built
+image's package closure, and the Debian Installer's own kernel is not the
+installed one), Simple-CDD 0.6.9, and the Technitium 15.6.1 linux/amd64
+manifest digest, plus Tailscale 1.104.1 and NetBird 0.82.0 for linux/amd64 by
+SHA-256. Only the overlay clients that the World's `overlays` select are
+fetched and embedded; the image carries the selection in its `overlays` file
+and build manifest. Build evidence is emitted under ignored
+`engine/installer/artifacts/`.
 
 ## Add the DNS image to the multiboot USB
 
@@ -127,7 +134,13 @@ The resulting host has:
 - root SSH login and SSH password authentication disabled;
 - Cockpit on TCP 9090;
 - digest-pinned Technitium DNS in a Podman systemd service;
-- checksum-pinned Tailscale installed and running but not enrolled;
+- the checksum-pinned overlay clients the World selects (Tailscale, NetBird,
+  or both) installed and running but not enrolled, with the selection in
+  `/etc/dns-appliance/overlays`;
+- unattended Debian updates from `deb.debian.org` and `security.debian.org`
+  over HTTPS, installed at dns01 02:00, dns02 02:30, dns03 03:00 and rebooted
+  into at dns01 03:00, dns02 03:30, dns03 04:00 (`Asia/Seoul`) only while every
+  peer that has answered DNS still answers;
 - nftables allowing DNS and cluster TLS from the LAN while SSH, Cockpit, and
   metrics are restricted to `management_cidr`;
 - the installation facts in `/etc/dns-appliance/install.env`.
@@ -136,7 +149,9 @@ First boot generates credentials, starts and probes DNS/Cockpit, switches the
 host resolver to `127.0.0.1`, validates `public.json`, and atomically writes the
 age-encrypted recovery archive. If USB writeback fails, credentials are reused
 on retry. Cluster joining intentionally happens later from the management
-machine so no shared join secret is embedded in the public installer.
+machine so no shared join secret is embedded in the public installer, and
+overlay enrollment (`tailscale-enroll`, `netbird-enroll`) runs from the
+management host after installation.
 
 After all three `ACTIVE` records exist, import and cluster them:
 

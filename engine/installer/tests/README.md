@@ -24,11 +24,38 @@ The reviewed-mode cases cover:
 - a matching generation-bound reinstall token being accepted;
 - a stale reinstall token being rejected.
 
-`repository-contract.sh` validates immutable source lock shapes, required
-artifacts, executable modes, the enrollment schema, and the presence of the
-first-boot safety contracts. GitHub Actions runs the installer, management,
-Tailscale enrollment, media-catalog, and repository-contract simulations plus
-ShellCheck and Python syntax validation.
+`repository-contract.sh` validates immutable source lock shapes (including
+`verify-locks` rejecting a Simple-CDD mirror that differs from
+`DEBIAN_SNAPSHOT`), required artifacts, executable modes, the enrollment
+schema, the presence of the first-boot safety contracts, and that CI runs every
+simulation listed here. GitHub Actions runs every simulation in this directory
+plus ShellCheck and Python syntax validation.
+
+`tailscale-enrollment-simulation.sh` and `netbird-enrollment-simulation.sh`
+drive the enrollment commands with fake `curl` and `ssh`. The NetBird
+simulation covers usage errors, one and all nodes, a self-hosted management
+URL, a non-HTTPS URL, an already enrolled node, missing, unset, and invalid
+token files, missing and ambiguous groups, key creation failure, remote `up`
+failure, wrong hostname, an address outside `10.78.0.0/16`, missing group
+membership, DNS, route, and SSH settings, routing peers by peer and by group, a
+changed resolver, and unconfirmed key deletion, and proves that neither the
+token nor any setup key reaches command arguments or output.
+
+`appliance-update-simulation.sh` checks the offline package set, apt sources,
+and configuration, renders the per-role timers through `dns-finish-install`,
+and runs `dns-appliance-reboot` with `dig`, `logger`, `systemctl`, and
+`in-target` replaced on `PATH` and a temporary state directory. It covers no reboot required (peers still learned), a reboot with both seen peers
+answering (counter reset), a never-seen peer down (no block), a seen peer down
+(skip, counter increment, journal line, no reboot), both peers down, persistence
+of the seen set and counter across runs, a peer answering only the retry,
+malformed state, and metrics rendering, and checks the rendered per-role
+install and reboot timers (`Asia/Seoul`, no random delay, no catch-up).
+
+`image-builder-simulation.sh` also covers World overlay resolution, the
+conditional build records for Tailscale-only, NetBird-only, and dual
+selections, the per-selection appliance install step, World/image agreement in
+every direction, readiness blockers, and both Linux writers' manifest checks
+with no target command reached.
 
 `repository-contract.sh` also runs the documentation check over every tracked
 text file; `repository-contract.sh --documentation-only <checkout>` runs only

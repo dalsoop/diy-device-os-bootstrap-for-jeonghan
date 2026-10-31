@@ -39,9 +39,10 @@ successful readback atomically publishes an append-only completed generation.
 ## Destructive workflow
 
 On a supported Linux builder, `prepare` downloads and verifies selected public
-media. After separately building the DNS runtime artifact, the `burn` command
-requires a removable non-root target, a readable serial, sufficient capacity,
-and the exact `ERASE <device> <serial>` confirmation.
+media. After separately building the DNS runtime artifact for the World's
+overlay selection, the `burn` command requires its build manifest with matching
+`overlays`, a removable non-root target, a readable serial, sufficient
+capacity, and the exact `ERASE <device> <serial>` confirmation.
 
 macOS builds an exact-size MBR disk image through the guarded Debian 13
 Podman/Docker loop-device builder, then burns it through the separately guarded
@@ -62,8 +63,8 @@ write. Ordinary operators should begin with the root
 | `device-os` | Module command implementation |
 | `usb-media/` | Catalog resolution, capacity, download, menu, and writers |
 | `collections/` | Reference selection and shared menu groups |
-| `dns-image/` | Offline DNS appliance image and guarded install gate |
-| `management/` | DNS cluster, Tailscale, desired-state apply, backup, and recovery |
+| `dns-image/` | Offline DNS appliance image with the World's overlay clients, guarded install gate, and unattended updates |
+| `management/` | DNS cluster, Tailscale and NetBird enrollment, desired-state apply, backup, recovery, and status monitor |
 | `build/` | Immutable external input locks and distribution contracts |
 | `schemas/` | Installation, enrollment, and distribution record shapes |
 | `tests/` | Isolated source and rejection simulations |

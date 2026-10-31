@@ -51,8 +51,18 @@ Implemented bootstrap and operating surfaces:
   is only verified.
 - `dns-appliance-status-monitor/start` launches a dependency-free Korean status
   page on `127.0.0.1:8080` and checks DNS over UDP/TCP plus Cockpit,
-  Technitium, and node-exporter connectivity for all three nodes. It is
+  Technitium, and node-exporter connectivity for all three nodes, reached by
+  the role names `dns01` through `dns03`. It also shows each node's pending
+  reboot and consecutive skipped reboots from its node-exporter metrics, and
+  reports a name that does not resolve separately from probe failures. It is
   read-only and is also copied onto the DIY Device OS USB for Jeonghan.
+
+The status monitor and the MCP gateway reach the nodes by role name, so the
+management host's resolver decides the path (LAN, Tailscale, or NetBird). The
+management host must resolve `dns01` through `dns03` without depending on the
+DNS cluster itself, through a hosts file or an overlay's own DNS (Tailscale
+MagicDNS or NetBird DNS), so both still reach the nodes when the cluster fails.
+Enrollment commands, by contrast, use the fixed LAN addresses below.
 
 Before enrollment, merge the relevant parts of
 `tailscale-policy.example.hujson` into the reviewed tailnet policy and create an
@@ -93,7 +103,8 @@ self-hosted management server by its HTTPS origin, `NETBIRD_APPLIANCE_GROUP`
 
 The reviewed MCP gateway lives in [`engine/agent/`](../../agent). It runs
 on a management host, reaches this module only through a fixed command
-allowlist, and uses stdio through a Tailscale-constrained SSH forced command.
+allowlist, and uses stdio through an SSH forced command reachable only over a
+reviewed overlay (Tailscale or NetBird).
 `dnsctl` remains the delegated apply and audit boundary; the gateway cannot
 bypass its commit, clean-tree, confirmation, token, or TLS requirements. Set
 `TECHNITIUM_CA_FILE` to make `dnsctl` verify a reviewed CA; the Agent Gateway

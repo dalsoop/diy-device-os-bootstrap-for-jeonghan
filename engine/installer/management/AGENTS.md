@@ -33,7 +33,13 @@ This module runs from a trusted management host after appliance installation.
 - Reinstall authorization must bind the active generation and hardware UUID; an
   old token must not authorize a replacement generation.
 - The status monitor is read-only and dependency-free. It must not become an
-  apply surface.
+  apply surface. It reaches nodes by role name; the management host resolves
+  those names without the DNS cluster (hosts file or an overlay's own DNS).
+- Enroll only the overlays the World selects, and only after their
+  preconditions: the reviewed tailnet policy for Tailscale; the network range
+  `10.78.0.0/16`, the `Default` policy removed or disabled, and the reviewed
+  policies for NetBird. Remove a reinstalled node's stale peer by hand before
+  re-enrolling it.
 - Router mutation is outside this module until a model-specific authenticated,
   reversible API and console recovery are proven.
 

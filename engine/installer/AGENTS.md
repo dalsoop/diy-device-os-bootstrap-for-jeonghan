@@ -6,9 +6,9 @@ This module is the repository's execution and safety boundary. It resolves World
 
 - `usb-media/` owns resolution, capacity, download, staging, Ventoy rendering, and physical USB writers.
 - `collections/` owns contributor reference grouping, not the personal selection used by ordinary World commands.
-- `dns-image/` owns the offline DNS image, install gate, and first-boot enrollment; it does not own general public OS behavior.
+- `dns-image/` owns the offline DNS image, install gate, first-boot enrollment, and the installed appliance's unattended updates and guarded reboots; it does not own general public OS behavior.
 - Per-role folders live in `burn-history/os-installs/<role>/`: the tracked guided profile `os.conf` and the ignored real hardware capture `hardware.conf`. Operator public keys live in the ignored `burn-history/keys/`. Public format examples live in `docs/examples/`.
-- `management/` owns post-install DNS, Tailscale, backup, restore, reinstall authorization, and read-only monitoring from a trusted host.
+- `management/` owns post-install DNS, Tailscale and NetBird enrollment, backup, restore, reinstall authorization, and read-only monitoring from a trusted host.
 - `build/` owns immutable external input locks; `schemas/` owns exchanged record shapes; `tests/` owns non-destructive simulations; `docs/` owns installer procedures and physical verification gates. Reviewed DNS desired state lives in `burn-history/dns-records.zone`.
 - Long-lived credentials belong outside the checkout. Router mutation and arbitrary remote administration are outside this module.
 
@@ -19,6 +19,7 @@ This module is the repository's execution and safety boundary. It resolves World
 - A USB write accepts only the currently inspected removable non-root device with readable serial, sufficient capacity, verified artifacts, and exact `ERASE <device> <serial>`.
 - General OS entries remain interactive. Guarded unattended behavior is isolated to the local DNS adapter with exact hardware, internal-disk, installer-media, and reinstall checks.
 - Mapper and partition ancestry resolve to one physical parent before target preparation. Unresolved, ambiguous, USB-backed, removable, mounted, zero-candidate, or multiple-candidate states fail before disk signatures are cleared.
+- The DNS image carries only the overlay clients that the World's `overlays` select. Readiness, World image builds, and World burns refuse a DNS build manifest whose `overlays` differ from the World's, or that has none, before any image, target, or USB event is touched. Use `dns-image/overlay-selection` for every comparison instead of re-parsing selections.
 - Secrets never enter arguments, URLs, logs, generated public JSON, or Git. Any removable-media secret is age-encrypted before its first write.
 - Source, image, VM, physical USB, firmware, installation, network, and recovery evidence remain separate claims.
 

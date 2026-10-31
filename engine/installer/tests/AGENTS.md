@@ -13,6 +13,12 @@ real hardware.
   digest, and staging rejection coverage.
 - Assert observable contracts and exit status; do not accept a warning when the
   safe behavior is failure.
+- Fake every network client (`curl`, `ssh`, `dig`, overlay CLIs) and every
+  state-changing command (`systemctl`, `logger`); never reach a real overlay
+  control plane, router, or Debian mirror. Prove that tokens and keys never
+  reach arguments or output.
+- Add every new simulation to the "Run Installer simulations" step in
+  `.github/workflows/ci.yml` and to the lists in `repository-contract.sh`.
 - Passing simulation is not physical qualification. Test output must not claim
   firmware, Secure Boot, real USB, or power-loss coverage.
 

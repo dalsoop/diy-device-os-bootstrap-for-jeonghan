@@ -119,6 +119,46 @@ and compares all of them before live target inspection or any write.
 
 **Response:** treat enrollment as failed unless the expected hostname and `tag:dns-appliance` are present, `accept-dns=false`, no routes or exit node are advertised, and Tailscale SSH/Serve/Funnel are absent. A key revocation failure remains relevant until the one-hour key expires.
 
+## NetBird connectivity can still violate appliance policy
+
+**Symptom:** a node shows as connected in NetBird but its resolver, routes, or SSH behavior changes, or it becomes a routing peer.
+
+**Cause:** NetBird client settings and account-level network routes, network routers, and exit nodes are separate from transport connectivity. A persisted client setting from an earlier `netbird up`, or a route that names the node's group, can enable DNS management, routes, or the NetBird SSH server.
+
+**Response:** treat enrollment as failed unless `netbird-enroll` verifies the hostname, an address in `10.78.0.0/16`, appliance-group membership, `disableDns`, `disableClientRoutes`, `disableServerRoutes`, and a false `serverSSHAllowed` in `netbird debug config`, no route or network router naming the peer or its groups, and `/etc/resolv.conf` naming only `127.0.0.1`. Pass every `netbird up` setting explicitly, because the client sends only flags that were given.
+
+## Tailscale drops carrier-grade NAT traffic from other interfaces
+
+**Symptom:** with both overlays installed, NetBird peers time out against a node, or traffic between NetBird addresses is lost, while Tailscale traffic works.
+
+**Cause:** Tailscale treats `100.64.0.0/10` as its own and drops packets from that range that arrive on any other interface. NetBird also allocates peer addresses from `100.64.0.0/10` by default, so the two overlays collide on a node that runs both.
+
+**Response:** set the NetBird account's network range to `10.78.0.0/16` (dashboard Settings > Networks) before the first peer enrolls. `netbird-enroll` rejects a peer address outside that range.
+
+## The NetBird client inserts rules into foreign input chains
+
+**Symptom:** after NetBird starts, an appliance input chain that the client does not own contains `iifname "wt0" accept`, and ports that the appliance's own rules limit become reachable over `wt0`.
+
+**Cause:** the NetBird client adds an accept rule for its interface to every input chain it finds in the ruleset, not only to chains in its own table or in tables named `filter`. Giving the appliance's table a separate name does not keep that rule out.
+
+**Response:** do not rely on a table name to keep NetBird's allowance out of an appliance chain. Treat the NetBird access policy (built-in `Default` policy removed or disabled, reviewed policies in place) as the limit on which peers reach appliance ports over `wt0`, and inspect `nft list ruleset` on an enrolled node so that any `wt0` accept in an appliance chain is counted as effective exposure.
+
+## A reinstalled node returns under a renamed peer
+
+**Symptom:** after a reinstall and re-enrollment, the node appears as `dns01-1` (or similar), and the status monitor, gateway, or overlay DNS no longer reach it as `dns01`; enrollment verification fails on the hostname.
+
+**Cause:** the reinstalled node has a new overlay identity while the stale peer with the same role name still exists in Tailscale or NetBird, so the control plane gives the new peer a different name.
+
+**Response:** remove the stale peer from each overlay by hand before re-enrolling the reinstalled node. The enrollment commands do not remove peers.
+
+## A guarded reboot can be skipped night after night
+
+**Symptom:** `/run/reboot-required` stays present for days, or the status monitor highlights a node with consecutive skipped reboots.
+
+**Cause:** at its reboot window, `dns-appliance-reboot` skips the reboot whenever a peer that has answered DNS at least once does not answer now. A peer that is down, readdressed, or permanently removed keeps blocking, because a seen peer stays seen. The skip exits zero, so the systemd unit does not fail.
+
+**Response:** read the skip reason with `journalctl -t dns-appliance-reboot`, and the `dns_appliance_reboot_*` metrics on port 9100 or the status monitor. Restore the failing peer first. Remove a peer from `/var/lib/dns-appliance/reboot-seen-peers` only when it is intentionally gone. Never reboot a node by hand while a peer is down.
+
 ## A collected backup is not a recovery proof
 
 **Symptom:** encrypted backup files exist, but recovery readiness is unknown.

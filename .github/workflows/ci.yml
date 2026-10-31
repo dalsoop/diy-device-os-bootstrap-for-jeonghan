@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install -y jq python3-jsonschema ruby shellcheck
+        run: sudo apt-get update && sudo apt-get install -y iproute2 jq nftables python3-jsonschema ruby shellcheck
       - name: Check project license notices
         shell: bash
         run: |
@@ -360,6 +360,7 @@ jobs:
         run: |
           tests/install-gate-simulation.sh
           tests/management-simulation.sh
+          tests/firewall-namespace-simulation.sh
           tests/tailscale-enrollment-simulation.sh
           tests/netbird-enrollment-simulation.sh
           tests/status-monitor-simulation.sh

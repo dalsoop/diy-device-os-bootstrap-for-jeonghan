@@ -151,6 +151,7 @@ for file in \
     engine/installer/tests/image-builder-simulation.sh \
     engine/installer/tests/macos-writer-simulation.sh \
     engine/installer/tests/management-simulation.sh \
+    engine/installer/tests/firewall-namespace-simulation.sh \
     engine/installer/tests/status-monitor-simulation.sh \
     engine/installer/tests/tailscale-enrollment-simulation.sh \
     engine/installer/tests/netbird-enrollment-simulation.sh \
@@ -185,6 +186,8 @@ for required in \
     burn-history/os-installs/dns02/os.conf \
     burn-history/os-installs/dns03/os.conf \
     burn-history/keys/README.md \
+    engine/installer/dns-image/payload/nftables.conf \
+    engine/installer/dns-image/payload/nftables-own-table.conf \
     engine/installer/management/tailscale-policy.example.hujson \
     engine/installer/management/netbird-policy.example.json \
     engine/installer/usb-media/composition.json \
@@ -232,6 +235,18 @@ grep -q 'previous_generation' "$repo_root/dns-image/scripts/install-gate"
 grep -q 'Authorization: Bearer' "$repo_root/dns-image/payload/dns-appliance-health"
 grep -q 'unzip -t' "$repo_root/dns-image/payload/dns-appliance-backup"
 grep -q 'iifname "tailscale0"' "$repo_root/dns-image/payload/nftables.conf"
+grep -q 'iifname "wt0"' "$repo_root/dns-image/payload/nftables.conf"
+grep -q '@@CLUSTER_PEERS@@' "$repo_root/dns-image/payload/nftables.conf"
+grep -qx 'table inet dns_appliance {' "$repo_root/dns-image/payload/nftables.conf"
+grep -q 'type filter hook prerouting' "$repo_root/dns-image/payload/nftables.conf"
+# The appliance firewall owns one table; it never flushes the whole ruleset.
+if grep -q -E '^[^#]*flush' "$repo_root/dns-image/payload/nftables.conf"; then
+    echo "repository-contract: the appliance firewall flushes" >&2
+    exit 1
+fi
+grep -qx 'ExecStop=/usr/sbin/nft destroy table inet dns_appliance' \
+    "$repo_root/dns-image/payload/nftables-own-table.conf"
+grep -qx '../payload/nftables-own-table.conf' "$repo_root/dns-image/simple-cdd/profiles/default.extra"
 grep -q 'preauthorized:true' "$repo_root/management/tailscale-enroll"
 grep -q 'TAILSCALE_LICENSES_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'tailscale-dependency-licenses.md' "$repo_root/dns-image/build-image"
@@ -335,6 +350,7 @@ for contract in \
     tests/license-policy-simulation.sh \
     tests/documentation-check-simulation.sh \
     tests/netbird-enrollment-simulation.sh \
+    tests/firewall-namespace-simulation.sh \
     tests/status-monitor-simulation.sh \
     tests/appliance-update-simulation.sh \
     engine/world/schemas/usb-event.schema.json \

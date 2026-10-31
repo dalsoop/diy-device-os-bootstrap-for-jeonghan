@@ -241,54 +241,313 @@ import re
 import sys
 
 source = pathlib.Path(sys.argv[1]).read_text()
-function = re.search(r"^write_technitium_env\(\) \{\n.*?^\}", source, re.M | re.S)
-assert function, "first-boot environment renderer is missing"
-fixture = function.group().replace("/etc/dns-appliance", "${fixture_dir}")
+blocks = []
+for name in ("recursion_acl", "write_technitium_env"):
+    function = re.search(r"^" + name + r"\(\) \{\n.*?^\}", source, re.M | re.S)
+    assert function, f"first-boot {name} is missing"
+    blocks.append(function.group().replace("/etc/dns-appliance", "${fixture_dir}"))
 pathlib.Path(sys.argv[2], "render-env").write_text(
-    'set -eu\n' + fixture + '\nwrite_technitium_env "$1"\n'
+    'set -eu\n' + "\n".join(blocks) + '\nwrite_technitium_env "$1"\n'
 )
 PY
-for include_password in true false; do
-    fixture_dir="$temporary" ROLE=dns01 CLUSTER_DOMAIN=home.arpa \
-        ADDRESS=10.77.5.1 LAN_CIDR=10.77.0.0/16 technitium_token="$temporary/token" \
-        sh "$temporary/render-env" "$include_password"
-    python3 - "$temporary/technitium.env" "$include_password" <<'PY'
+# The recursion ACL follows the overlay selection: loopback and the LAN, plus
+# each selected overlay's address range.
+for case_line in 'tailscale|127.0.0.0/8,10.77.0.0/16,100.64.0.0/10' \
+    'netbird|127.0.0.0/8,10.77.0.0/16,10.78.0.0/16' \
+    'tailscale netbird|127.0.0.0/8,10.77.0.0/16,100.64.0.0/10,10.78.0.0/16'; do
+    selection=${case_line%%|*}
+    # shellcheck disable=SC2086 # one selected overlay per line
+    printf '%s\n' $selection > "$temporary/overlays"
+    for include_password in true false; do
+        fixture_dir="$temporary" ROLE=dns01 CLUSTER_DOMAIN=home.arpa \
+            ADDRESS=10.77.5.1 LAN_CIDR=10.77.0.0/16 technitium_token="$temporary/token" \
+            overlay_selection="$temporary/overlays" \
+            sh "$temporary/render-env" "$include_password"
+        python3 - "$temporary/technitium.env" "$include_password" "$selection" "${case_line#*|}" <<'PY'
 import ipaddress
 import pathlib
 import stat
 import sys
 
 path = pathlib.Path(sys.argv[1])
+selection = sys.argv[3].split()
 config = dict(line.split("=", 1) for line in path.read_text().splitlines())
 assert stat.S_IMODE(path.stat().st_mode) == 0o600
 assert config["DNS_SERVER_RECURSION"] == "UseSpecifiedNetworkACL"
+assert config["DNS_SERVER_RECURSION_NETWORK_ACL"] == sys.argv[4], config["DNS_SERVER_RECURSION_NETWORK_ACL"]
 networks = [ipaddress.ip_network(value) for value in config["DNS_SERVER_RECURSION_NETWORK_ACL"].split(",")]
 allowed = lambda address: any(ipaddress.ip_address(address) in network for network in networks)
-for address in ("127.0.0.1", "10.77.5.1", "10.77.255.254", "100.64.0.0", "100.100.1.2", "100.127.255.255"):
+tailscale = ("100.64.0.0", "100.100.1.2", "100.127.255.255")
+netbird = ("10.78.0.1", "10.78.255.254")
+for address in ("127.0.0.1", "10.77.5.1", "10.77.0.0", "10.77.255.254"):
     assert allowed(address), f"expected recursion for {address}"
-for address in ("1.1.1.1", "10.1.0.1", "100.63.255.255", "100.128.0.0", "192.168.0.1", "::1"):
+for address in tailscale:
+    assert allowed(address) == ("tailscale" in selection), f"recursion for {address} with {selection}"
+for address in netbird:
+    assert allowed(address) == ("netbird" in selection), f"recursion for {address} with {selection}"
+for address in ("1.1.1.1", "10.1.0.1", "10.76.255.255", "10.79.0.0", "100.63.255.255",
+                "100.128.0.0", "192.168.0.1", "::1"):
     assert not allowed(address), f"unexpected recursion for {address}"
 assert ("DNS_SERVER_ADMIN_PASSWORD_FILE" in config) == (sys.argv[2] == "true")
 assert config["DNS_SERVER_AUTH_STATIC_SESSIONS"] == "admin:token"
 PY
+    done
 done
-pass firstboot_recursion_allows_lan_and_tailscale_but_not_public_clients
+pass firstboot_recursion_allows_lan_and_selected_overlays_but_not_public_clients
 
-python3 - "$repo_root/dns-image/payload/nftables.conf" <<'PY'
+# The appliance firewall is rendered by the installer step itself: its
+# functions are extracted from dns-finish-install and run against a fixture
+# medium carrying the three embedded role profiles.
+finish_script=$repo_root/dns-image/scripts/dns-finish-install
+firewall=$temporary/firewall
+mkdir -p "$firewall/cdrom/simple-cdd"
+python3 - "$finish_script" "$firewall" <<'PY'
 import pathlib
+import re
 import sys
 
-rules = [line.strip() for line in pathlib.Path(sys.argv[1]).read_text().splitlines()
-         if line.strip() and not line.strip().startswith("#")]
-guard = rules.index('iifname != "tailscale0" ip saddr 100.64.0.0/10 drop')
-assert rules.index('iifname "lo" accept') < guard
-for index, rule in enumerate(rules):
-    if "accept" in rule and rule != 'iifname "lo" accept' and not rule.startswith("type "):
-        assert guard < index, "CGNAT guard must precede connection and LAN allowances"
-assert 'iifname "tailscale0" udp dport 53 accept' in rules
-assert 'iifname "tailscale0" tcp dport { 22, 53, 9090, 9100, 53443 } accept' in rules
-assert 'type filter hook input priority 0; policy drop;' in rules
+source = pathlib.Path(sys.argv[1]).read_text()
+blocks = []
+for name in ("canonical_overlays", "ipv4_cidr", "peer_address", "render_firewall"):
+    function = re.search(r"^" + name + r"\(\) \{\n.*?^\}", source, re.M | re.S)
+    assert function, f"{name} is missing from dns-finish-install"
+    blocks.append(function.group().replace("/cdrom/", sys.argv[2] + "/cdrom/"))
+pathlib.Path(sys.argv[2], "render.sh").write_text(
+    "set -eu\n" + "\n".join(blocks) + '\nrender_firewall "$1" "$2" "$3"\n'
+)
 PY
-pass tailscale_source_range_is_guarded_before_other_firewall_allowances
+grep -qx 'render_firewall /cdrom/simple-cdd/nftables.conf /target/etc/dns-appliance/overlays /target/etc/nftables.conf' \
+    "$finish_script" || {
+    echo "FAIL dns-finish-install does not render the firewall from the installed overlay selection" >&2
+    exit 1
+}
+reset_firewall_fixture() {
+    rm -f "$firewall/nftables.conf" "$firewall/nftables.conf.tmp"
+    for number in 1 2 3; do
+        printf 'role=dns0%s\naddress=10.77.5.%s\nprefix_length=16\n' "$number" "$number" \
+            > "$firewall/cdrom/simple-cdd/dns0$number.conf"
+    done
+}
+render_firewall_fixture() {
+    LAN_CIDR=${FIREWALL_LAN_CIDR-10.77.0.0/16} \
+    MANAGEMENT_CIDR=${FIREWALL_MANAGEMENT_CIDR-10.77.0.0/24} \
+        sh "$firewall/render.sh" "${FIREWALL_TEMPLATE:-$repo_root/dns-image/payload/nftables.conf}" \
+        "$firewall/overlays" "$firewall/nftables.conf"
+}
+for selection in tailscale netbird 'tailscale netbird'; do
+    reset_firewall_fixture
+    # shellcheck disable=SC2086 # one selected overlay per line
+    printf '%s\n' $selection > "$firewall/overlays"
+    render_firewall_fixture > "$firewall/render.log" 2>&1 || {
+        echo "FAIL firewall rendering for '$selection': $(cat "$firewall/render.log")" >&2
+        exit 1
+    }
+    python3 - "$firewall/nftables.conf" "$selection" <<'PY'
+import pathlib
+import re
+import stat
+import sys
 
-echo "RESULT $pass_count/18 management simulations passed"
+path = pathlib.Path(sys.argv[1])
+selection = sys.argv[2].split()
+assert stat.S_IMODE(path.stat().st_mode) == 0o644
+text = path.read_text()
+assert "@@" not in text, "unrendered marker"
+lines = [line.strip() for line in text.splitlines()
+         if line.strip() and not line.strip().startswith("#")]
+assert not any(line.startswith("flush") for line in lines), "the firewall flushes"
+assert "ruleset" not in " ".join(lines), "the firewall names the whole ruleset"
+# Idempotent load: create-if-absent, delete, recreate, all in one transaction.
+assert lines[:3] == ["table inet dns_appliance", "delete table inet dns_appliance",
+                     "table inet dns_appliance {"], lines[:3]
+assert [line for line in lines if line.startswith(("table", "delete", "add", "destroy"))] == lines[:3]
+
+chains = {}
+for match in re.finditer(r"^\s*chain (\S+) \{\n(.*?)^\s*\}", text, re.M | re.S):
+    chains[match.group(1)] = [line.strip() for line in match.group(2).splitlines()
+                              if line.strip() and not line.strip().startswith("#")]
+assert sorted(chains) == ["forward", "input", "output", "overlay_prerouting"], sorted(chains)
+
+interfaces = [name for overlay, name in (("tailscale", "tailscale0"), ("netbird", "wt0"))
+              if overlay in selection]
+quoted = ", ".join(f'"{name}"' for name in interfaces)
+management = "{ 22, 53, 9090, 9100, 53443 }"
+
+expected_prerouting = [
+    "type filter hook prerouting priority filter; policy accept;",
+    f"iifname != {{ {quoted} }} accept",
+    "fib daddr type != { local, broadcast, multicast } accept",
+    "ct state established,related accept",
+    "ct state invalid drop",
+    "meta l4proto { icmp, ipv6-icmp } accept",
+    "udp dport 53 accept",
+    f"tcp dport {management} accept",
+    "drop",
+]
+assert chains["overlay_prerouting"] == expected_prerouting, chains["overlay_prerouting"]
+
+expected_input = ["type filter hook input priority filter; policy drop;", 'iifname "lo" accept']
+if "tailscale" in selection:
+    expected_input.append('iifname != "tailscale0" ip saddr 100.64.0.0/10 drop')
+if "netbird" in selection:
+    expected_input.append('iifname != "wt0" ip saddr 10.78.0.0/16 drop')
+expected_input += [
+    "ct state established,related accept",
+    "ct state invalid drop",
+    "ip protocol icmp accept",
+    "ip6 nexthdr ipv6-icmp accept",
+    "ip saddr 10.77.0.0/16 udp dport 53 accept",
+    "ip saddr 10.77.0.0/16 tcp dport 53 accept",
+    "ip saddr { 10.77.5.1, 10.77.5.2, 10.77.5.3 } tcp dport 53443 accept",
+    "ip saddr 10.77.0.0/24 tcp dport { 22, 9090, 9100, 53443 } accept",
+]
+for name in interfaces:
+    expected_input += [f'iifname "{name}" udp dport 53 accept',
+                       f'iifname "{name}" tcp dport {management} accept']
+assert chains["input"] == expected_input, chains["input"]
+assert chains["forward"] == ["type filter hook forward priority filter; policy drop;"]
+assert chains["output"] == ["type filter hook output priority filter; policy accept;"]
+for unselected in {"tailscale0", "wt0"} - set(interfaces):
+    assert not any(unselected in line for line in lines), f"{unselected} is rendered without its overlay"
+PY
+done
+pass firewall_renders_only_its_own_table_for_each_overlay_selection
+pass firewall_limits_selected_overlay_interfaces_in_prerouting_and_guards_their_ranges
+
+expect_firewall_rejected() {
+    name=$1
+    if render_firewall_fixture > "$firewall/render.log" 2>&1; then
+        echo "FAIL firewall rendering accepted $name" >&2
+        exit 1
+    fi
+    if [ -e "$firewall/nftables.conf" ] || [ -e "$firewall/nftables.conf.tmp" ]; then
+        echo "FAIL firewall rendering left output after rejecting $name" >&2
+        exit 1
+    fi
+}
+reset_firewall_fixture
+printf 'tailscale\nnetbird\n' > "$firewall/overlays"
+sed 's/^\( *\)ct state invalid drop$/\1ct state invalid drop @@UNKNOWN@@/' \
+    "$repo_root/dns-image/payload/nftables.conf" > "$firewall/stray-marker.conf"
+FIREWALL_TEMPLATE=$firewall/stray-marker.conf expect_firewall_rejected "an unrendered marker"
+FIREWALL_LAN_CIDR='10.77.0.0/16 accept' expect_firewall_rejected "a LAN value that is not a CIDR"
+FIREWALL_LAN_CIDR='10.77.0.0/33' expect_firewall_rejected "a LAN prefix above 32"
+FIREWALL_MANAGEMENT_CIDR='' expect_firewall_rejected "an empty management CIDR"
+FIREWALL_MANAGEMENT_CIDR='10.77.0.256/24' expect_firewall_rejected "an invalid management address"
+printf 'role=dns03\n' > "$firewall/cdrom/simple-cdd/dns03.conf"
+expect_firewall_rejected "a role profile without an address"
+reset_firewall_fixture
+: > "$firewall/overlays"
+expect_firewall_rejected "an empty overlay selection"
+printf 'wireguard\n' > "$firewall/overlays"
+expect_firewall_rejected "an unknown overlay selection"
+pass firewall_rendering_rejects_unrendered_markers_and_invalid_inputs
+
+# The health script reports each selected overlay and only those. Every
+# command it runs is a fixture on PATH; the reboot metrics come from a fake
+# reboot script and are written unchanged.
+health=$temporary/health
+mkdir -p "$health/bin" "$health/etc" "$health/state/secrets" "$health/metrics"
+printf 'ROLE=dns01\nADDRESS=10.77.5.1\n' > "$health/etc/install.env"
+printf '%s\n' health-token > "$health/state/secrets/technitium-static-token"
+sed -e "s#/etc/dns-appliance#$health/etc#g" \
+    -e "s#/var/lib/dns-appliance#$health/state#g" \
+    -e "s#/var/lib/prometheus/node-exporter#$health/metrics#g" \
+    -e "s#/usr/local/sbin/dns-appliance-reboot#$health/bin/dns-appliance-reboot#g" \
+    "$repo_root/dns-image/payload/dns-appliance-health" > "$health/dns-appliance-health"
+cat > "$health/bin/dig" <<'EOF'
+#!/bin/sh
+printf '127.0.0.1\n'
+EOF
+cat > "$health/bin/curl" <<'EOF'
+#!/bin/sh
+printf '{"status":"ok"}\n'
+EOF
+cat > "$health/bin/timedatectl" <<'EOF'
+#!/bin/sh
+printf 'yes\n'
+EOF
+cat > "$health/bin/tailscale" <<'EOF'
+#!/bin/sh
+[ "$*" = "status --json" ] || exit 64
+printf '%s\n' '{"BackendState":"Running","Self":{"HostName":"dns01","TailscaleIPs":["100.101.1.1","fd7a:115c:a1e0::1"],"Tags":["tag:dns-appliance"]}}'
+EOF
+cat > "$health/bin/netbird" <<'EOF'
+#!/bin/sh
+[ "$*" = "status --json" ] || exit 64
+[ "${HEALTH_NETBIRD_FAIL:-false}" = false ] || exit 1
+printf '%s\n' '{"management":{"url":"https://api.netbird.io:443","connected":true},"netbirdIp":"10.78.0.5/16","fqdn":"dns01.netbird.cloud"}'
+EOF
+cat > "$health/bin/dns-appliance-reboot" <<'EOF'
+#!/bin/sh
+[ "$1" = metrics ] || exit 64
+printf 'dns_appliance_reboot_pending 0\ndns_appliance_reboot_skipped_consecutive 0\ndns_appliance_reboot_last_skip_timestamp_seconds 0\n'
+EOF
+chmod 0755 "$health/bin"/*
+run_health() {
+    rm -f "$health/state/health.json" "$health/metrics"/*.prom
+    PATH="$health/bin:$PATH" bash "$health/dns-appliance-health" > "$health/run.log" 2>&1
+}
+for selection in tailscale netbird 'tailscale netbird'; do
+    # shellcheck disable=SC2086 # one selected overlay per line
+    printf '%s\n' $selection > "$health/etc/overlays"
+    run_health || {
+        echo "FAIL health for '$selection': $(cat "$health/run.log")" >&2
+        exit 1
+    }
+    jq -e --arg selection "$selection" '
+      ($selection | split(" ")) as $selected |
+      (has("tailscale") | not) and
+      (.overlays | keys | sort) == ($selected | sort) and
+      (if ($selected | index("tailscale")) then
+         .overlays.tailscale == {up: 1, state: "Running", ip: "100.101.1.1", hostname: "dns01", tags: ["tag:dns-appliance"]}
+       else true end) and
+      (if ($selected | index("netbird")) then
+         .overlays.netbird == {up: 1, state: "Connected", ip: "10.78.0.5", hostname: "dns01"}
+       else true end) and
+      .hostname == "dns01" and .dns_udp == 1 and .technitium == 1
+    ' "$health/state/health.json" >/dev/null || {
+        echo "FAIL health.json for '$selection': $(cat "$health/state/health.json")" >&2
+        exit 1
+    }
+    for overlay in tailscale netbird; do
+        case " $selection " in
+            *" $overlay "*) want=1 ;;
+            *) want=0 ;;
+        esac
+        have=$(grep -c "^dns_appliance_service_up{service=\"$overlay\"} 1\$" "$health/metrics/dns-appliance.prom" || true)
+        [ "$have" = "$want" ] || {
+            echo "FAIL health metric for $overlay with '$selection': $(cat "$health/metrics/dns-appliance.prom")" >&2
+            exit 1
+        }
+    done
+    "$health/bin/dns-appliance-reboot" metrics > "$health/expected-reboot.prom"
+    cmp -s "$health/expected-reboot.prom" "$health/metrics/dns-appliance-reboot.prom" || {
+        echo "FAIL health no longer writes the reboot metrics unchanged" >&2
+        exit 1
+    }
+done
+printf 'netbird\n' > "$health/etc/overlays"
+HEALTH_NETBIRD_FAIL=true run_health || {
+    echo "FAIL health failed when only the NetBird daemon is down: $(cat "$health/run.log")" >&2
+    exit 1
+}
+jq -e '.overlays == {netbird: {up: 0, state: "Unavailable", ip: "", hostname: ""}}' \
+    "$health/state/health.json" >/dev/null || {
+    echo "FAIL unavailable NetBird is not reported: $(cat "$health/state/health.json")" >&2
+    exit 1
+}
+grep -qx 'dns_appliance_service_up{service="netbird"} 0' "$health/metrics/dns-appliance.prom" || {
+    echo "FAIL unavailable NetBird metric is not 0" >&2
+    exit 1
+}
+for content in '' 'wireguard\n' 'netbird\ntailscale\n'; do
+    printf '%b' "$content" > "$health/etc/overlays"
+    if run_health; then
+        echo "FAIL health accepted overlay selection '$content'" >&2
+        exit 1
+    fi
+done
+pass health_reports_each_selected_overlay_and_only_those
+
+echo "RESULT $pass_count/21 management simulations passed"

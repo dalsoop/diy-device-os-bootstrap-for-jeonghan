@@ -137,11 +137,11 @@ Until a reviewed update path exists, the operator must watch the upstream securi
 
 `license check --mode personal-use` for the contributor reference collection names no World, so it cannot know which overlays a DNS image would select. Without a valid build manifest it lists all six known DNS components, including both overlays' components. This is conservative: it may warn about a component that a particular image does not contain, but never omits one. World-driven checks use the World's overlays, and checks with a valid build manifest use the manifest's.
 
-## NetBird's interface allowance reaches appliance input chains
+## The overlay port limits are not yet checked with the real clients
 
-The NetBird client inserts `iifname "wt0" accept` into every input chain it finds, including chains in tables it does not own. On an appliance with NetBird enrolled, that rule admits every peer that the NetBird access policy lets through on `wt0`, regardless of the appliance's own port limits. Until the appliance firewall handles this, the NetBird access policy (built-in `Default` policy removed or disabled, the reviewed policies from `netbird-policy.example.json` in place) is the only limit on which NetBird peers reach the appliance ports.
+The NetBird client inserts `iifname "wt0" accept` at the top of the appliance's input and forward chains and re-inserts it after any change, so the appliance limits overlay ports in the prerouting chain `overlay_prerouting` of its own table, which the client does not touch, and keeps the overlay clients' tables through `nftables.service` load, reload, and stop. `tests/firewall-namespace-simulation.sh` shows both in network namespaces, but with veth interfaces named `wt0` and `tailscale0`, an inserted rule that reproduces the client's, and stand-in tables, not the real NetBird and Tailscale clients.
 
-The appliance firewall design for NetBird port limits is pending. Closing this requires a reviewed firewall change that keeps the appliance limits authoritative with the NetBird client running, simulation coverage, and a live check on an enrolled node with `nft list ruleset`.
+Closing this requires an installed node with both clients enrolled: `nft list table inet dns_appliance` shows `overlay_prerouting` with both interfaces; from an admin-group peer over each overlay, DNS and the management ports answer while a port outside the allowed set does not; and the clients' tables and connectivity remain after `systemctl reload nftables` and `systemctl restart nftables`.
 
 ## Tailscale enrollment does not inspect Serve or Funnel state
 

@@ -122,6 +122,20 @@ fi
 /usr/bin/podman image exists "$TECHNITIUM_IMAGE:$TECHNITIUM_VERSION" ||
     fail "pinned Technitium image did not load with the expected tag"
 
+# Prints the recursion ACL: loopback, the LAN, and the address range of each
+# overlay listed in the selection file. nftables accepts each overlay range
+# only on its own interface.
+recursion_acl() {
+    acl="127.0.0.0/8,$2"
+    if grep -qx tailscale "$1"; then
+        acl="$acl,100.64.0.0/10"
+    fi
+    if grep -qx netbird "$1"; then
+        acl="$acl,10.78.0.0/16"
+    fi
+    printf '%s\n' "$acl"
+}
+
 write_technitium_env() {
     include_password=$1
     env_tmp=/etc/dns-appliance/technitium.env.tmp
@@ -139,8 +153,7 @@ write_technitium_env() {
         printf 'DNS_SERVER_WEB_SERVICE_USE_SELF_SIGNED_CERT=true\n'
         printf 'DNS_SERVER_WEB_SERVICE_HTTP_TO_TLS_REDIRECT=true\n'
         printf 'DNS_SERVER_RECURSION=UseSpecifiedNetworkACL\n'
-        # nftables restricts CGNAT sources to the authenticated tailscale0 interface.
-        printf 'DNS_SERVER_RECURSION_NETWORK_ACL=127.0.0.0/8,%s,100.64.0.0/10\n' "$LAN_CIDR"
+        printf 'DNS_SERVER_RECURSION_NETWORK_ACL=%s\n' "$(recursion_acl "$overlay_selection" "$LAN_CIDR")"
         printf 'DNS_SERVER_LOG_USING_LOCAL_TIME=false\n'
         printf 'DNS_SERVER_LOG_FOLDER_PATH=/var/log/technitium/dns\n'
         printf 'DNS_SERVER_LOG_MAX_LOG_FILE_DAYS=30\n'

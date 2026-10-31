@@ -137,11 +137,19 @@ and compares all of them before live target inspection or any write.
 
 ## The NetBird client inserts rules into foreign input chains
 
-**Symptom:** after NetBird starts, an appliance input chain that the client does not own contains `iifname "wt0" accept`, and ports that the appliance's own rules limit become reachable over `wt0`.
+**Symptom:** after NetBird starts, the appliance input chain in `inet dns_appliance` begins with `iifname "wt0" counter accept`, and the rule comes back about half a second after it is deleted or the table is reloaded.
 
-**Cause:** the NetBird client adds an accept rule for its interface to every input chain it finds in the ruleset, not only to chains in its own table or in tables named `filter`. Giving the appliance's table a separate name does not keep that rule out.
+**Cause:** the NetBird client (0.82.0) inserts an accept for its interface at position 1 of every input and forward filter chain of the `ip`, `ip6`, and `inet` families that it does not own, skipping only its own table, firewalld, and `ip`/`ip6` tables named `filter`, `nat`, `mangle`, `raw`, or `security`, and it watches the ruleset to re-insert the rule after any table or chain change. A separate table name does not keep that rule out of an input chain, so input-chain port limits alone do not hold on `wt0`. The client never touches prerouting chains.
 
-**Response:** do not rely on a table name to keep NetBird's allowance out of an appliance chain. Treat the NetBird access policy (built-in `Default` policy removed or disabled, reviewed policies in place) as the limit on which peers reach appliance ports over `wt0`, and inspect `nft list ruleset` on an enrolled node so that any `wt0` accept in an appliance chain is counted as effective exposure.
+**Response:** the appliance limits overlay ports in the prerouting filter chain `overlay_prerouting` of its own table, which drops traffic for this host arriving on `wt0` or `tailscale0` outside established or related traffic, ICMP, DNS 53, and TCP 22, 9090, 9100, and 53443 before any input chain runs. Treat the `wt0` accept in the input chain as expected and do not fight it. `tests/firewall-namespace-simulation.sh` proves the limit holds with that rule inserted. On an enrolled node, `nft list table inet dns_appliance` must show `overlay_prerouting` with the selected interfaces; the NetBird access policy (built-in `Default` policy removed or disabled, reviewed policies in place) still decides which peers reach the allowed ports.
+
+## Restarting nftables can remove the overlay clients' rules
+
+**Symptom:** after `systemctl restart nftables` or a reload, Tailscale or NetBird traffic stops until the client daemon restarts, or `nft list ruleset` no longer shows the clients' tables.
+
+**Cause:** Debian's `nftables.service` stops with `nft flush ruleset`, and a firewall file that begins with `flush ruleset` removes every table on each load, including the tables the overlay clients created.
+
+**Response:** the appliance firewall file only recreates `inet dns_appliance` (create, delete, and recreate in one transaction) and never flushes the ruleset, and the `nftables.service` drop-in `60-dns-appliance.conf` stops by deleting only that table and reloads by re-applying the file. Never add `flush ruleset` to the appliance firewall or remove the drop-in.
 
 ## A reinstalled node returns under a renamed peer
 

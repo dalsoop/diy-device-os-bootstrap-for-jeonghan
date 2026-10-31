@@ -985,6 +985,289 @@ reject_records "a reversed selection" 'netbird\ntailscale\n' "$records/rejected"
 # shellcheck disable=SC2086
 reject_records "an unknown overlay" 'wireguard\n' "$records/rejected" $netbird_inputs
 
+# A DNS image is used only with the World it was built for. The build
+# manifest's overlays are compared with the World's as a set.
+agreement=$overlay/agreement
+mkdir -p "$agreement"
+selection_tool=$tree/engine/installer/dns-image/overlay-selection
+cp -p "$repo_root/dns-image/overlay-selection" "$selection_tool"
+jq 'del(.overlays)' "$records/both/build-manifest.json" > "$agreement/no-overlays.json"
+jq '.overlays = ["netbird","tailscale"]' "$records/both/build-manifest.json" > "$agreement/reordered.json"
+for case_name in "both|tailscale\nnetbird" "tailscale|tailscale" "netbird|netbird"; do
+    "$selection_tool" manifest "$records/${case_name%%|*}/build-manifest.json" > "$agreement/selection" ||
+        simulation_fail "the ${case_name%%|*} manifest selection was rejected"
+    [ "$(cat "$agreement/selection")" = "$(printf '%b' "${case_name#*|}")" ] ||
+        simulation_fail "the ${case_name%%|*} manifest selection was misread"
+done
+"$selection_tool" manifest "$agreement/reordered.json" > "$agreement/selection" ||
+    simulation_fail "a manifest selection was not compared as a set"
+[ "$(cat "$agreement/selection")" = "$(printf 'tailscale\nnetbird')" ] ||
+    simulation_fail "a reordered manifest selection was not canonicalized"
+if "$selection_tool" manifest "$agreement/no-overlays.json" > /dev/null 2> "$agreement/selection.err"; then
+    simulation_fail "a manifest without overlays was accepted"
+fi
+grep -q 'DNS build manifest has no overlays' "$agreement/selection.err" ||
+    simulation_fail "a manifest without overlays was not named as such"
+for invalid in '[]' '["wireguard"]' '["tailscale","tailscale"]' '"tailscale"' 'null'; do
+    jq --argjson overlays "$invalid" '.overlays = $overlays' "$records/both/build-manifest.json" \
+        > "$agreement/invalid.json"
+    if "$selection_tool" manifest "$agreement/invalid.json" > /dev/null 2>&1; then
+        simulation_fail "manifest overlays $invalid were accepted"
+    fi
+done
+
+agree_with_world() {
+    DEVICE_OS_WORLD=$1 "$selection_tool" agree "$2" > "$agreement/agree.out" 2> "$agreement/agree.err"
+}
+expect_agreement() {
+    agree_with_world "$1" "$2" ||
+        simulation_fail "World $1 rejected the matching manifest $2: $(cat "$agreement/agree.err")"
+}
+expect_disagreement() {
+    if agree_with_world "$1" "$2"; then
+        simulation_fail "World $1 accepted the manifest $2"
+    fi
+    grep -q -F "$3" "$agreement/agree.err" ||
+        simulation_fail "the refusal for World $1 does not name both selections: $(cat "$agreement/agree.err")"
+}
+expect_agreement jeonghan-home "$records/both/build-manifest.json"
+[ "$(cat "$agreement/agree.out")" = "$(printf 'tailscale\nnetbird')" ] ||
+    simulation_fail "an agreeing selection was not reported"
+expect_agreement reverse-home "$records/both/build-manifest.json"
+expect_agreement jeonghan-home "$agreement/reordered.json"
+expect_agreement tailscale-home "$records/tailscale/build-manifest.json"
+expect_agreement netbird-home "$records/netbird/build-manifest.json"
+expect_disagreement tailscale-home "$records/both/build-manifest.json" \
+    'DNS image overlays (tailscale, netbird) differ from the World overlays (tailscale)'
+expect_disagreement jeonghan-home "$records/tailscale/build-manifest.json" \
+    'DNS image overlays (tailscale) differ from the World overlays (tailscale, netbird)'
+expect_disagreement netbird-home "$records/tailscale/build-manifest.json" \
+    'DNS image overlays (tailscale) differ from the World overlays (netbird)'
+expect_disagreement jeonghan-home "$agreement/no-overlays.json" 'DNS build manifest has no overlays'
+if agree_with_world missing-home "$records/both/build-manifest.json"; then
+    simulation_fail "agreement was accepted without a resolvable World"
+fi
+
+# A World plan or a resolved Catalog that embeds one supplies the selection.
+agree_with_plan() {
+    printf '%s\n' "$2" > "$agreement/plan.json"
+    "$selection_tool" agree "$1" "$agreement/plan.json" > "$agreement/agree.out" 2> "$agreement/agree.err"
+}
+agree_with_plan "$records/netbird/build-manifest.json" '{"world":{"slug":"x"},"overlays":["netbird"]}' ||
+    simulation_fail "a matching World plan was rejected"
+agree_with_plan "$records/tailscale/build-manifest.json" \
+    '{"catalog":{},"world":{"world":{"slug":"x"},"media":{"id":"dns-install"},"overlays":["tailscale"]}}' ||
+    simulation_fail "a matching resolved Catalog was rejected"
+if agree_with_plan "$records/both/build-manifest.json" '{"world":{"slug":"x"},"overlays":["netbird"]}'; then
+    simulation_fail "a World plan with fewer overlays was accepted"
+fi
+grep -q -F 'DNS image overlays (tailscale, netbird) differ from the World overlays (netbird)' \
+    "$agreement/agree.err" || simulation_fail "a plan refusal does not name both selections"
+if agree_with_plan "$records/netbird/build-manifest.json" \
+    '{"world":{"world":{"slug":"x"},"media":{"id":"dns-install"},"overlays":["tailscale","netbird"]}}'; then
+    simulation_fail "a resolved Catalog with more overlays was accepted"
+fi
+for plan in '{"overlays":[]}' '{"overlays":["wireguard"]}' '{"world":{"slug":"x"}}' '{}' \
+    '{"world":{"world":{"slug":"x"},"media":{"id":"dns-install"}}}' 'null'; do
+    if agree_with_plan "$records/both/build-manifest.json" "$plan"; then
+        simulation_fail "agreement accepted the World selection $plan"
+    fi
+done
+
+# Readiness blocks a DNS build whose overlays differ from the World's.
+cp -p "$repo_root/dns-image/check-readiness" "$tree/engine/installer/dns-image/"
+tree_readiness() {
+    rm -rf "$agreement/artifacts"
+    mkdir -p "$agreement/artifacts"
+    cp "$2" "$agreement/artifacts/build-manifest.json"
+    env DEVICE_OS_WORLD="$1" DNS_APPLIANCE_CACHE_DIR="$overlay/empty-cache" \
+        DNS_APPLIANCE_ARTIFACT_DIR="$agreement/artifacts" \
+        "$tree/engine/installer/dns-image/check-readiness" > "$agreement/readiness.json" 2>/dev/null || true
+}
+tree_readiness jeonghan-home "$records/both/build-manifest.json"
+jq -e '(.passed | index("DNS image overlays match the World (tailscale, netbird)")) != null and
+  ([.blockers[] | select(test("overlays"))] | length) == 0' "$agreement/readiness.json" >/dev/null ||
+    simulation_fail "readiness did not accept a DNS build for the World's overlays"
+tree_readiness tailscale-home "$records/both/build-manifest.json"
+jq -e '(.blockers | index("DNS image overlays (tailscale, netbird) differ from the World overlays (tailscale); rebuild the DNS image for this World")) != null and .ready == false' \
+    "$agreement/readiness.json" >/dev/null ||
+    simulation_fail "readiness accepted a DNS build with more overlays than the World"
+tree_readiness jeonghan-home "$records/netbird/build-manifest.json"
+jq -e '(.blockers | index("DNS image overlays (netbird) differ from the World overlays (tailscale, netbird); rebuild the DNS image for this World")) != null' \
+    "$agreement/readiness.json" >/dev/null ||
+    simulation_fail "readiness accepted a DNS build with fewer overlays than the World"
+tree_readiness jeonghan-home "$agreement/no-overlays.json"
+jq -e '[.blockers[] | select(startswith("DNS build manifest has no overlays"))] | length == 1' \
+    "$agreement/readiness.json" >/dev/null ||
+    simulation_fail "readiness accepted a DNS build manifest without overlays"
+
+# Both Linux writers accept every selection shape, carry only the selected
+# overlays' fields and licenses, and refuse a disagreeing or overlay-less
+# manifest before they inspect any target.
+writer_bin=$agreement/bin
+mkdir -p "$writer_bin"
+printf '#!/bin/sh\necho Linux\n' > "$writer_bin/uname"
+printf '#!/bin/sh\necho 0\n' > "$writer_bin/id"
+for command_name in lsblk findmnt sfdisk blockdev udevadm mkfs.exfat mkfs.vfat blkid; do
+    # shellcheck disable=SC2016
+    printf '#!/bin/sh\nprintf "%%s\\n" "$(basename "$0") $*" >> "$TEST_COMMAND_LOG"\nexit 99\n' \
+        > "$writer_bin/$command_name"
+done
+# The writers refuse uncommitted source changes; this simulation runs from a
+# working copy, so only that comparison is answered here.
+printf '#!/bin/sh\ncase " $* " in *" diff "*) exit 0 ;; esac\nexec %s "$@"\n' "$(command -v git)" \
+    > "$writer_bin/git"
+chmod 0755 "$writer_bin"/*
+ruby "$monorepo_root/engine/world/bin/resolve-world" --output "$agreement/world.json"
+DEVICE_MEDIA_WORLD_PLAN=$agreement/world.json USB_MEDIA_CATALOG=$agreement/world-catalog.json \
+    "$repo_root/usb-media/resolve-catalog" >/dev/null
+writer_cache=$agreement/cache
+mkdir -p "$writer_cache"
+bootloader_name=$(jq -er '.bootloader.source.filename' "$agreement/world-catalog.json")
+printf 'bootloader fixture\n' > "$writer_cache/$bootloader_name"
+jq --arg digest "$(digest_of "$writer_cache/$bootloader_name")" '.bootloader.source.sha256 = $digest' \
+    "$agreement/world-catalog.json" > "$agreement/world-catalog.next"
+mv "$agreement/world-catalog.next" "$agreement/world-catalog.json"
+jq -e '[.entries[].profile_adapter] == ["dns-appliance"] and .world.overlays == ["tailscale","netbird"]' \
+    "$agreement/world-catalog.json" >/dev/null || simulation_fail "the writer World catalog is unexpected"
+cp -R "$records/both" "$agreement/no-overlays"
+cp "$agreement/no-overlays.json" "$agreement/no-overlays/build-manifest.json"
+usb_writer() {
+    world_overlays=$1
+    manifest_dir=$2
+    jq --argjson overlays "$world_overlays" '.world.overlays = $overlays' \
+        "$agreement/world-catalog.json" > "$agreement/catalog.json"
+    : > "$agreement/commands.log"
+    rm -f "$agreement/decision.json"
+    set +e
+    env PATH="$writer_bin:$PATH" TEST_COMMAND_LOG="$agreement/commands.log" \
+        USB_MEDIA_CACHE_DIR="$writer_cache" DEVICE_OS_LICENSE_DECISION_OUTPUT="$agreement/decision.json" \
+        "$repo_root/usb-media/write-usb-linux" --device /dev/not-a-device --catalog "$agreement/catalog.json" \
+        --runtime-artifact "dns-appliance=$records/inputs/dns-appliance.iso" \
+        --runtime-manifest "dns-appliance=$manifest_dir/build-manifest.json" \
+        > "$agreement/writer.out" 2> "$agreement/writer.err"
+    writer_status=$?
+    set -e
+    [ ! -s "$agreement/commands.log" ] ||
+        simulation_fail "the Ventoy writer inspected a target during $manifest_dir: $(cat "$agreement/commands.log")"
+}
+dns_writer() {
+    manifest_dir=$1
+    : > "$agreement/commands.log"
+    set +e
+    env PATH="$writer_bin:$PATH" TEST_COMMAND_LOG="$agreement/commands.log" \
+        "$repo_root/dns-image/write-usb-linux" --device /dev/not-a-device \
+        --iso "$records/inputs/dns-appliance.iso" --manifest "$manifest_dir/build-manifest.json" \
+        --registry "$manifest_dir/component-redistribution-registry.json" \
+        --sbom "$manifest_dir/sbom.spdx.json" --confirm 'ERASE /dev/not-a-device' \
+        > "$agreement/writer.out" 2> "$agreement/writer.err"
+    writer_status=$?
+    set -e
+    [ ! -s "$agreement/commands.log" ] ||
+        simulation_fail "the DNS writer inspected a target during $manifest_dir: $(cat "$agreement/commands.log")"
+}
+# An accepted manifest reaches only the block-device check of the absent target.
+for case_name in '["tailscale","netbird"]|both' '["tailscale"]|tailscale' '["netbird"]|netbird' \
+    '["netbird","tailscale"]|both'; do
+    usb_writer "${case_name%%|*}" "$records/${case_name#*|}"
+    { [ "$writer_status" -eq 2 ] && [ -s "$agreement/decision.json" ]; } ||
+        simulation_fail "the Ventoy writer refused the ${case_name#*|} manifest for World ${case_name%%|*}: $(cat "$agreement/writer.err")"
+    jq -e --arg selection "${case_name#*|}" '
+      [.selected_artifacts[] | select(.kind == "component") | .id] ==
+        (["debian-package-closure","technitium-oci"] +
+         (if $selection == "netbird" then [] else ["tailscale-archive","tailscale-dependency-report"] end) +
+         (if $selection == "tailscale" then [] else ["netbird-archive"] end) +
+         ["repository-source-snapshot"]) and
+      all(.selected_artifacts[] | select(.kind == "component"); .sha256 != null)
+    ' "$agreement/decision.json" >/dev/null ||
+        simulation_fail "the Ventoy writer did not bind the ${case_name#*|} components"
+done
+for selection in both tailscale netbird; do
+    dns_writer "$records/$selection"
+    { [ "$writer_status" -eq 2 ] && grep -q '^usage:' "$agreement/writer.err"; } ||
+        simulation_fail "the DNS writer refused the $selection manifest: $(cat "$agreement/writer.err")"
+done
+expect_usb_writer_refusal() {
+    usb_writer "$1" "$2"
+    { [ "$writer_status" -eq 1 ] && [ ! -e "$agreement/decision.json" ]; } ||
+        simulation_fail "the Ventoy writer accepted $2 for World $1"
+    grep -q -F "$3" "$agreement/writer.err" ||
+        simulation_fail "the Ventoy writer refusal for $2 is unclear: $(cat "$agreement/writer.err")"
+}
+expect_usb_writer_refusal '["tailscale","netbird"]' "$records/tailscale" \
+    'DNS image overlays (tailscale) differ from the World overlays (tailscale, netbird)'
+expect_usb_writer_refusal '["netbird"]' "$records/both" \
+    'DNS image overlays (tailscale, netbird) differ from the World overlays (netbird)'
+expect_usb_writer_refusal '["tailscale","netbird"]' "$agreement/no-overlays" 'DNS build manifest has no overlays'
+dns_writer "$agreement/no-overlays"
+{ [ "$writer_status" -eq 1 ] && grep -q 'DNS build manifest has no overlays' "$agreement/writer.err"; } ||
+    simulation_fail "the DNS writer accepted a manifest without overlays: $(cat "$agreement/writer.err")"
+# Fields of an unselected overlay are refused even when the rest agrees.
+cp -R "$records/netbird" "$agreement/stray-field"
+jq '.tailscale_version = "1.104.1"' "$records/netbird/build-manifest.json" \
+    > "$agreement/stray-field/build-manifest.json"
+expect_usb_writer_refusal '["netbird"]' "$agreement/stray-field" 'DNS build manifest distribution evidence is invalid'
+dns_writer "$agreement/stray-field"
+{ [ "$writer_status" -eq 1 ] && grep -q 'DNS distribution manifest is invalid' "$agreement/writer.err"; } ||
+    simulation_fail "the DNS writer accepted a field of an unselected overlay"
+# An SBOM must describe at least the packages of the selected overlays.
+for writer_case in usb dns; do
+    cp -R "$records/tailscale" "$agreement/short-sbom"
+    jq '.packages |= .[0:4]' "$records/tailscale/sbom.spdx.json" > "$agreement/short-sbom/sbom.spdx.json"
+    jq --arg digest "$(digest_of "$agreement/short-sbom/sbom.spdx.json")" '.sbom_sha256 = $digest' \
+        "$records/tailscale/build-manifest.json" > "$agreement/short-sbom/build-manifest.json"
+    if [ "$writer_case" = usb ]; then
+        expect_usb_writer_refusal '["tailscale"]' "$agreement/short-sbom" 'DNS SPDX SBOM is malformed'
+    else
+        dns_writer "$agreement/short-sbom"
+        { [ "$writer_status" -eq 1 ] && grep -q 'DNS SPDX SBOM is invalid' "$agreement/writer.err"; } ||
+            simulation_fail "the DNS writer accepted an SBOM without the Tailscale packages"
+    fi
+    rm -rf "$agreement/short-sbom"
+done
+
+# The DNS-ENROLL summary and the USB license texts follow the selection.
+python3 - "$repo_root/usb-media/write-usb-linux" "$repo_root/dns-image/write-usb-linux" "$agreement" <<'PY'
+import pathlib
+import re
+import sys
+
+usb_writer, dns_writer, output = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
+for label, path, names in (("usb", usb_writer, ("installer_summary", "overlay_licenses")),
+                           ("dns", dns_writer, ("installer_summary",))):
+    source = pathlib.Path(path).read_text()
+    for name in names:
+        function = re.search(rf"^{name}\(\) \{{\n.*?^\}}", source, re.M | re.S)
+        assert function, f"{path} has no {name} function"
+        (output / f"{label}-{name}.sh").write_text(
+            "set -eu\n" + function.group() + f'\n{name} "$1"\n')
+PY
+for writer_case in usb dns; do
+    for selection in both tailscale netbird; do
+        bash "$agreement/$writer_case-installer_summary.sh" "$records/$selection/build-manifest.json" \
+            > "$agreement/installer.json"
+        jq -e --slurpfile manifest "$records/$selection/build-manifest.json" '
+          . as $summary | $manifest[0] as $m |
+          (["schema_version","build_id","image_sha256","debian_point_release","technitium_version","technitium_image_digest","overlays"] +
+           [$m.overlays[] | (. + "_version"), (. + "_archive_sha256")]) as $fields |
+          (keys | sort) == ($fields | sort) and .schema_version == 1 and
+          .image_sha256 == $m.iso_sha256 and
+          all($fields[] | select(. != "schema_version" and . != "image_sha256"); . as $k | $m[$k] == $summary[$k])
+        ' "$agreement/installer.json" >/dev/null ||
+            simulation_fail "the $writer_case writer summary does not follow the $selection selection"
+    done
+done
+for case_name in "tailscale|docs/licenses/Tailscale-BSD-3-Clause.txt" \
+    "netbird|docs/licenses/NetBird-BSD-3-Clause.txt" \
+    "tailscale netbird|docs/licenses/Tailscale-BSD-3-Clause.txt docs/licenses/NetBird-BSD-3-Clause.txt"; do
+    licenses=$(bash "$agreement/usb-overlay_licenses.sh" "${case_name%%|*}" | tr '\n' ' ')
+    [ "$licenses" = "${case_name#*|} " ] ||
+        simulation_fail "the Ventoy writer licenses for ${case_name%%|*} are '$licenses'"
+done
+if bash "$agreement/usb-overlay_licenses.sh" wireguard > /dev/null 2>&1; then
+    simulation_fail "the Ventoy writer named a license for an unknown overlay"
+fi
+
 # The appliance installs exactly the embedded selection.
 finish=$overlay/finish
 make_finish_root() {

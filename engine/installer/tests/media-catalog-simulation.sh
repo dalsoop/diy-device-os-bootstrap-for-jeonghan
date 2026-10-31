@@ -250,4 +250,66 @@ printf '%s\n' "$unverified_result" | jq -e '
 ' >/dev/null ||
     fail "unverified size incorrectly produced a final capacity decision"
 
+# World build-image and burn compare the DNS build manifest's overlays with the
+# World's before any image, target or USB event is touched. Test mode keeps any
+# event record that a regression would publish inside this simulation.
+device_os=$repo_root/device-os
+world_command() {
+    env DEVICE_OS_WORLD_PLAN="$temporary/os-world.json" USB_MEDIA_CATALOG="$temporary/os-catalog.json" \
+        DEVICE_OS_TEST_MODE=1 DEVICE_OS_EVENT_OUTPUT_ROOT="$temporary/events" "$@" \
+        > "$temporary/world-command.out" 2> "$temporary/world-command.err"
+}
+printf '{"overlays":["tailscale"]}\n' > "$temporary/tailscale-manifest.json"
+printf '{"overlays":["netbird","tailscale"]}\n' > "$temporary/dual-manifest.json"
+printf '{"iso_sha256":"%s"}\n' "$dns_digest" > "$temporary/overlay-less-manifest.json"
+expect_world_refusal() {
+    expected=$1
+    shift
+    if world_command "$@"; then
+        fail "World command accepted: $*"
+    fi
+    grep -q -F "$expected" "$temporary/world-command.err" ||
+        fail "World command refusal is unclear: $(cat "$temporary/world-command.err")"
+    if grep -q -e 'usb-media build-image' -e 'write-usb-linux' -e 'USB event' "$temporary/world-command.err" ||
+        [ -e "$temporary/events" ] || [ -e "$temporary/never" ]; then
+        fail "World command reached the image builder, writer or event recorder: $*"
+    fi
+}
+mismatch='DNS image overlays (tailscale) differ from the World overlays (tailscale, netbird)'
+expect_world_refusal "$mismatch" "$device_os" world build-image \
+    --output "$temporary/never/device-os.raw" --size 1 \
+    --runtime-artifact "dns-appliance=$temporary/dns-appliance.iso" \
+    --runtime-manifest "dns-appliance=$temporary/tailscale-manifest.json"
+expect_world_refusal "$mismatch" "$device_os" world burn --device /dev/not-a-device \
+    --runtime-artifact "dns-appliance=$temporary/dns-appliance.iso" \
+    --runtime-manifest "dns-appliance=$temporary/tailscale-manifest.json" \
+    --confirm 'ERASE /dev/not-a-device NONE'
+expect_world_refusal 'DNS build manifest has no overlays' "$device_os" world burn --device /dev/not-a-device \
+    --runtime-artifact "dns-appliance=$temporary/dns-appliance.iso" \
+    --runtime-manifest "dns-appliance=$temporary/overlay-less-manifest.json" \
+    --confirm 'ERASE /dev/not-a-device NONE'
+expect_world_refusal 'requires --runtime-manifest dns-appliance=' "$device_os" world build-image \
+    --output "$temporary/never/device-os.raw" --size 1 \
+    --runtime-artifact "dns-appliance=$temporary/dns-appliance.iso"
+expect_world_refusal 'requires --runtime-manifest dns-appliance=' "$device_os" world burn \
+    --device /dev/not-a-device --confirm 'ERASE /dev/not-a-device NONE'
+
+# A matching set, in any order, and media without the DNS appliance pass to the
+# image builder, which rejects the deliberately undersized request itself.
+expect_world_pass() {
+    if world_command "$@"; then
+        fail "the undersized image request was accepted: $*"
+    fi
+    if grep -q -e 'overlay-selection' -e 'runtime-manifest' "$temporary/world-command.err" ||
+        ! grep -q 'usb-media build-image' "$temporary/world-command.err"; then
+        fail "World build-image did not pass the overlay agreement: $(cat "$temporary/world-command.err")"
+    fi
+    [ ! -e "$temporary/never" ] || fail "World build-image created an image directory"
+}
+expect_world_pass "$device_os" world build-image --output "$temporary/never/device-os.raw" --size 1 \
+    --runtime-artifact "dns-appliance=$temporary/dns-appliance.iso" \
+    --runtime-manifest "dns-appliance=$temporary/dual-manifest.json"
+expect_world_pass env DEVICE_OS_MEDIA=inventory-capture "$device_os" world build-image \
+    --output "$temporary/never/device-os.raw" --size 1
+
 echo "media catalog simulations: passed"

@@ -9,6 +9,12 @@ set -eu
 #   check FILE            accept FILE only when it holds such a selection
 #   notices FILE NOTICES  print NOTICES without the sections of overlays that
 #                         FILE does not select
+#   manifest MANIFEST     print the selection of a DNS build manifest in the
+#                         canonical order
+#   agree MANIFEST [PLAN] print the selection when the DNS build manifest's
+#                         overlays equal, as a set, those of PLAN (a World plan
+#                         or a resolved Catalog that embeds one) or, without
+#                         PLAN, of the resolved World; refuse any difference
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 monorepo_root=$(CDPATH='' cd -- "$script_dir/../../.." && pwd)
@@ -20,8 +26,54 @@ fail() {
 }
 
 usage() {
-    echo "usage: overlay-selection resolve | check FILE | notices FILE NOTICES" >&2
+    echo "usage: overlay-selection resolve | check FILE | notices FILE NOTICES | manifest MANIFEST | agree MANIFEST [PLAN]" >&2
     exit 2
+}
+
+# Print the selection held in a JSON value as a set: a non-empty array of
+# unique values from the closed set, emitted in the canonical order. The jq
+# variables are not shell expansions.
+# shellcheck disable=SC2016
+canonical_selection='
+    if type == "array" and length > 0 and
+       all(.[]; . == "tailscale" or . == "netbird") and
+       ((unique | length) == length)
+    then . as $selected | ["tailscale","netbird"][] | select(. as $overlay | $selected | index($overlay) != null)
+    else error("invalid overlay selection") end'
+
+manifest_selection() {
+    { [ -f "$1" ] && [ -r "$1" ]; } || fail "DNS build manifest is not readable: $1"
+    present=$(jq -r 'if type == "object" and has("overlays") then "yes" else "no" end' "$1" 2>/dev/null) ||
+        fail "DNS build manifest is not JSON: $1"
+    [ "$present" = yes ] || fail "DNS build manifest has no overlays; rebuild the DNS image with this checkout: $1"
+    jq -r ".overlays | $canonical_selection" "$1" 2>/dev/null ||
+        fail "DNS build manifest overlays must be a non-empty list of unique values from tailscale and netbird: $1"
+}
+
+plan_selection() {
+    [ -r "$1" ] || fail "World plan is not readable: $1"
+    jq -r "
+        if type != \"object\" then error(\"no World plan\")
+        elif has(\"overlays\") then .overlays
+        elif (.world | type) == \"object\" and (.world | has(\"media\")) then .world.overlays
+        else error(\"no World plan\") end | $canonical_selection" "$1" 2>/dev/null ||
+        fail "World overlays must be a non-empty list of unique values from tailscale and netbird: $1"
+}
+
+listing() {
+    printf '%s\n' "$1" | awk 'NR > 1 { printf ", " } { printf "%s", $0 }'
+}
+
+agree() {
+    image_selection=$(manifest_selection "$1")
+    if [ "$#" -eq 2 ]; then
+        world_selection=$(plan_selection "$2")
+    else
+        world_selection=$(resolve)
+    fi
+    [ "$image_selection" = "$world_selection" ] ||
+        fail "DNS image overlays ($(listing "$image_selection")) differ from the World overlays ($(listing "$world_selection")); rebuild the DNS image for this World"
+    printf '%s\n' "$image_selection"
 }
 
 check_file() {
@@ -112,6 +164,17 @@ case "${1:-}" in
     notices)
         [ "$#" -eq 3 ] || usage
         notices "$2" "$3"
+        ;;
+    manifest)
+        [ "$#" -eq 2 ] || usage
+        command -v jq >/dev/null 2>&1 || fail "jq is required"
+        manifest_selection "$2"
+        ;;
+    agree)
+        { [ "$#" -eq 2 ] || [ "$#" -eq 3 ]; } || usage
+        command -v jq >/dev/null 2>&1 || fail "jq is required"
+        shift
+        agree "$@"
         ;;
     *) usage ;;
 esac

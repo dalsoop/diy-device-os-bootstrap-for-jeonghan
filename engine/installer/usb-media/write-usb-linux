@@ -70,6 +70,29 @@ emit_write_evidence() {
     mv "$evidence_temporary" "$write_evidence"
 }
 
+# Repository license texts of the overlay clients the DNS image carries, one
+# path per line, for a whitespace-separated selection.
+overlay_licenses() {
+    local overlay
+    for overlay in $1; do
+        case "$overlay" in
+            tailscale) echo docs/licenses/Tailscale-BSD-3-Clause.txt ;;
+            netbird) echo docs/licenses/NetBird-BSD-3-Clause.txt ;;
+            *) return 1 ;;
+        esac
+    done
+}
+
+# The DNS-ENROLL summary names the selected overlays and carries only their
+# version and archive digest fields.
+installer_summary() {
+    jq '. as $manifest |
+      {schema_version:1,build_id,image_sha256:.iso_sha256,debian_point_release,
+       technitium_version,technitium_image_digest,overlays} +
+      reduce ($manifest.overlays[] | (. + "_version"), (. + "_archive_sha256")) as $field
+        ({}; .[$field] = $manifest[$field])' "$1"
+}
+
 assignment_parts() {
     value=$1
     case "$value" in
@@ -141,8 +164,7 @@ git -C "$monorepo_root" diff --quiet -- ||
     fail "tracked source changes are not committed"
 git -C "$monorepo_root" diff --cached --quiet -- ||
     fail "staged source changes are not committed"
-for legal_file in LICENSE docs/licenses/LICENSE_HISTORY.md docs/licenses/THIRD_PARTY_NOTICES.md \
-    docs/licenses/Tailscale-BSD-3-Clause.txt; do
+for legal_file in LICENSE docs/licenses/LICENSE_HISTORY.md docs/licenses/THIRD_PARTY_NOTICES.md; do
     [ -r "$monorepo_root/$legal_file" ] || fail "missing legal file: $legal_file"
 done
 
@@ -160,6 +182,7 @@ printf '%s  %s\n' "$bootloader_sha256" "$bootloader_file" | sha256sum -c - >/dev
 
 required_bytes=0
 dns_manifest=
+overlay_license_files=
 while IFS= read -r entry; do
     id=$(jq -er '.id' <<<"$entry")
     kind=$(jq -er '.source.kind' <<<"$entry")
@@ -186,6 +209,16 @@ while IFS= read -r entry; do
             staged_manifests["$id"]=$manifest
             if [ "$adapter" = dns-appliance ]; then
                 dns_manifest=$manifest
+                # A World's media carries only a DNS image built for that
+                # World's overlays; the refusal precedes any target inspection.
+                dns_overlays=$("$repo_root/dns-image/overlay-selection" manifest "$manifest") ||
+                    fail "DNS build manifest has no valid overlay selection"
+                if jq -e 'has("world")' "$catalog" >/dev/null; then
+                    "$repo_root/dns-image/overlay-selection" agree "$manifest" "$catalog" >/dev/null ||
+                        fail "DNS image and World overlays differ"
+                fi
+                overlay_license_files=$(overlay_licenses "$dns_overlays") ||
+                    fail "DNS build manifest selects an unknown overlay"
                 companion_dir=$(dirname -- "$manifest")
                 registry=$companion_dir/$(jq -er '.source.component_registry_filename' <<<"$entry")
                 sbom=$companion_dir/$(jq -er '.source.sbom_filename' <<<"$entry")
@@ -201,16 +234,39 @@ while IFS= read -r entry; do
                     --arg policy_digest "$dns_policy_digest" \
                     --slurpfile registry "$registry" '
                   def exact_keys($expected): (keys | sort) == ($expected | sort);
-                  ["schema_version","artifact_id","build_id","install_mode","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","tailscale_version","tailscale_archive_sha256","source_revision","source_repository","source_archive"] as $fields |
+                  def selected($overlay): (.overlays | index($overlay)) != null;
+                  def canonical_selection:
+                    type == "array" and length > 0 and
+                    (. as $s | $s == [("tailscale","netbird") | select(. as $o | $s | index($o) != null)]);
+                  if (.overlays | canonical_selection) | not then false else
+                  (["schema_version","artifact_id","build_id","install_mode","iso","iso_sha256","distribution_status","component_registry","component_registry_sha256","distribution_policy_sha256","overlays","components","sbom","sbom_sha256","debian_point_release","debian_snapshot","technitium_version","technitium_image_digest","technitium_archive_sha256","source_revision","source_repository","source_archive"] +
+                   (if selected("tailscale") then ["tailscale_version","tailscale_archive_sha256"] else [] end) +
+                   (if selected("netbird") then ["netbird_version","netbird_archive_sha256"] else [] end)) as $fields |
+                  (["debian-package-closure","technitium-oci"] +
+                   (if selected("tailscale") then ["tailscale-archive","tailscale-dependency-report"] else [] end) +
+                   (if selected("netbird") then ["netbird-archive"] else [] end) +
+                   ["repository-source-snapshot"]) as $component_ids |
                   exact_keys($fields) and .schema_version == 1 and .artifact_id == "dns-appliance" and
                   (.distribution_status == "personal-use-only" or .distribution_status == "redistribution-reviewed") and
                   .component_registry == "component-redistribution-registry.json" and
                   .component_registry_sha256 == $registry_digest and
                   .distribution_policy_sha256 == $policy_digest and
+                  [.components[].id] == $component_ids and
                   .components == ($registry[0].components | map({id,status:.redistribution.status})) and
                   .sbom == "sbom.spdx.json" and .sbom_sha256 == $sbom_digest
+                  end
                 ' "$manifest" >/dev/null || fail "DNS build manifest distribution evidence is invalid"
-                jq -e '.spdxVersion == "SPDX-2.3" and .dataLicense == "CC0-1.0" and (.packages | type == "array" and length >= 5)' \
+                # The SBOM describes the Debian closure, Technitium, the
+                # project, and two Tailscale or one NetBird package.
+                sbom_minimum=3
+                for overlay in $dns_overlays; do
+                    case "$overlay" in
+                        tailscale) sbom_minimum=$((sbom_minimum + 2)) ;;
+                        netbird) sbom_minimum=$((sbom_minimum + 1)) ;;
+                    esac
+                done
+                jq -e --argjson minimum "$sbom_minimum" \
+                    '.spdxVersion == "SPDX-2.3" and .dataLicense == "CC0-1.0" and (.packages | type == "array" and length >= $minimum)' \
                     "$sbom" >/dev/null || fail "DNS SPDX SBOM is malformed"
                 manifest_status=$(jq -er '.distribution_status' "$manifest")
                 [ "$(jq -er '.redistribution.status' <<<"$entry")" = "$manifest_status" ] ||
@@ -259,6 +315,9 @@ for supplied_id in "${!runtime_artifacts[@]}" "${!runtime_manifests[@]}"; do
 done
 if [ -n "$dns_manifest" ]; then
     [ "$reserve_mib" -ge 512 ] || fail "dns-appliance requires at least 512 MiB enrollment reserve"
+    for legal_file in $overlay_license_files; do
+        [ -r "$monorepo_root/$legal_file" ] || fail "missing legal file: $legal_file"
+    done
 else
     [ "$reserve_mib" -eq 0 ] || fail "enrollment reserve must be zero when dns-appliance is not selected"
 fi
@@ -449,8 +508,9 @@ install -m 0644 "$monorepo_root/docs/licenses/LICENSE_HISTORY.md" \
     "$mount_dir/licenses/LICENSE_HISTORY.md"
 install -m 0644 "$monorepo_root/docs/licenses/THIRD_PARTY_NOTICES.md" \
     "$mount_dir/licenses/THIRD_PARTY_NOTICES.md"
-install -m 0644 "$monorepo_root/docs/licenses/Tailscale-BSD-3-Clause.txt" \
-    "$mount_dir/licenses/Tailscale-BSD-3-Clause.txt"
+for legal_file in $overlay_license_files; do
+    install -m 0644 "$monorepo_root/$legal_file" "$mount_dir/licenses/$(basename -- "$legal_file")"
+done
 install -m 0644 "$script_dir/distribution-policy.json" \
     "$mount_dir/licenses/distribution-policy.json"
 install -m 0644 "$distribution_record" "$mount_dir/licenses/DISTRIBUTION.json"
@@ -551,8 +611,7 @@ umount "$mount_dir"
 if [ -n "$dns_manifest" ]; then
     mount -o nodev,nosuid,noexec,umask=0077 "$enroll_partition" "$enroll_dir"
     install -d -m 0700 "$enroll_dir/records" "$enroll_dir/reinstall"
-    jq '{schema_version:1,build_id:.build_id,image_sha256:.iso_sha256,debian_point_release,technitium_version,technitium_image_digest,tailscale_version,tailscale_archive_sha256}' \
-        "$dns_manifest" > "$enroll_dir/installer.json"
+    installer_summary "$dns_manifest" > "$enroll_dir/installer.json"
     enrollment_digest=$(sha256sum "$enroll_dir/installer.json" | awk '{print $1}')
     sync -f "$enroll_dir"
     umount "$enroll_dir"

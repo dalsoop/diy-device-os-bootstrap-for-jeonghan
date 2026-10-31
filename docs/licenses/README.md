@@ -21,8 +21,9 @@ The DNS image build copies the project license, the license history and the
 notices into every image, and the license text of an overlay client only when
 the World selects that overlay; it fails when a required file is missing. The
 image installs them under the same file names in
-`/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/`, and the USB writers
-copy them into `licenses/`. When adding or renaming a file here, update
+`/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/`, and the Ventoy USB
+writer copies them into `licenses/`, an overlay client's license text only
+when the DNS image selects that overlay. When adding or renaming a file here, update
 `engine/installer/dns-image/build-image`, `engine/installer/usb-media/write-usb-linux`,
 the `contracts` workflow and `engine/installer/tests/repository-contract.sh`
 together.

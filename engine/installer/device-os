@@ -111,6 +111,31 @@ resolve_world() {
     DEVICE_MEDIA_WORLD_PLAN=$world_plan "$repo_root/usb-media/resolve-catalog" >/dev/null
 }
 
+# A World's media carries only a DNS image built for that World's overlays.
+# Compare them before any image is assembled, target inspected, or USB event
+# opened; the writers repeat the comparison themselves.
+check_world_overlays() {
+    world_action=$1
+    shift
+    dns_id=$(jq -r 'first(.entries[] | select(.profile_adapter == "dns-appliance") | .id) // empty' "$resolved")
+    [ -n "$dns_id" ] || return 0
+    dns_manifest=
+    while [ "$#" -gt 0 ]; do
+        if [ "$1" = --runtime-manifest ] && [ "$#" -ge 2 ]; then
+            case "$2" in
+                "$dns_id="*)
+                    [ -z "$dns_manifest" ] || fail "duplicate --runtime-manifest $dns_id"
+                    dns_manifest=${2#"$dns_id="}
+                    ;;
+            esac
+        fi
+        shift
+    done
+    [ -n "$dns_manifest" ] ||
+        fail "world $world_action requires --runtime-manifest $dns_id=/absolute/path/build-manifest.json"
+    "$repo_root/dns-image/overlay-selection" agree "$dns_manifest" "$world_plan" >/dev/null || exit 1
+}
+
 print_plan() {
     echo "DIY Device OS USB for Jeonghan contents"
     echo
@@ -282,11 +307,13 @@ case "$command" in
             build-image)
                 shift
                 resolve_world
+                check_world_overlays build-image "$@"
                 USB_MEDIA_CATALOG=$resolved exec "$repo_root/usb-media/build-image" "$@"
                 ;;
             burn)
                 shift
                 resolve_world
+                check_world_overlays burn "$@"
                 target_device=$(option_value --device "$@") || fail "world burn requires --device"
                 USB_MEDIA_CATALOG=$resolved exec "$event_recorder" \
                     --world-plan "$world_plan" \

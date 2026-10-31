@@ -89,6 +89,14 @@ tests in the Installer.
   capacity, and exact `ERASE <device> <serial>` confirmation.
 - The macOS writer additionally binds confirmation to media name and exact byte
   size: `ERASE <device> <media-name> <serial> <bytes>`.
+- When the World's media contains the DNS appliance, `world build-image` and
+  `world burn` require its build manifest and refuse it unless its `overlays`
+  equal the World's as a set; the Linux writer repeats the comparison for a
+  World Catalog. Both refusals precede any image assembly or target
+  inspection. A manifest without `overlays` is refused.
+- `world burn-image-macos` writes only an image whose manifest binds the
+  current resolved Catalog digest. That Catalog embeds the World plan, so an
+  overlay change after `world build-image` makes the writer refuse the image.
 - Repository-file and repository-tree bundles reject every symlink before
   staging so a checkout path cannot escape into host files.
 - Generated media and caches remain outside Git.
@@ -110,14 +118,15 @@ DEVICE-OS/                     exFAT label used by Ventoy's bundled formatter
 │   ├── DIY-DEVICE-OS-BOOTSTRAP-FOR-JEONGHAN-GPL-3.0.txt
 │   ├── LICENSE_HISTORY.md
 │   ├── THIRD_PARTY_NOTICES.md
-│   ├── Tailscale-BSD-3-Clause.txt
+│   ├── Tailscale-BSD-3-Clause.txt   only when the DNS image selects Tailscale
+│   ├── NetBird-BSD-3-Clause.txt     only when the DNS image selects NetBird
 │   └── SOURCE.md
 ├── ventoy/ventoy.json
 ├── README_KO.txt
 └── README_EN.txt
 
 DNS-ENROLL/                 FAT32, present only with the DNS profile
-├── installer.json
+├── installer.json          build, image digest, overlays and only their fields
 ├── records/
 └── reinstall/
 ```

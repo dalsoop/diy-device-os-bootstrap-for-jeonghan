@@ -6,7 +6,13 @@ This directory contains the first implementation of the Debian OS installer:
   Tailscale static archive.
 - `build-image` builds an offline amd64 image and release evidence on Debian 13.
 - `write-usb-linux` writes the verified ISO and appends `DNS-ENROLL` after an
-  exact destructive confirmation.
+  exact destructive confirmation. It accepts only a build manifest whose
+  `overlays`, overlay fields, components and SBOM agree, and its
+  `installer.json` summary names the selected overlays with only their fields.
+- `overlay-selection` resolves the World's overlay selection and compares it, as
+  a set, with a build manifest's `overlays`. `check-readiness` reports any
+  difference as a blocker, and `./device-os world build-image` and
+  `world burn` refuse it before any image, target or USB event is touched.
 - `capture-inventory` hashes the exact identity of one HP PC, NIC, and disk.
 - `inventory-wizard` (`tools/dns-inventory` on the USB) asks for the role,
   wired interface, and internal disk by number, offers only install-gate

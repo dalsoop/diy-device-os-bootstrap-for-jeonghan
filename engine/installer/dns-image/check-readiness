@@ -128,6 +128,18 @@ if [ -r "$manifest" ]; then
     else
         block "DNS build manifest does not resolve to a readable ISO"
     fi
+    # The built image is usable only with the World it was built for. An
+    # unresolvable World is already a blocker above.
+    if [ -n "${overlays:-}" ]; then
+        agreement_error=$(mktemp)
+        if agreement=$("$script_dir/overlay-selection" agree "$manifest" 2> "$agreement_error"); then
+            pass "DNS image overlays match the World ($(printf '%s\n' "$agreement" | paste -sd, - | sed 's/,/, /g'))"
+        else
+            reason=$(sed -n 's/^overlay-selection: //p' "$agreement_error" | sed -n '1p')
+            block "${reason:-DNS image overlays cannot be compared with the World}"
+        fi
+        rm -f "$agreement_error"
+    fi
 else
     block "DNS installer ISO and build manifest have not been built"
 fi

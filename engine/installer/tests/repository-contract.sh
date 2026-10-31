@@ -73,6 +73,39 @@ fi
 
 "$repo_root/build/verify-locks" >/dev/null
 
+# Every Simple-CDD mirror must name the locked Debian snapshot. A temporary
+# copy of the lock verifier must accept the reviewed files and reject each
+# mirror that names another timestamp or is missing.
+locks_copy=$(mktemp -d)
+trap 'rm -rf "$locks_copy"' EXIT HUP INT TERM
+mkdir -p "$locks_copy/build/locks" "$locks_copy/dns-image/simple-cdd"
+cp -p "$repo_root/build/verify-locks" "$repo_root/build/distribution-policy.json" \
+    "$locks_copy/build/"
+cp -p "$repo_root/build/locks/sources.env" "$locks_copy/build/locks/"
+simple_cdd_copy=$locks_copy/dns-image/simple-cdd/simple-cdd.conf
+cp -p "$repo_root/dns-image/simple-cdd/simple-cdd.conf" "$simple_cdd_copy"
+"$locks_copy/build/verify-locks" >/dev/null
+for mirror in debian_mirror security_mirror updates_mirror; do
+    sed "s#^\\($mirror=\"https://snapshot\\.debian\\.org/archive/[a-z-]*/\\)[0-9]*T[0-9]*Z/\"\$#\\119990101T000000Z/\"#" \
+        "$repo_root/dns-image/simple-cdd/simple-cdd.conf" > "$simple_cdd_copy"
+    grep -q "^$mirror=\"https://snapshot\\.debian\\.org/archive/[a-z-]*/19990101T000000Z/\"\$" \
+        "$simple_cdd_copy" || {
+        echo "repository-contract: cannot prepare the $mirror mismatch fixture" >&2
+        exit 1
+    }
+    if "$locks_copy/build/verify-locks" >/dev/null 2>&1; then
+        echo "repository-contract: verify-locks accepted a $mirror that differs from DEBIAN_SNAPSHOT" >&2
+        exit 1
+    fi
+    grep -v "^$mirror=" "$repo_root/dns-image/simple-cdd/simple-cdd.conf" > "$simple_cdd_copy" || true
+    if "$locks_copy/build/verify-locks" >/dev/null 2>&1; then
+        echo "repository-contract: verify-locks accepted a missing $mirror" >&2
+        exit 1
+    fi
+done
+rm -rf "$locks_copy"
+trap - EXIT HUP INT TERM
+
 for file in \
     engine/installer/dns-image/payload/dns-appliance-firstboot \
     engine/installer/dns-image/payload/dns-appliance-health \

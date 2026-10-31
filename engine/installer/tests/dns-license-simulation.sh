@@ -46,7 +46,7 @@ jq -n '{
       schema_version: 1,
       artifact_id: "dns-appliance",
       components: [
-        {id:"debian-package-closure",version:"13.7.0@20261011T000000Z",digest:{algorithm:"sha256",value:("a"*64)},redistribution:{status:"personal-use-only"}},
+        {id:"debian-package-closure",version:"13.7.0@20261031T143759Z",digest:{algorithm:"sha256",value:("a"*64)},redistribution:{status:"personal-use-only"}},
         {id:"technitium-oci",version:"15.6.1",digest:{algorithm:"sha256",value:("b"*64)},source_identity:{kind:"oci-digest",value:("sha256:"+("1"*64))},redistribution:{status:"personal-use-only"}},
         {id:"tailscale-archive",version:"1.104.1",digest:{algorithm:"sha256",value:("c"*64)},redistribution:{status:"personal-use-only"}},
         {id:"tailscale-dependency-report",version:"1.104.1",digest:{algorithm:"sha256",value:("d"*64)},redistribution:{status:"personal-use-only"}},
@@ -219,7 +219,7 @@ jq -n \
       sbom: "sbom.spdx.json",
       sbom_sha256: $sbom_sha256,
       debian_point_release: "13.7.0",
-      debian_snapshot: "20261011T000000Z",
+      debian_snapshot: "20261031T143759Z",
       technitium_version: "15.6.1",
       technitium_image_digest: ("sha256:"+("1"*64)),
       technitium_archive_sha256: ("b"*64),

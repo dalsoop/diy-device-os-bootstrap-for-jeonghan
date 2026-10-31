@@ -12,8 +12,11 @@ policy.
 - Never expose USB burn, internal-disk installation, restore, reinstall
   authorization, enrollment, arbitrary shell, arbitrary path, or arbitrary URL
   tools.
-- Keep stdio as the only transport. Remote access is ordinary SSH constrained
-  to a Tailscale interface and a forced command on the management host.
+- Keep stdio as the only transport. Remote access is ordinary SSH over an
+  overlay (Tailscale or NetBird), constrained to a forced command on the
+  management host.
+- Address DNS nodes by role name; the management host's resolver decides which
+  overlay or LAN path a name takes.
 - Do not run an MCP listener or long-lived gateway on a DNS appliance.
 
 ## Credentials and output
@@ -21,8 +24,9 @@ policy.
 - Accept only paths to role-specific token files. Never accept token values as
   tool arguments or environment values.
 - Forward an explicit environment allowlist to child processes.
-- Accept a management-host Tailscale executable override only as an absolute,
-  executable path fixed by the host administrator; never as a tool argument.
+- Accept management-host Tailscale and NetBird executable overrides only as
+  absolute, executable paths fixed by the host administrator; never as tool
+  arguments.
 - Keep DNS reader, planner, and applier credentials separate.
 - Require a readable trusted Technitium CA file before permitting an apply call;
   the discoverable tool rejects execution without it.
@@ -38,6 +42,7 @@ policy.
 
 - Pin every Python dependency exactly in `requirements.lock`.
 - Test the MCP tool inventory, command allowlist, environment allowlist,
-  invalid-input rejection, default-disabled writes, and delegated apply gate.
+  invalid-input rejection, default-disabled writes, delegated apply gate, and
+  `tunnel_status` with both, one, or neither overlay CLI present.
 - A passing simulation proves only the gateway contract. It does not prove
-  Tailscale reachability, DNS API access, USB creation, or physical deployment.
+  overlay reachability, DNS API access, USB creation, or physical deployment.

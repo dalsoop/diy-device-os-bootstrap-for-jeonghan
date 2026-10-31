@@ -17,7 +17,7 @@ diy-device-os-bootstrap-for-jeonghan/
 ├── burn-history/                     ← everything the user decides, keeps private, or looks back on
 │   ├── README.md                     ← user guide
 │   ├── .paths.yaml                   ← World playbook: registered data paths read by the World tools
-│   ├── home.yaml                     ← home: networks, computers, services, media, policies (you edit)
+│   ├── home.yaml                     ← home: networks, computers, services, media, overlays, policies (you edit)
 │   ├── dns-records.zone              ← reviewed DNS zone
 │   ├── os-installs/<role>/           ← os.conf guided profile (tracked); hardware.conf real capture (ignored)
 │   ├── keys/                         ← operator SSH public key and age recipient (ignored except README.md)
@@ -26,10 +26,10 @@ diy-device-os-bootstrap-for-jeonghan/
 ├── engine/
 │   ├── installer/
 │   │   ├── AGENTS.md                 ← execution, media assembly, and destructive gates
-│   │   ├── dns-image/AGENTS.md       ← guarded offline DNS image and first boot
+│   │   ├── dns-image/AGENTS.md       ← guarded offline DNS image, first boot, and unattended updates
 │   │   ├── usb-media/AGENTS.md       ← resolution, capacity, download, and USB writers
 │   │   ├── management/
-│   │   │   ├── AGENTS.md             ← post-install DNS, backup, restore, and Tailscale operations
+│   │   │   ├── AGENTS.md             ← post-install DNS, backup, restore, Tailscale and NetBird enrollment
 │   │   │   └── dns-appliance-status-monitor/
 │   │   │       └── AGENTS.md         ← dependency-free read-only status page
 │   │   ├── build/AGENTS.md           ← immutable external build locks

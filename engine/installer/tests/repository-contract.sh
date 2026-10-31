@@ -111,6 +111,7 @@ for file in \
     engine/installer/dns-image/payload/dns-appliance-health \
     engine/installer/dns-image/payload/dns-appliance-backup \
     engine/installer/dns-image/payload/dns-appliance-technitium-run \
+    engine/installer/dns-image/payload/dns-appliance-reboot \
     engine/installer/dns-image/fetch-locked-sources \
     engine/installer/dns-image/overlay-selection \
     engine/installer/dns-image/render-build-records \
@@ -124,6 +125,7 @@ for file in \
     engine/installer/management/import-enrollment \
     engine/installer/management/collect-backups \
     engine/installer/management/tailscale-enroll \
+    engine/installer/management/netbird-enroll \
     engine/agent/run \
     engine/agent/server.py \
     engine/agent/tests/gateway_simulation.py \
@@ -150,6 +152,9 @@ for file in \
     engine/installer/tests/macos-writer-simulation.sh \
     engine/installer/tests/management-simulation.sh \
     engine/installer/tests/status-monitor-simulation.sh \
+    engine/installer/tests/tailscale-enrollment-simulation.sh \
+    engine/installer/tests/netbird-enrollment-simulation.sh \
+    engine/installer/tests/appliance-update-simulation.sh \
     engine/installer/tests/documentation-check-simulation.sh \
     engine/world/bin/resolve-world \
     engine/world/bin/record-usb-event \
@@ -181,6 +186,7 @@ for required in \
     burn-history/os-installs/dns03/os.conf \
     burn-history/keys/README.md \
     engine/installer/management/tailscale-policy.example.hujson \
+    engine/installer/management/netbird-policy.example.json \
     engine/installer/usb-media/composition.json \
     engine/installer/usb-media/distribution-policy.json \
     engine/installer/usb-media/local-entries/dns-appliance.json \
@@ -195,6 +201,9 @@ for required in \
     engine/agent/README.md \
     engine/agent/requirements.lock \
     engine/agent/tailscale-policy.example.hujson \
+    engine/agent/netbird-policy.example.json \
+    docs/tracking/decisions/0013-select-overlays-per-world.md \
+    docs/tracking/decisions/0014-unattended-upgrades-with-guarded-reboots.md \
     burn-history/.paths.yaml \
     burn-history/home.yaml \
     burn-history/logs/usb/README.md \
@@ -325,6 +334,9 @@ for contract in \
     tests/dns-license-simulation.sh \
     tests/license-policy-simulation.sh \
     tests/documentation-check-simulation.sh \
+    tests/netbird-enrollment-simulation.sh \
+    tests/status-monitor-simulation.sh \
+    tests/appliance-update-simulation.sh \
     engine/world/schemas/usb-event.schema.json \
     engine/world/schemas/usb-verification.schema.json \
     burn-history/logs/usb/failed; do

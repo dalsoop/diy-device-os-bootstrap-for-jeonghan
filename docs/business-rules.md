@@ -4,7 +4,7 @@
 
 `jeonghan-home` is the single mutable World for Jeonghan's home infrastructure. DNS is its first deployed service, not a repository or World boundary. Adding Proxmox, TrueNAS, desktops, storage, switches, or later services extends this World; it must not create a product-specific repository merely because a new device role appears.
 
-A World draft expresses desired assets, networks, nodes, services, media, and policy. It may select only declared Catalog entries or reviewed Installer-local profiles. An unknown ID, duplicate ID, unresolved reference, duplicate static address, unreachable gateway, or policy weaker than the resolver accepts makes the World invalid; the system must not guess or silently drop the item.
+A World draft expresses desired assets, networks, nodes, services, media, management overlays, and policy. It may select only declared Catalog entries or reviewed Installer-local profiles. An unknown ID, duplicate ID, unresolved reference, duplicate static address, unreachable gateway, missing or invalid overlay selection, or policy weaker than the resolver accepts makes the World invalid; the system must not guess or silently drop the item.
 
 World intent is declarative. Selecting media or enabling a role does not authorize a USB or internal disk write; live target inspection and exact confirmation remain separate decisions at execution time.
 
@@ -47,11 +47,15 @@ Real inventory must be captured on each target and remains outside Git. An examp
 
 An installation may proceed only when exactly one enabled role matches the current HP identity, NIC, and internal disk. Zero matches, multiple matches, a removable disk, installer media, unresolved mapper ancestry, a mounted candidate, or identity mismatch stops before partitioning. A role with an active completed generation additionally requires reinstall authorization bound to that generation and system UUID hash.
 
+The World selects the management overlays, Tailscale, NetBird, or both; there is no default. A DNS image carries only the selected overlay clients and is usable only with a World whose selection equals the image's; a different selection requires a rebuilt image. Overlay enrollment is a management-host action after installation, one node at a time, with single-use keys. The NetBird account uses the network range `10.78.0.0/16` and has its all-to-all `Default` policy removed or disabled before the first appliance enrolls. A reinstalled node is re-enrolled only after the stale peer with the same role name is removed by hand from each overlay, because a duplicate name yields a renamed peer that breaks access by role name.
+
+Installed nodes keep themselves patched from the Debian archive (point release and security). Each role installs updates at its fixed time (dns01 02:00, dns02 02:30, dns03 03:00 `Asia/Seoul`) and may reboot one hour later (dns01 03:00, dns02 03:30, dns03 04:00) only when a reboot is required and every peer that has ever answered DNS still answers; otherwise the reboot is skipped, logged, and counted, and the next attempt is the next night. A missed time is not caught up after downtime. Overlay clients and Technitium are not updated this way; they change only through a reviewed lock update and image rebuild.
+
 Cluster formation follows three healthy standalone nodes. DNS desired-state changes apply one logical zone operation at a time and require a passing UDP and TCP canary before the next operation. Router DHCP advertises all three resolvers only after cluster and rollback checks; on cutover failure, previous DHCP DNS values are restored before appliance investigation.
 
 ## Evidence and release state
 
-Source validation, image build, VM boot, physical USB write, firmware boot, OS installation, Tailscale enrollment, cluster formation, backup restore, and router cutover are distinct states. Evidence for one state never completes a later state.
+Source validation, image build, VM boot, physical USB write, firmware boot, OS installation, Tailscale or NetBird enrollment, cluster formation, backup restore, and router cutover are distinct states. Evidence for one state never completes a later state.
 
 A release candidate consists of exact source identities, source locks, manifests, checksums, package closure, SBOM, and observed gate results. Building it does not authorize publication, burning, or installation. If physical, network, or license evidence is incomplete, the candidate remains explicitly unqualified and generated images must not be represented as a finished release.
 

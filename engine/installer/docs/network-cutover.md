@@ -7,8 +7,26 @@ therefore be `10.77.0.1/16` (`255.255.0.0`) or provide an explicit routed path t
 `10.77.5.0/24`. A factory-default `/24` router configuration does not satisfy
 this design.
 
-Before changing the router, retain a wired management client and a documented
-way to restore its previous LAN address and mask. Record the old DHCP DNS values.
+## Move the router to `10.77.0.1/16`
+
+Moving the router's LAN interface to `10.77.0.1/16` is a manual operator step.
+Router mutation stays outside every repository command and the agent gateway,
+because router interfaces and firmware differ and no reviewed, authenticated,
+reversible mechanism exists.
+
+1. Before changing the router, retain a wired management client and a
+   documented way to restore the router's previous LAN address and mask. Record
+   the old router values, including DHCP range, reservations, and DHCP DNS.
+2. From the router's own administration interface, set the LAN address to
+   `10.77.0.1` with mask `255.255.0.0` and a DHCP range inside `10.77.0.0/16`
+   that excludes `10.77.5.1` through `10.77.5.3`. Do not change DHCP DNS.
+3. Give the wired management client an address in `10.77.0.0/24`
+   (`management_cidr`), renew one test lease, and reach the router at
+   `10.77.0.1`.
+4. Run the static check below. It must show the router reachable now, and
+   each node reachable once it is installed, before any DHCP DNS change. If the
+   router is unreachable, restore the old router values from the wired client.
+
 Run the static check from the management machine:
 
 ```sh
@@ -20,8 +38,9 @@ outbound IP connectivity, DNS resolution, and HTTPS to a fixed public endpoint.
 This distinguishes a valid local address plan from working Internet access.
 Use `--json` for automation or `--offline` only when the check must avoid
 external traffic. Internet is required while preparing public images and
-enrolling Tailscale, but not while booting the already-built offline DNS
-installer. DNS service health remains a separate cutover gate.
+enrolling Tailscale or NetBird, and installed nodes use it for unattended
+Debian updates, but it is not required while booting the already-built offline
+DNS installer. DNS service health remains a separate cutover gate.
 
 ## Cabling
 
@@ -32,7 +51,7 @@ installed.
 
 ## Ordered cutover
 
-1. Confirm the router LAN mask is `/16`; do not change DHCP DNS yet.
+1. Confirm the router LAN is `10.77.0.1/16`; do not change DHCP DNS yet.
 2. Install and verify `dns01`, then `dns02`, then `dns03` one at a time.
 3. Bootstrap the Technitium cluster and import `home.arpa`.
 4. From two independent clients, query every node over UDP and TCP:

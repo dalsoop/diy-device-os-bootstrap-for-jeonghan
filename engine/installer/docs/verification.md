@@ -20,23 +20,40 @@ evidence.
   firewall's Tailscale source-address guard.
 - `tests/tailscale-enrollment-simulation.sh` passes without printing either
   OAuth or auth-key material.
+- `tests/netbird-enrollment-simulation.sh` passes every success, refusal, and
+  verification case, including unconfirmed setup-key deletion, without the
+  token or any setup key reaching command arguments or output.
+- `tests/appliance-update-simulation.sh` passes the reboot decision cases
+  (no reboot required, seen peers up, never-seen peer down, seen peer down,
+  both down, persistence, metrics) and the rendered per-role timers.
+- `tests/status-monitor-simulation.sh` passes name resolution, reboot metrics,
+  GET-only access, highlighting, and configuration rejection cases.
+- `tests/image-builder-simulation.sh` passes the Tailscale-only, NetBird-only,
+  and dual overlay selections, World/image agreement, and both Linux writers'
+  manifest checks.
 - `tests/media-catalog-simulation.sh` rejects duplicate identities, unknown
   strategies/adapters, path traversal, and invalid digests, then proves that a
   new standard ISO reaches the Ventoy menu through catalog data alone.
 - `tests/repository-contract.sh` passes.
 - ShellCheck reports no errors.
 - GitHub CI passes on the exact commit to be built.
-- `build/verify-locks` passes and the fetched OCI manifest matches the amd64
-  digest.
+- `build/verify-locks` passes, including the Simple-CDD mirror timestamps equal
+  to `DEBIAN_SNAPSHOT` and the NetBird pin, and the fetched OCI manifest
+  matches the amd64 digest.
 
 ## Build gates
 
 - Build on an amd64 Debian 13.7 host with Simple-CDD 0.6.9.
 - Build twice from clean ignored directories and compare ISO, package closure,
   manifest, and SBOM.
+- Confirm that the package closure carries `linux-image-amd64` 6.12.113-1 or
+  later and `unattended-upgrades`.
+- Confirm that the manifest's `overlays` equal the World's and that the ISO
+  carries only the selected overlay clients and license texts.
 - Verify the ISO checksum before and after USB writing.
 - Inspect BIOS and UEFI boot files; verify signed Secure Boot components.
-- Verify the embedded Tailscale archive SHA-256 and installed client version.
+- Verify the embedded Tailscale and NetBird archive SHA-256 values and the
+  installed client versions.
 
 ## Virtual-machine gates
 
@@ -67,6 +84,16 @@ evidence.
 - Enroll with a one-off tagged Tailscale key, verify `accept-dns=false`, no
   routes/exit-node/Serve/Funnel/SSH, management-port ACLs, `tailscale ping`, and
   keyless reconnection after reboot.
+- With the NetBird range `10.78.0.0/16` and the `Default` policy removed,
+  enroll with `netbird-enroll`, verify the reported settings, that the setup
+  key is gone from the dashboard, that only the admin group reaches the
+  management ports over `wt0`, and reconnection after reboot. Inspect
+  `nft list ruleset` and record every rule the overlay clients added.
+- Confirm `apt-daily-upgrade.timer` and `dns-appliance-reboot.timer` at the
+  role's times, an unattended upgrade run against the Debian archive, a
+  guarded reboot with peers answering, and a skipped reboot (journal entry,
+  `dns_appliance_reboot_*` metrics, and status-monitor highlight) while a seen
+  peer is stopped.
 
 ## Selected Device OS USB gates
 
@@ -84,8 +111,9 @@ evidence.
 - If Proxmox VE, Proxmox Backup Server, TrueNAS SCALE, or Pop!_OS is selected in
   a future generation, qualify that exact release on disposable media and prove
   it remains interactive before production use.
-- Run the bundled DNS appliance status monitor and confirm it reports DNS UDP,
-  DNS TCP, Cockpit, Technitium, and metrics for all three nodes.
+- Run the bundled DNS appliance status monitor and confirm it resolves
+  `dns01` through `dns03` without the DNS cluster and reports DNS UDP, DNS TCP,
+  Cockpit, Technitium, metrics, and reboot state for all three nodes.
 - On `dns-install`, verify `DNS-ENROLL` survives boot and accepts only the DNS
   appliance's encrypted enrollment output. `inventory-capture` reserves no DNS
   enrollment partition.

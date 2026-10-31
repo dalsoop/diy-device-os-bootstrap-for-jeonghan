@@ -18,8 +18,21 @@ first-boot enrollment.
 - Write secrets to USB only inside an age-encrypted archive. Validate public
   output, write temporary files, atomically rename, synchronize, and only then
   mark completion.
-- Tailscale is installed offline but remains unenrolled until the management
-  host supplies a one-off key.
+- Only the overlay clients that the resolved World selects (Tailscale, NetBird,
+  or both) are fetched, embedded, installed, and enabled. Obtain the selection
+  through `overlay-selection`; the embedded `overlays` file and the build
+  manifest record it, and `render-build-records` emits the conditional
+  registry, manifest, and SBOM. An installed client remains unenrolled until
+  the management host supplies a one-off key.
+- The NetBird unit mirrors what `netbird service install` writes for the pinned
+  client (socket `/var/run/netbird.sock`, profile under `/var/lib/netbird/`,
+  logs under `/var/log/netbird/`). Re-read the pinned client source before
+  changing it or the pin.
+- Installed nodes take Debian point-release and security updates unattended at
+  fixed per-role times and reboot only through `dns-appliance-reboot`, which
+  skips the window while any seen peer fails to answer DNS. Keep install one
+  hour before reboot, no random delay, and no catch-up after downtime. Overlay
+  clients and Technitium are not updated this way.
 - A build is not installation proof. Keep VM, physical hardware, power-loss, and
   firmware verification as separate evidence.
 

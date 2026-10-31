@@ -7,7 +7,7 @@ DIY Device OS Bootstrap for Jeonghan combines one personal infrastructure model 
 ```text
 operator or remote agent
         |
-        | root CLI, or MCP stdio through forced SSH over Tailscale
+        | root CLI, or MCP stdio through forced SSH over Tailscale or NetBird
         v
 burn-history/ desired state ----------------------+
         | validated media and policy               |
@@ -39,7 +39,9 @@ it owns neither desired state nor destructive authority.
 | GitHub and GitHub Actions | Source review, protected merge, source-level CI, and evidence-only candidate builds | Commits and pull requests | Required `contracts` result, source history, and non-executable verification evidence | Automatic prebuilt publication, secret storage, or hardware qualification |
 | Build host (amd64 Debian 13) | Simple-CDD, Debian archive tooling, `xorriso`, `skopeo`, and Podman-compatible OCI inputs | Clean committed source, locks, public inputs, ignored real inventory | DNS ISO, manifest, package closure, checksums, and SBOM | Physical write authorization or long-lived credentials |
 | Ventoy boot chain | Presents selected ISO entries on removable media | Verified bootloader archive, resolved menu, staged images | BIOS/UEFI boot menu | World selection, artifact trust, or unattended target authorization |
-| Technitium and Tailscale | DNS runtime/cluster API and private management transport | Installed appliance state and management-host credentials | DNS service, cluster state, restricted overlay reachability | Repository policy or implicit agent authority |
+| Technitium | DNS runtime and cluster API | Installed appliance state and management-host credentials | DNS service and cluster state | Repository policy or implicit agent authority |
+| Tailscale and NetBird | Private management overlays; the World selects one or both, and the DNS image carries only the selected clients | Pinned client archives, management-host enrollment credentials, and the overlay access policy | Restricted overlay reachability by role name | Appliance DNS configuration, routing, SSH, or implicit agent authority |
+| Debian archive | Source of unattended appliance updates | HTTPS requests from installed appliances | Signed point-release and security packages | Overlay clients or Technitium, which change only through a reviewed lock update and image rebuild |
 | age | Encrypts enrollment, recovery, and access bundles to a public recipient | Public recipient in image; private identity on management host | Ciphertext safe for temporary USB transport | Long-lived key custody or plaintext persistence |
 | Vendor and distribution endpoints | External artifact sources | Versioned HTTPS requests | Bootloader archives, OS images, packages, OCI image | Trust by availability alone; every consumed artifact remains digest-checked |
 
@@ -50,7 +52,7 @@ The root `device-os` command is the operator entry point. Ruby resolves World YA
 1. The operator edits `burn-history/home.yaml` and selects a declared media definition.
 2. `engine/world/bin/resolve-world` validates references, addresses, language, and fail-closed policy, then emits a versioned World plan.
 3. The Installer independently validates that plan, revalidates every selected public or local entry, records the repository commit and Catalog tree, and calculates capacity.
-4. `prepare` downloads only selected locked artifacts and promotes each cache file only after SHA-256 verification. The DNS image remains a separately built runtime artifact with its own manifest.
+4. `prepare` downloads only selected locked artifacts and promotes each cache file only after SHA-256 verification. The DNS image remains a separately built runtime artifact with its own manifest. Its build reads the World's overlay selection, bundles only those clients, and records the selection in the manifest; `world build-image` and `world burn` refuse a DNS image whose selection differs from the World's.
 5. Immediately before `burn`, the writer inspects the live removable device, rejects root/internal/ambiguous/unresolved targets, binds confirmation to the current path and serial, stages the exact plan, writes the USB, and verifies the result.
 6. The World event recorder serializes physical attempts, stores pending state under the ignored `burn-history/.in-progress/`, and atomically publishes a completed World generation only after write and readback succeed. Failed and cancelled attempts publish redacted event records but never generation directories.
 
@@ -70,11 +72,13 @@ The current repository has no prebuilt publishing job. The policy evaluator cann
 
 The non-destructive `inventory-capture` media contains Debian Live and gathers exact identity for each HP computer. Reviewed local inventory enables one role at a time. The `dns-install` media then carries only the guarded offline DNS image; its install gate resolves the physical parent of mapper-backed installer media and accepts exactly one non-removable internal disk matching the enabled role.
 
-First boot creates stable bootstrap credentials, installs the pinned Technitium runtime, records public evidence, encrypts recovery material to the operator's age recipient, and marks completion only after durable output succeeds. The management host imports and rotates that material, forms the three-node cluster, enrolls each node into Tailscale with a short-lived key, applies reviewed DNS state, collects encrypted backups, and performs explicit restore or reinstall operations. Router DHCP DNS changes occur only after all three nodes pass standalone and cluster checks.
+First boot creates stable bootstrap credentials, installs the pinned Technitium runtime, records public evidence, encrypts recovery material to the operator's age recipient, and marks completion only after durable output succeeds. The management host imports and rotates that material, forms the three-node cluster, enrolls each node into the World's selected overlays with short-lived single-use keys, applies reviewed DNS state, collects encrypted backups, and performs explicit restore or reinstall operations. Enrollment reaches the nodes at their fixed LAN addresses; the status monitor and agent gateway reach them by role name through the management host's own resolver (a hosts file or an overlay's DNS), not through the DNS cluster. Router DHCP DNS changes occur only after all three nodes pass standalone and cluster checks.
+
+Installed nodes take Debian point-release and security updates unattended at a fixed per-role time and reboot into them one hour later, one role per half hour, only when every peer that has ever answered still answers DNS. A skipped reboot is visible in the journal, the node-exporter metrics, and the status monitor.
 
 ## Remote agent flow
 
-A remote MCP client reaches a dedicated management-host account through ordinary SSH carried over Tailscale. The account's forced command starts the gateway over stdio. The gateway validates a fixed typed tool call, constructs only an allowlisted command and environment, delegates to the root CLI or reviewed management command, clips output at 64 KiB, and returns structured data. It does not inspect delegated output for credentials, opens no network listener, and never runs on a DNS appliance.
+A remote MCP client reaches a dedicated management-host account through ordinary SSH carried over Tailscale or NetBird. The account's forced command starts the gateway over stdio. The gateway validates a fixed typed tool call, constructs only an allowlisted command and environment, delegates to the root CLI or reviewed management command, clips output at 64 KiB, and returns structured data. It does not inspect delegated output for credentials, opens no network listener, and never runs on a DNS appliance.
 
 ## State locations
 

@@ -61,12 +61,16 @@ jobs:
         run: |
           ruby -c engine/world/bin/resolve-world
           ruby -c engine/world/bin/record-usb-event
+          ruby -c engine/world/bin/render-network-plan
+          ruby -c engine/world/lib/network_plan.rb
           ruby -c engine/world/tests/world-contract-simulation.rb
           ruby -c engine/world/tests/usb-event-simulation.rb
+          ruby -c engine/world/tests/network-plan-simulation.rb
       - name: Validate World contract
         run: |
           engine/world/tests/world-contract-simulation.rb
           engine/world/tests/usb-event-simulation.rb
+          engine/world/tests/network-plan-simulation.rb
       - name: Validate Catalog contracts
         run: |
           engine/catalog/bin/verify-catalog

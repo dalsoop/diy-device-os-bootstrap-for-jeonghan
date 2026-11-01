@@ -1,0 +1,36 @@
+apiVersion: device-os.bootstrap/v1alpha1
+kind: NetworkPlanPresets
+
+# Reviewed starting points for World.spec.networkPlan. A World names one with
+# `preset` and may override any field; the result is validated as a whole by
+# engine/world/lib/network_plan.rb. The three node names are the installer's
+# fixed roles (dns01, dns02, dns03).
+presets:
+  home-10-77:
+    description: Dedicated /16 home LAN on an uncommon 10.x block, DNS nodes in 10.77.5.0/24
+    lan: 10.77.0.0/16
+    gateway: 10.77.0.1
+    upstreamDns: 10.77.0.1
+    management: 10.77.0.0/24
+    domain: home.arpa
+    clusterDomain: dns-cluster.home.arpa
+    netbirdRange: 10.78.0.0/16
+    nodes:
+      dns01: 10.77.5.1
+      dns02: 10.77.5.2
+      dns03: 10.77.5.3
+
+  home-router-24:
+    description: A typical home router's /24 kept as it is; DNS nodes outside the router's DHCP pool
+    lan: 192.168.1.0/24
+    gateway: 192.168.1.1
+    upstreamDns: 192.168.1.1
+    management: 192.168.1.0/26
+    domain: home.arpa
+    clusterDomain: dns-cluster.home.arpa
+    dhcpRange: 192.168.1.100-192.168.1.199
+    netbirdRange: 10.78.0.0/16
+    nodes:
+      dns01: 192.168.1.53
+      dns02: 192.168.1.54
+      dns03: 192.168.1.55

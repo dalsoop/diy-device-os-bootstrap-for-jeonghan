@@ -24,10 +24,15 @@ spec:
       type: computer
       inventoryRef: os-installs/dns03/hardware.conf
 
+  # The LAN, router, management range, node addresses and NetBird range come
+  # from this plan: a reviewed preset (engine/world/presets/network-plans.yaml)
+  # plus any field overridden here. engine/world/bin/render-network-plan
+  # --write regenerates os-installs/<role>/os.conf from it.
+  networkPlan:
+    preset: home-10-77
+
   networks:
     - id: home-lan
-      cidr: 10.77.0.0/16
-      gateway: 10.77.0.1
       assurance: planned-unverified
 
   nodes:
@@ -35,17 +40,14 @@ spec:
       assetRef: hp-dns-01
       role: dns-appliance
       networkRef: home-lan
-      ipv4: 10.77.5.1
     - id: dns02
       assetRef: hp-dns-02
       role: dns-appliance
       networkRef: home-lan
-      ipv4: 10.77.5.2
     - id: dns03
       assetRef: hp-dns-03
       role: dns-appliance
       networkRef: home-lan
-      ipv4: 10.77.5.3
 
   services:
     - id: dns-cluster

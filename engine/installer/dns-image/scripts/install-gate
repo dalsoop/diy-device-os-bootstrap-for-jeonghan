@@ -73,6 +73,7 @@ load_config() {
     LAN_CIDR=
     MANAGEMENT_CIDR=
     CLUSTER_DOMAIN=
+    NETBIRD_RANGE=
     EXPECTED_PRODUCT_NAME_SHA256=
     EXPECTED_PRODUCT_SKU_SHA256=
     EXPECTED_SYSTEM_SERIAL_SHA256=
@@ -97,6 +98,7 @@ load_config() {
             lan_cidr) LAN_CIDR=$value ;;
             management_cidr) MANAGEMENT_CIDR=$value ;;
             cluster_domain) CLUSTER_DOMAIN=$value ;;
+            netbird_range) NETBIRD_RANGE=$value ;;
             expected_product_name_sha256) EXPECTED_PRODUCT_NAME_SHA256=$value ;;
             expected_product_sku_sha256) EXPECTED_PRODUCT_SKU_SHA256=$value ;;
             expected_system_serial_sha256) EXPECTED_SYSTEM_SERIAL_SHA256=$value ;;
@@ -155,6 +157,11 @@ validate_profile() {
             management=cidr(v["management_cidr"]); split(v["management_cidr"],a,"/")
             if (a[2]+0 < p || int(management/size)*size != lan) bad=1
             if (v["domain"] !~ /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/ || v["cluster_domain"] !~ /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/) bad=1
+            # The optional NetBird range must be its own network, apart from the LAN.
+            if ("netbird_range" in v) {
+                nb=cidr(v["netbird_range"]); split(v["netbird_range"],a,"/"); nbsize=power2(32-(a[2]+0))
+                if (nb < lan+size && lan < nb+nbsize) bad=1
+            }
             exit bad ? 1 : 0
         }
     ' "$1" || fail "invalid or inconsistent network profile for $2"
@@ -200,6 +207,7 @@ match_node() {
 
     [ "$matches" -eq 1 ] || fail "hardware matched $matches inventory entries; expected exactly one"
     load_config "$matched_config"
+    validate_profile "$matched_config" "$ROLE"
     NIC_NAME=$matched_nic
     NIC_MAC=$(read_first_line "$sys_root/class/net/$NIC_NAME/address")
 
@@ -207,6 +215,11 @@ match_node() {
         "$DNS_SERVERS" "$DOMAIN" "$LAN_CIDR" "$MANAGEMENT_CIDR" "$CLUSTER_DOMAIN"; do
         [ -n "$value" ] || fail "inventory entry for $ROLE is incomplete"
     done
+    # A NetBird image needs the plan's NetBird range; refuse before any disk is
+    # touched rather than in the late installer step.
+    if [ -r "$media_dir/overlays" ] && grep -qx netbird "$media_dir/overlays" && [ -z "$NETBIRD_RANGE" ]; then
+        fail "the image selects NetBird but the profile for $ROLE has no netbird_range"
+    fi
 
     check_reinstall_permission
 
@@ -222,6 +235,7 @@ match_node() {
         printf 'LAN_CIDR=%s\n' "$LAN_CIDR"
         printf 'MANAGEMENT_CIDR=%s\n' "$MANAGEMENT_CIDR"
         printf 'CLUSTER_DOMAIN=%s\n' "$CLUSTER_DOMAIN"
+        [ -z "$NETBIRD_RANGE" ] || printf 'NETBIRD_RANGE=%s\n' "$NETBIRD_RANGE"
         printf 'NIC_NAME=%s\n' "$NIC_NAME"
         printf 'NIC_MAC=%s\n' "$NIC_MAC"
     } > "$state_file"
@@ -578,7 +592,7 @@ capture_guided() {
     done
     # Only approved network fields survive the public template. Hardware comes
     # exclusively from this machine, never from an embedded placeholder.
-    awk -F= '$1 ~ /^(role|address|prefix_length|netmask|gateway|dns_servers|domain|lan_cidr|management_cidr|cluster_domain)$/ {print}' \
+    awk -F= '$1 ~ /^(role|address|prefix_length|netmask|gateway|dns_servers|domain|lan_cidr|management_cidr|cluster_domain|netbird_range)$/ {print}' \
         "$selected_profile" > "$inventory_dir/$selected_role.conf"
     {
         for item in product_name product_sku product_serial product_uuid; do
@@ -602,6 +616,10 @@ capture_guided() {
     db_subst dns-appliance/erase role "$ROLE"
     db_subst dns-appliance/erase address "$ADDRESS/$PREFIX_LENGTH"
     db_subst dns-appliance/erase gateway "$GATEWAY"
+    db_subst dns-appliance/erase lan "$LAN_CIDR"
+    db_subst dns-appliance/erase management "$MANAGEMENT_CIDR"
+    db_subst dns-appliance/erase dns "$DNS_SERVERS"
+    db_subst dns-appliance/erase netbird "${NETBIRD_RANGE:--}"
     db_subst dns-appliance/erase disk "/dev/$selected_disk"
     db_subst dns-appliance/erase model "$selected_model"
     db_subst dns-appliance/erase serial "$selected_serial"

@@ -259,7 +259,7 @@ for case_line in 'tailscale|127.0.0.0/8,10.77.0.0/16,100.64.0.0/10' \
     # shellcheck disable=SC2086 # one selected overlay per line
     printf '%s\n' $selection > "$temporary/overlays"
     for include_password in true false; do
-        fixture_dir="$temporary" ROLE=dns01 CLUSTER_DOMAIN=home.arpa \
+        fixture_dir="$temporary" ROLE=dns01 CLUSTER_DOMAIN=home.arpa NETBIRD_RANGE=10.78.0.0/16 \
             ADDRESS=10.77.5.1 LAN_CIDR=10.77.0.0/16 technitium_token="$temporary/token" \
             overlay_selection="$temporary/overlays" \
             sh "$temporary/render-env" "$include_password"
@@ -294,6 +294,17 @@ PY
     done
 done
 pass firstboot_recursion_allows_lan_and_selected_overlays_but_not_public_clients
+
+printf 'netbird\n' > "$temporary/overlays"
+fixture_dir="$temporary" ROLE=dns01 CLUSTER_DOMAIN=home.arpa NETBIRD_RANGE=10.66.0.0/16 \
+    ADDRESS=10.77.5.1 LAN_CIDR=10.77.0.0/16 technitium_token="$temporary/token" \
+    overlay_selection="$temporary/overlays" \
+    sh "$temporary/render-env" false
+grep -qx 'DNS_SERVER_RECURSION_NETWORK_ACL=127.0.0.0/8,10.77.0.0/16,10.66.0.0/16' "$temporary/technitium.env" || {
+    echo "FAIL first boot did not take the NetBird range from the install state" >&2
+    exit 1
+}
+pass firstboot_recursion_takes_the_netbird_range_from_the_install_state
 
 # The appliance firewall is rendered by the installer step itself: its
 # functions are extracted from dns-finish-install and run against a fixture
@@ -331,6 +342,7 @@ reset_firewall_fixture() {
 render_firewall_fixture() {
     LAN_CIDR=${FIREWALL_LAN_CIDR-10.77.0.0/16} \
     MANAGEMENT_CIDR=${FIREWALL_MANAGEMENT_CIDR-10.77.0.0/24} \
+    NETBIRD_RANGE=${FIREWALL_NETBIRD_RANGE-10.78.0.0/16} \
         sh "$firewall/render.sh" "${FIREWALL_TEMPLATE:-$repo_root/dns-image/payload/nftables.conf}" \
         "$firewall/overlays" "$firewall/nftables.conf"
 }
@@ -441,7 +453,30 @@ reset_firewall_fixture
 expect_firewall_rejected "an empty overlay selection"
 printf 'wireguard\n' > "$firewall/overlays"
 expect_firewall_rejected "an unknown overlay selection"
+printf 'netbird\n' > "$firewall/overlays"
+FIREWALL_NETBIRD_RANGE='' expect_firewall_rejected "NetBird without a NetBird range"
+FIREWALL_NETBIRD_RANGE='10.78.0.0/16 accept' expect_firewall_rejected "a NetBird range that is not a CIDR"
 pass firewall_rendering_rejects_unrendered_markers_and_invalid_inputs
+
+# The NetBird range comes from the World's network plan, not from the template.
+reset_firewall_fixture
+printf 'netbird\n' > "$firewall/overlays"
+FIREWALL_NETBIRD_RANGE=10.66.0.0/16 render_firewall_fixture > "$firewall/render.log" 2>&1 || {
+    echo "FAIL firewall rendering with another NetBird range: $(cat "$firewall/render.log")" >&2
+    exit 1
+}
+if ! grep -q 'iifname != "wt0" ip saddr 10.66.0.0/16 drop' "$firewall/nftables.conf" ||
+    grep -q '10\.78\.' "$firewall/nftables.conf"; then
+    echo "FAIL the firewall did not take the NetBird range from the network plan" >&2
+    exit 1
+fi
+reset_firewall_fixture
+printf 'tailscale\n' > "$firewall/overlays"
+FIREWALL_NETBIRD_RANGE='' render_firewall_fixture > "$firewall/render.log" 2>&1 || {
+    echo "FAIL a Tailscale-only firewall needed a NetBird range: $(cat "$firewall/render.log")" >&2
+    exit 1
+}
+pass firewall_takes_the_netbird_range_from_the_network_plan
 
 # The health script reports each selected overlay and only those. Every
 # command it runs is a fixture on PATH; the reboot metrics come from a fake

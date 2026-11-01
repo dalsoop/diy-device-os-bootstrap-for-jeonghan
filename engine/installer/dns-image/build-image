@@ -64,6 +64,19 @@ for overlay in $overlays; do
     esac
 done
 
+# The per-node network profiles are generated from the World's network plan.
+# An image never embeds an address the World does not state; a fixture
+# inventory (DNS_APPLIANCE_INVENTORY_DIR) is the tests' own input.
+if [ -z "${DNS_APPLIANCE_INVENTORY_DIR:-}" ]; then
+    if [ -n "${DEVICE_OS_WORLD:-}" ]; then
+        ruby "$monorepo_root/engine/world/bin/render-network-plan" --check --world "$DEVICE_OS_WORLD" ||
+            fail "os-installs do not match the World's network plan"
+    else
+        ruby "$monorepo_root/engine/world/bin/render-network-plan" --check ||
+            fail "os-installs do not match the World's network plan"
+    fi
+fi
+
 case "$source_repository" in
     https://*) ;;
     *) fail "source repository must use HTTPS" ;;
@@ -181,6 +194,10 @@ for role in dns01 dns02 dns03; do
         value=$(awk -F= -v wanted="$key" '$1 == wanted { print $2 }' "$source_file")
         [ -n "$value" ] || fail "$role is missing $key"
     done
+    if [ "$netbird_selected" = true ]; then
+        grep -Eq '^netbird_range=([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$' "$source_file" ||
+            fail "$role has no netbird_range but the World selects NetBird; render the network plan"
+    fi
     enabled=$(awk -F= '$1 == "destructive_install_enabled" { print $2 }' "$source_file")
     case "$enabled" in
         true)

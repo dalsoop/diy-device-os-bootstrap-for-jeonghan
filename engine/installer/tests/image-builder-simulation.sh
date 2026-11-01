@@ -641,9 +641,11 @@ fi
 # A disposable checkout holding the World resolver, the overlay tools and a
 # playbook with three Worlds that differ only in their overlay selection.
 tree=$overlay/tree
-mkdir -p "$tree/engine/world/bin" "$tree/engine/installer/dns-image" \
-    "$tree/engine/installer/build/locks" "$tree/burn-history"
+mkdir -p "$tree/engine/world/bin" "$tree/engine/world/lib" "$tree/engine/world/presets" \
+    "$tree/engine/installer/dns-image" "$tree/engine/installer/build/locks" "$tree/burn-history"
 cp -p "$monorepo_root/engine/world/bin/resolve-world" "$tree/engine/world/bin/"
+cp -p "$monorepo_root/engine/world/lib/network_plan.rb" "$tree/engine/world/lib/"
+cp -p "$monorepo_root/engine/world/presets/network-plans.yaml" "$tree/engine/world/presets/"
 cp -p "$repo_root/dns-image/overlay-selection" "$repo_root/dns-image/fetch-locked-sources" \
     "$tree/engine/installer/dns-image/"
 ruby -ryaml -e '
@@ -1307,7 +1309,8 @@ make_finish_root() {
     fi
     printf '%s\n' ROLE=dns01 ADDRESS=10.77.5.1 NETMASK=255.255.0.0 GATEWAY=10.77.0.1 \
         DNS_SERVERS=10.77.0.1 DOMAIN=home.arpa LAN_CIDR=10.77.0.0/16 \
-        MANAGEMENT_CIDR=10.77.0.0/24 CLUSTER_DOMAIN=home.arpa NIC_NAME=eno1 TARGET_DISK=/dev/sda \
+        MANAGEMENT_CIDR=10.77.0.0/24 CLUSTER_DOMAIN=home.arpa NETBIRD_RANGE=10.78.0.0/16 \
+        NIC_NAME=eno1 TARGET_DISK=/dev/sda \
         > "$root/run/install.env"
     cat > "$root/bin/in-target" <<'EOF'
 #!/bin/sh

@@ -75,7 +75,7 @@ for selection in tailscale netbird both; do
         both) printf 'tailscale\nnetbird\n' > "$work/$selection.overlays" ;;
         *) printf '%s\n' "$selection" > "$work/$selection.overlays" ;;
     esac
-    LAN_CIDR=10.77.0.0/16 MANAGEMENT_CIDR=10.77.0.0/24 \
+    LAN_CIDR=10.77.0.0/16 MANAGEMENT_CIDR=10.77.0.0/24 NETBIRD_RANGE=10.78.0.0/16 \
         sh "$work/render.sh" "$payload/nftables.conf" "$work/$selection.overlays" \
         "$work/$selection.nft" || fail "rendering the $selection firewall failed"
 done

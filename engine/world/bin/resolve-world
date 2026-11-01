@@ -9,6 +9,7 @@ require "json"
 require "optparse"
 require "pathname"
 require "yaml"
+require_relative "../lib/network_plan"
 
 class ContractError < StandardError; end
 
@@ -162,11 +163,28 @@ begin
   end
   fail_contract("duplicate overlay") unless overlays.uniq.length == overlays.length
 
+  # The network plan (a reviewed preset plus overrides) is the source of the
+  # LAN and node addresses. A network or node that also states them must agree.
+  plan = nil
+  if spec.key?("networkPlan")
+    begin
+      plan = NetworkPlan.resolve(spec["networkPlan"], overlays)
+    rescue NetworkPlan::Error => e
+      fail_contract(e.message)
+    end
+  end
+
   networks = list(spec["networks"], "World.spec.networks")
   network_ids = unique_ids(networks, "networks")
   network_by_id = {}
   networks.each_with_index do |network, index|
     network = mapping(network, "networks[#{index}]")
+    if plan
+      network["cidr"] = plan["lan"] unless network.key?("cidr")
+      network["gateway"] = plan["gateway"] unless network.key?("gateway")
+      fail_contract("networks[#{index}] disagrees with networkPlan") unless network["cidr"] == plan["lan"] &&
+                                                                         network["gateway"] == plan["gateway"]
+    end
     cidr = parse_ip(network["cidr"], "networks[#{index}].cidr")
     fail_contract("network CIDR must be IPv4: #{network['id']}") unless cidr.ipv4?
     gateway = parse_host_ip(network["gateway"], "networks[#{index}].gateway")
@@ -184,6 +202,12 @@ begin
     fail_contract("unknown assetRef: #{asset_ref}") unless asset_ids.include?(asset_ref)
     fail_contract("unknown networkRef: #{network_ref}") unless network_ids.include?(network_ref)
     text(node["role"], "nodes[#{index}].role")
+    if plan
+      planned = plan["nodes"][node["id"]]
+      fail_contract("node is not in networkPlan.nodes: #{node['id']}") unless planned
+      node["ipv4"] = planned unless node.key?("ipv4")
+      fail_contract("nodes[#{index}].ipv4 disagrees with networkPlan") unless node["ipv4"] == planned
+    end
     address = parse_host_ip(node["ipv4"], "nodes[#{index}].ipv4")
     fail_contract("node address must be IPv4: #{node['id']}") unless address.ipv4?
     fail_contract("node address is outside its network: #{node['id']}") unless network_by_id.fetch(network_ref).include?(address)

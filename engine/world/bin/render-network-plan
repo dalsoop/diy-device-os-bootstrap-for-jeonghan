@@ -1,0 +1,91 @@
+#!/usr/bin/env ruby
+# SPDX-FileCopyrightText: 2026 dalsoop
+# SPDX-License-Identifier: GPL-3.0-only
+# frozen_string_literal: true
+
+# Writes (--write) or checks (--check) each node's installer network profile,
+# os-installs/<role>/os.conf next to the World, from the World's network plan,
+# and checks that the reviewed zone file's node records carry the same
+# addresses. The image builder runs --check, so an image cannot embed a node
+# address the World does not state.
+
+require "optparse"
+require "pathname"
+require "yaml"
+require_relative "../lib/network_plan"
+
+def fail_render(message)
+  warn "render-network-plan: #{message}"
+  exit 1
+end
+
+options = { mode: nil }
+OptionParser.new do |parser|
+  parser.banner = "Usage: engine/world/bin/render-network-plan (--check | --write) [--playbook PATH] [--world SLUG]"
+  parser.on("--check", "Fail when a generated file differs") { options[:mode] = :check }
+  parser.on("--write", "Rewrite the generated files") { options[:mode] = :write }
+  parser.on("--playbook PATH", "WorldPlaybook path") { |value| options[:playbook] = value }
+  parser.on("--world SLUG", "Draft World slug") { |value| options[:world] = value }
+end.parse!
+fail_render("choose --check or --write") unless options[:mode] && ARGV.empty?
+
+begin
+  repository_root = Pathname(__dir__).join("../../..").expand_path
+  playbook_path = Pathname(options.fetch(:playbook, repository_root.join("burn-history/.paths.yaml").to_s)).expand_path
+  module_root = playbook_path.dirname
+  playbook = YAML.safe_load_file(playbook_path, permitted_classes: [], aliases: false)
+  drafts = playbook.dig("spec", "drafts")
+  fail_render("the playbook declares no drafts") unless drafts.is_a?(Array) && !drafts.empty?
+  draft = if options[:world]
+            drafts.find { |item| item["slug"] == options[:world] }
+          elsif drafts.length == 1
+            drafts.first
+          end
+  fail_render("select a World with --world") unless draft
+  relative = draft["path"].to_s
+  fail_render("unsafe World path") if relative.start_with?("/") || relative.split("/").include?("..")
+  world = YAML.safe_load_file(module_root.join(relative), permitted_classes: [], aliases: false)
+  spec = world["spec"]
+  fail_render("the World has no networkPlan") unless spec.is_a?(Hash) && spec.key?("networkPlan")
+  plan = NetworkPlan.resolve(spec["networkPlan"], Array(spec["overlays"]))
+rescue NetworkPlan::Error, Psych::Exception, Errno::ENOENT => e
+  fail_render(e.message)
+end
+
+stale = []
+NetworkPlan::ROLES.each do |role|
+  path = module_root.join("os-installs", role, "os.conf")
+  wanted = NetworkPlan.os_conf(plan, role)
+  current = path.file? ? path.read : nil
+  next if current == wanted
+
+  if options[:mode] == :write
+    path.dirname.mkpath
+    path.write(wanted)
+    puts "wrote #{path.relative_path_from(module_root.parent)}"
+  else
+    stale << path.relative_path_from(module_root.parent).to_s
+  end
+end
+
+zone = module_root.join("dns-records.zone")
+if zone.file?
+  records = zone.read.lines.filter_map do |line|
+    fields = line.split
+    [fields[0], fields[3]] if fields.length >= 4 && fields[1] == "IN" && fields[2] == "A"
+  end.to_h
+  NetworkPlan::ROLES.each do |role|
+    next if records[role] == plan["nodes"][role]
+
+    stale << "#{zone.relative_path_from(module_root.parent)} (#{role} A #{records[role] || 'missing'}, plan #{plan['nodes'][role]})"
+  end
+end
+
+unless stale.empty?
+  warn "render-network-plan: these files do not match the World's network plan:"
+  stale.each { |item| warn "  #{item}" }
+  warn "render-network-plan: run engine/world/bin/render-network-plan --write (the zone file is edited by hand)"
+  exit 1
+end
+puts "network plan: #{plan['lan']} gateway #{plan['gateway']}, nodes #{plan['nodes'].values.join(', ')}" \
+     "#{plan['netbird_range'] ? ", NetBird #{plan['netbird_range']}" : ''}"

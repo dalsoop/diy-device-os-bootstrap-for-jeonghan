@@ -19,6 +19,8 @@ Template: dns-appliance/erase
 Type: string
 Description: Confirm Debian OS + DNS installation and disk erasure
  Role: ${role}; address: ${address}; gateway: ${gateway}
+ Network plan: LAN ${lan}; management ${management}; upstream DNS ${dns}; NetBird ${netbird}
+ If this is not your network, stop here and rebuild the image from your World.
  .
  ALL DATA on ${disk} will be erased.
  Model: ${model}; serial: ${serial}; size: ${bytes} bytes.
@@ -26,6 +28,8 @@ Description: Confirm Debian OS + DNS installation and disk erasure
  Type exactly: ${confirmation}
 Description-ko.UTF-8: Debian OS + DNS 설치와 내부 디스크 지우기를 확인하세요
  역할: ${role}; 주소: ${address}; 게이트웨이: ${gateway}
+ 네트워크 계획: LAN ${lan}; 관리 ${management}; 상위 DNS ${dns}; NetBird ${netbird}
+ 내 네트워크와 다르면 여기서 멈추고 World에서 이미지를 다시 만드세요.
  .
  ${disk}의 모든 데이터가 지워집니다.
  모델: ${model}; 일련번호: ${serial}; 크기: ${bytes} 바이트.

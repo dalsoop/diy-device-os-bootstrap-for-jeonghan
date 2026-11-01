@@ -288,6 +288,16 @@ grep -q 'resolved catalog revision does not match the checkout' \
 
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/schemas/enrollment-record.schema.json"
+# Node addresses come from each World network plan; the enrollment schema must
+# accept any IPv4 address, not one plan's addresses (first boot validates it).
+python3 - "$repo_root/schemas/enrollment-record.schema.json" <<'PY'
+import json, re, sys
+pattern = json.load(open(sys.argv[1]))["properties"]["address"]["pattern"]
+for good in ("10.77.5.1", "192.168.1.53", "10.0.5.3"):
+    assert re.search(pattern, good), f"enrollment schema rejects {good}"
+for bad in ("10.77.5", "256.1.1.1", "10.77.5.1/16"):
+    assert not re.search(pattern, bad), f"enrollment schema accepts {bad}"
+PY
 for schema in \
     component-redistribution-registry.schema.json \
     component-review-record.schema.json \

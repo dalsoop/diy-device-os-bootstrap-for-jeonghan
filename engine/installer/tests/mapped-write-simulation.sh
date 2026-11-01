@@ -42,14 +42,28 @@ with open(path, "wb") as image:
 PY
 python3 "$make_bmap" "$temporary/image.raw" --metadata-mib 1 > "$temporary/make.log" ||
     fail "make-bmap failed: $(cat "$temporary/make.log")"
-python3 - "$temporary/image.raw.bmap.json" <<'PY'
+# Some file systems (APFS for small files) report no holes; then every block
+# is mapped, which is the safe fallback, and only the mapped checks apply.
+holes=$(python3 - "$temporary/image.raw" <<'PY'
+import os, sys
+fd = os.open(sys.argv[1], os.O_RDONLY)
+try:
+    print("yes" if os.lseek(fd, 0, os.SEEK_HOLE) < os.path.getsize(sys.argv[1]) else "no")
+except (AttributeError, OSError):
+    print("no")
+PY
+)
+python3 - "$temporary/image.raw.bmap.json" "$holes" <<'PY'
 import json, sys
 document = json.load(open(sys.argv[1]))
 blocks = {block for start, count in document["ranges"] for block in range(start, start + count)}
 for required in (0, 1, 10, 25, 32):
     assert required in blocks, f"block {required} is not mapped: {sorted(blocks)}"
-for skipped in (2, 5, 20, 30, 33, 38, 39):
-    assert skipped not in blocks, f"block {skipped} is mapped: {sorted(blocks)}"
+if sys.argv[2] == "yes":
+    for skipped in (2, 5, 20, 30, 33, 38, 39):
+        assert skipped not in blocks, f"block {skipped} is mapped: {sorted(blocks)}"
+else:
+    assert blocks == set(range(40)), "without hole reporting every block must be mapped"
 assert document["image_bytes"] == 40 << 20
 PY
 
@@ -73,6 +87,12 @@ for block in range(40):
         assert device[span] == b"\xaa" * MIB, f"unmapped block {block} was written"
 PY
 echo "PASS mapped_write_writes_and_verifies_only_mapped_blocks"
+
+if [ "$holes" != yes ]; then
+    echo "SKIP the refusal cases need hole reporting, which this file system lacks"
+    echo "mapped-write simulations: passed"
+    exit 0
+fi
 
 # Data the map leaves out is refused before the device changes.
 python3 -c 'import sys; f = open(sys.argv[1], "r+b"); f.seek(20 << 20); f.write(b"\x33")' "$temporary/image.raw"

@@ -265,7 +265,8 @@ if [ "$mode" = mapped ]; then
     echo "target: $device"
     echo "media: $media_name"
     echo "bytes: $device_bytes"
-    echo "warning: all existing partitions and data will be erased"
+    echo "warning: the partition map and every file system are replaced; old bytes stay in their free space"
+    echo "warning: use the full write mode to erase a stick that held enrollment or other private data"
     diskutil unmountDisk "$device"
     python3 "$script_dir/mapped-write.py" --image "$image" --bmap "$bmap" \
         --image-sha256 "$image_sha256" \

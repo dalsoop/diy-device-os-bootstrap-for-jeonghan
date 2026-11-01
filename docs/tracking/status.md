@@ -59,6 +59,13 @@ Update (2026-10-22): after the license and redistribution policy merged, commit 
 
 Physical media (2026-10-22): the `63cd0f4` raw image (SHA-256 `53c6bff1…69d`) was written to the 30,784,094,208-byte SanDisk 3.2Gen1 with `world burn-image-macos` on the operator workstation, as a one-time operator exception to the build-host-only rule. Two-phase raw readback passed, and generation `20261022024140-jeonghan-home` records it. The write took 18 minutes and the `cmp` readback 33 minutes. This is a physical write and readback, not HP firmware boot or install evidence. That generation is retired: it carries the previous LAN addresses and a Debian snapshot with the vulnerable kernel, and no node is installed from it. Its record under `burn-history/logs/usb/` stays unchanged.
 
+Physical media (2026-11-01 and 2026-11-02), same SanDisk 3.2Gen1, operator workstation, `world burn-image-macos` full write:
+
+- 14:11 KST: the `3a2dea1` guided image (raw SHA-256 `3223f1be…1bb2`); two-phase readback passed and generation `20261101132210-jeonghan-home` records it. Superseded by the next write, not installed from.
+- 00:22 KST: the `faff60b` guided image (ISO SHA-256 `23918c62…68c6` before the glyph fix build; raw SHA-256 `4ff901fb…8b17`), built in an amd64 Debian 13 container on m5m1 from merged `main`, with `linux-image-amd64` 6.12.113-1, Tailscale 1.104.1, NetBird 0.82.0 and the `home-10-77` network plan. The body (53 minutes at 9.7 MB/s) and the first MiB were written and both readbacks passed, then the final `diskutil unmountDisk` was refused by Spotlight's `mdsync` holding the newly mounted volume, the writer exited non-zero, and the recorder published only the failed event `burn-history/logs/usb/failed/2026/20261101231141-jeonghan-home-0288a50c.json` (readback `pending`, because the writer's evidence was never set to passed). The stick was then force-unmounted and ejected by hand. This stick is the one the operator installs from; no generation exists for it. The writer now retries the final unmount and forces it (#21), so the next write publishes a generation.
+
+Neither write is HP firmware boot or install evidence.
+
 The source contract suite passed on the build host, including World, Catalog, media, inventory wizard, management, Tailscale and Agent Gateway simulations. Signed Debian installer fetch rejection fixtures also pass. The first real image build exposed Simple-CDD 0.6.9 requesting a removed i386 installer; the candidate now uses signed/checksummed amd64-only custom-installer inputs and still needs a successful image build.
 
 ## 10.77 LAN, kernel fix snapshot, overlays per World, and unattended upgrades (2026-11-01)

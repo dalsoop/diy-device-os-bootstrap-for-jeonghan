@@ -1,0 +1,24 @@
+{
+  "schema_version": 2,
+  "event_id": "20261101231141-jeonghan-home-0288a50c",
+  "generation_candidate": "20261101231141-jeonghan-home",
+  "generation_id": null,
+  "world_slug": "jeonghan-home",
+  "media_id": "dns-install",
+  "writer": "macos-mbr-last",
+  "repository_revision": "faff60b1c242870f3c74bea67fd5301c69996edf",
+  "catalog_tree": "f454bdf3312b3934f2d49a6ddf9468ff371e7cbd",
+  "status": "failed",
+  "started_at": "2026-11-01T23:11:41+09:00",
+  "finished_at": "2026-11-02T00:22:58+09:00",
+  "exit_code": 1,
+  "failure_code": "writer-exit-nonzero",
+  "target": {
+    "display_name": "SanDisk 3.2Gen1",
+    "bytes": 30784094208
+  },
+  "readback": {
+    "method": "mbr-last-raw-compare",
+    "status": "pending"
+  }
+}

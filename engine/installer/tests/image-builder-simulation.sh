@@ -641,9 +641,11 @@ fi
 # A disposable checkout holding the World resolver, the overlay tools and a
 # playbook with three Worlds that differ only in their overlay selection.
 tree=$overlay/tree
-mkdir -p "$tree/engine/world/bin" "$tree/engine/installer/dns-image" \
-    "$tree/engine/installer/build/locks" "$tree/burn-history"
+mkdir -p "$tree/engine/world/bin" "$tree/engine/world/lib" "$tree/engine/world/presets" \
+    "$tree/engine/installer/dns-image" "$tree/engine/installer/build/locks" "$tree/burn-history"
 cp -p "$monorepo_root/engine/world/bin/resolve-world" "$tree/engine/world/bin/"
+cp -p "$monorepo_root/engine/world/lib/network_plan.rb" "$tree/engine/world/lib/"
+cp -p "$monorepo_root/engine/world/presets/network-plans.yaml" "$tree/engine/world/presets/"
 cp -p "$repo_root/dns-image/overlay-selection" "$repo_root/dns-image/fetch-locked-sources" \
     "$tree/engine/installer/dns-image/"
 ruby -ryaml -e '

@@ -465,11 +465,11 @@ FIREWALL_NETBIRD_RANGE=10.66.0.0/16 render_firewall_fixture > "$firewall/render.
     echo "FAIL firewall rendering with another NetBird range: $(cat "$firewall/render.log")" >&2
     exit 1
 }
-grep -q 'iifname != "wt0" ip saddr 10.66.0.0/16 drop' "$firewall/nftables.conf" &&
-    ! grep -q '10\.78\.' "$firewall/nftables.conf" || {
+if ! grep -q 'iifname != "wt0" ip saddr 10.66.0.0/16 drop' "$firewall/nftables.conf" ||
+    grep -q '10\.78\.' "$firewall/nftables.conf"; then
     echo "FAIL the firewall did not take the NetBird range from the network plan" >&2
     exit 1
-}
+fi
 reset_firewall_fixture
 printf 'tailscale\n' > "$firewall/overlays"
 FIREWALL_NETBIRD_RANGE='' render_firewall_fixture > "$firewall/render.log" 2>&1 || {

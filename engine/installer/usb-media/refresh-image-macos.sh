@@ -112,10 +112,8 @@ refresh_from_image() {
     done < <(LC_ALL=C comm -13 "$work/image-data.sums" "$work/usb-data.sums" | sed -E 's/^[0-9a-f]{64}  //')
     echo "refresh: $changed data file(s) copied, $removed removed"
 
-    for path in installer.json; do
-        cmp -s "$work/image-enroll/$path" "$work/usb-enroll/$path" ||
-            COPYFILE_DISABLE=1 cp -X "$work/image-enroll/$path" "$work/usb-enroll/$path"
-    done
+    cmp -s "$work/image-enroll/installer.json" "$work/usb-enroll/installer.json" ||
+        COPYFILE_DISABLE=1 cp -X "$work/image-enroll/installer.json" "$work/usb-enroll/installer.json"
     mkdir -p "$work/usb-enroll/records" "$work/usb-enroll/reinstall"
 
     sync

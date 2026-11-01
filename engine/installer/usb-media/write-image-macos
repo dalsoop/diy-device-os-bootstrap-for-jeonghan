@@ -9,7 +9,7 @@ distribution_policy=$script_dir/distribution-policy.json
 image=
 device=
 confirmation=
-mode=write
+mode='write'
 write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
 
 usage() {
@@ -220,7 +220,7 @@ expected="$confirmation_word $device $media_name $serial $device_bytes"
     fail "exact confirmation required: $expected"
 
 if [ "$mode" = refresh ]; then
-    # shellcheck source=engine/installer/usb-media/refresh-image-macos.sh
+    # shellcheck source=/dev/null
     . "$script_dir/refresh-image-macos.sh"
     preflight_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
     emit_write_evidence pending

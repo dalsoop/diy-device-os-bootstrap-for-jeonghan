@@ -194,6 +194,10 @@ for role in dns01 dns02 dns03; do
         value=$(awk -F= -v wanted="$key" '$1 == wanted { print $2 }' "$source_file")
         [ -n "$value" ] || fail "$role is missing $key"
     done
+    if [ "$netbird_selected" = true ]; then
+        grep -Eq '^netbird_range=([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$' "$source_file" ||
+            fail "$role has no netbird_range but the World selects NetBird; render the network plan"
+    fi
     enabled=$(awk -F= '$1 == "destructive_install_enabled" { print $2 }' "$source_file")
     case "$enabled" in
         true)

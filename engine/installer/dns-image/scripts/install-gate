@@ -207,6 +207,7 @@ match_node() {
 
     [ "$matches" -eq 1 ] || fail "hardware matched $matches inventory entries; expected exactly one"
     load_config "$matched_config"
+    validate_profile "$matched_config" "$ROLE"
     NIC_NAME=$matched_nic
     NIC_MAC=$(read_first_line "$sys_root/class/net/$NIC_NAME/address")
 
@@ -214,6 +215,11 @@ match_node() {
         "$DNS_SERVERS" "$DOMAIN" "$LAN_CIDR" "$MANAGEMENT_CIDR" "$CLUSTER_DOMAIN"; do
         [ -n "$value" ] || fail "inventory entry for $ROLE is incomplete"
     done
+    # A NetBird image needs the plan's NetBird range; refuse before any disk is
+    # touched rather than in the late installer step.
+    if [ -r "$media_dir/overlays" ] && grep -qx netbird "$media_dir/overlays" && [ -z "$NETBIRD_RANGE" ]; then
+        fail "the image selects NetBird but the profile for $ROLE has no netbird_range"
+    fi
 
     check_reinstall_permission
 

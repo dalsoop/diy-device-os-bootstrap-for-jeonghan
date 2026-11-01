@@ -8,6 +8,13 @@ management_url=${NETBIRD_MANAGEMENT_URL:-https://api.netbird.io}
 appliance_group=${NETBIRD_APPLIANCE_GROUP:-dns-appliances}
 ssh_user=${NETBIRD_SSH_USER:-dns-operator}
 token_file=${NETBIRD_API_TOKEN_FILE:-}
+# The account's NetBird network range: NETBIRD_RANGE, else the World's network
+# plan as rendered into the first node's profile.
+netbird_range=${NETBIRD_RANGE:-}
+if [ -z "$netbird_range" ]; then
+    plan_profile="$(CDPATH='' cd -- "$(dirname -- "$0")/../../.." && pwd)/burn-history/os-installs/dns01/os.conf"
+    [ -r "$plan_profile" ] && netbird_range=$(awk -F= '$1 == "netbird_range" { print $2 }' "$plan_profile")
+fi
 # The NetBird API accepts setup-key lifetimes from one day upward.
 setup_key_lifetime=86400
 requested_role=
@@ -49,6 +56,32 @@ printf '%s' "$management_url" |
 printf '%s' "$appliance_group" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]*$' ||
     fail "invalid NETBIRD_APPLIANCE_GROUP"
 printf '%s' "$ssh_user" | grep -Eq '^[a-z_][a-z0-9_-]*$' || fail "invalid NETBIRD_SSH_USER"
+printf '%s' "$netbird_range" |
+    grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}/([89]|[12][0-9]|3[0-2])$' ||
+    fail "set NETBIRD_RANGE or render the World's network plan (no NetBird range found)"
+
+# in_netbird_range ADDRESS succeeds when the IPv4 ADDRESS lies inside the range.
+in_netbird_range() {
+    awk -v address="$1" -v range="$netbird_range" '
+        function ip(value,    part, n, i, result) {
+            n = split(value, part, ".")
+            if (n != 4) bad = 1
+            result = 0
+            for (i = 1; i <= 4; i++) {
+                if (part[i] !~ /^[0-9]+$/ || part[i] + 0 > 255) bad = 1
+                result = result * 256 + part[i]
+            }
+            return result
+        }
+        BEGIN {
+            split(range, r, "/")
+            size = 1
+            for (i = 0; i < 32 - r[2]; i++) size *= 2
+            low = ip(r[1]) - ip(r[1]) % size
+            value = ip(address)
+            exit (bad || value < low || value >= low + size)
+        }'
+}
 if [ -z "$token_file" ] || [ ! -r "$token_file" ]; then
     fail "NetBird API token file is missing or unreadable"
 fi
@@ -139,10 +172,12 @@ verify_node() {
     printf '%s' "$node_status" |
         jq -e --arg role "$role" '(.fqdn | type == "string") and (.fqdn | split(".")[0] == $role)' \
         >/dev/null 2>&1 || property_failed "$role" hostname
-    ip=$(printf '%s' "$node_status" | jq -er '
+    if ! ip=$(printf '%s' "$node_status" | jq -er '
         .netbirdIp | strings | split("/")[0]
-        | select(test("^10\\.78\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"))
-    ' 2>/dev/null) || property_failed "$role" "NetBird address outside 10.78.0.0/16"
+        | select(test("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$"))
+    ' 2>/dev/null) || ! in_netbird_range "$ip"; then
+        property_failed "$role" "NetBird address outside $netbird_range"
+    fi
 
     config=$(remote "$host" sudo netbird debug config 2>/dev/null) ||
         property_failed "$role" "readable client configuration"

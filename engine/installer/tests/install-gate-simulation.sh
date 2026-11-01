@@ -232,6 +232,26 @@ expect_failure() {
 root=$(make_fixture valid)
 expect_success valid_exact_match "$root"
 
+# A NetBird image refuses a profile without the plan's NetBird range before any
+# disk byte is written, and carries the range into the install state.
+root=$(make_fixture netbird-without-range)
+printf 'tailscale\nnetbird\n' > "$root/media/overlays"
+expect_failure netbird_image_without_netbird_range_is_blocked "$root"
+
+root=$(make_fixture netbird-with-range)
+printf 'tailscale\nnetbird\n' > "$root/media/overlays"
+sed -i.bak 's#^cluster_domain=.*#&\nnetbird_range=10.66.0.0/16#' "$root/media/dns01.conf"
+expect_success netbird_image_with_netbird_range "$root"
+grep -qx 'NETBIRD_RANGE=10.66.0.0/16' "$root/run/install.env" || {
+    printf 'FAIL the NetBird range did not reach the install state\n' >&2
+    exit 1
+}
+
+root=$(make_fixture netbird-range-on-lan)
+printf 'netbird\n' > "$root/media/overlays"
+sed -i.bak 's#^cluster_domain=.*#&\nnetbird_range=10.77.128.0/17#' "$root/media/dns01.conf"
+expect_failure netbird_range_overlapping_the_lan_is_blocked "$root"
+
 root=$(make_fixture wrong-dmi)
 printf 'OTHER-SERIAL\n' > "$root/sys/class/dmi/id/product_serial"
 expect_failure wrong_dmi_is_blocked "$root"

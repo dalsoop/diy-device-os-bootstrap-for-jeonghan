@@ -199,7 +199,8 @@ run_case() {
     : > "$state/api.log"
     url=${CASE_URL:-https://api.netbird.io}
     status=0
-    env -u NETBIRD_MANAGEMENT_URL -u NETBIRD_APPLIANCE_GROUP -u NETBIRD_SSH_USER \
+    env -u NETBIRD_MANAGEMENT_URL -u NETBIRD_APPLIANCE_GROUP -u NETBIRD_SSH_USER -u NETBIRD_RANGE \
+        ${CASE_RANGE:+NETBIRD_RANGE="$CASE_RANGE"} \
         PATH="$temporary/bin:$PATH" \
         MOCK_STATE="$state" MOCK_SCENARIO="$scenario" MOCK_TOKEN="$token" \
         MOCK_KEY_PREFIX="$key_prefix" MOCK_URL="$url" MOCK_SSH_USER=dns-operator \
@@ -247,6 +248,15 @@ pass enrolls_all_nodes_with_distinct_keys
 CASE_URL=https://netbird.example.test run_case self-hosted success 0 --role dns02
 expect_output 'enrolled and verified dns02 at 10.78.1.2'
 pass honors_self_hosted_management_url
+
+CASE_RANGE=10.66.0.0/16 run_case other-range success 1 --role dns01
+expect_output 'NetBird address outside 10.66.0.0/16'
+CASE_RANGE=10.78.1.0/24 run_case narrower-range success 0 --role dns01
+expect_output 'enrolled and verified dns01 at 10.78.1.1'
+CASE_RANGE=not-a-range run_case invalid-range none 1 --role dns01
+expect_output 'no NetBird range found'
+[ ! -s "$state/argv.log" ] || die "invalid-range: contacted the API or SSH"
+pass checks_the_address_against_the_network_plan_range
 
 CASE_URL=http://netbird.example.test run_case insecure-url none 1 --role dns01
 [ ! -s "$state/argv.log" ] || die "insecure-url: contacted the API or SSH"

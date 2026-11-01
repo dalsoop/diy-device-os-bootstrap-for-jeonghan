@@ -1,3 +1,28 @@
+Template: dns-appliance/blocked
+Type: error
+Description: DNS appliance installation stopped before partitioning
+ ${reason}
+ .
+ No disk will be partitioned. Turn the machine off, fix the cause and boot
+ the USB stick again. If no internal disk is visible, set the firmware
+ storage mode to AHCI (not RAID, Intel RST or VMD).
+Description-ko.UTF-8: 디스크를 나누기 전에 DNS 서버 설치를 멈췄습니다
+ ${reason}
+ .
+ 어떤 디스크도 나누거나 지우지 않습니다. 전원을 끄고 원인을 고친 뒤 USB로 다시
+ 부팅하세요. 내부 디스크가 보이지 않으면 BIOS의 저장장치 모드를 AHCI로
+ 바꾸세요(RAID, Intel RST, VMD가 아니어야 합니다).
+
+Template: dns-appliance/finish-failed
+Type: error
+Description: DNS appliance setup failed; the installation is not finished
+ The DNS appliance setup step returned an error, so this machine is not a
+ working DNS server. Do not reboot into it. Keep this screen, turn the
+ machine off and report the failure.
+Description-ko.UTF-8: DNS 서버 설정에 실패해 설치를 끝내지 않았습니다
+ DNS 서버 설정 단계에서 오류가 나서 이 장비는 DNS 서버로 동작하지 않습니다.
+ 이 상태로 재부팅해 쓰지 마세요. 이 화면을 남겨 두고 전원을 끈 뒤 알려 주세요.
+
 Template: dns-appliance/role
 Type: select
 Choices: dns01, dns02, dns03

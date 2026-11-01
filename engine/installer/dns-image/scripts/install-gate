@@ -23,10 +23,17 @@ if [ -e "$media_dir/install-mode" ]; then
     install_mode=$(cat "$media_dir/install-mode")
 fi
 
+record_failures=false
+
 fail() {
     message="DNS appliance install blocked: $*"
     logger -t dns-appliance-installer "$message" 2>/dev/null || true
     echo "$message" >&2
+    # Installer phases keep every refusal so the partitioning hook can show
+    # the first cause, which is often an earlier identity-step failure.
+    if [ "$record_failures" = true ]; then
+        { mkdir -p "$state_dir" && printf '%s\n' "$*" >> "$state_dir/failures"; } 2>/dev/null || true
+    fi
     exit 1
 }
 
@@ -529,6 +536,10 @@ assert_single_guided_disk() {
         guided_count=$((guided_count + 1))
         guided_disk=$candidate
     done
+    # Firmware in RAID, Intel RST or VMD mode hides the internal disk from
+    # Linux; the installer then sees only the USB stick.
+    [ "$guided_count" -ne 0 ] ||
+        fail "no internal disk is visible; set the firmware storage mode to AHCI (not RAID, Intel RST or VMD)"
     [ "$guided_count" -eq 1 ] || fail "found $guided_count internal disks; expected exactly one"
 }
 
@@ -639,8 +650,36 @@ case "$install_mode" in
     *) fail "unknown install mode" ;;
 esac
 
+# Debian Installer's preseed_command shows a failed command and then returns
+# success, so neither preseed/early_command nor partman/early_command can stop
+# the installer: partman would continue with the stock recipe on whatever
+# disk it sees, the USB stick included. The disk gate therefore runs as a
+# partman init.d hook (installed by prepare-installer), because a failing
+# init.d script aborts partman back to the main menu every time it starts.
+partman_hook() {
+    [ ! -e "$state_dir/disk-selected" ] || return 0
+    if /bin/sh "$0" select-disk >/dev/null 2>&1; then
+        : > "$state_dir/disk-selected"
+        return 0
+    fi
+    reason=
+    [ ! -r "$state_dir/failures" ] || reason=$(sed -n '1p' "$state_dir/failures")
+    [ -n "$reason" ] || reason="disk selection failed"
+    logger -t dns-appliance-installer "partitioning refused: $reason" 2>/dev/null || true
+    db_x_loadtemplatefile "$media_dir/guided.templates" dns-appliance || true
+    db_subst dns-appliance/blocked reason "$reason" || true
+    db_fset dns-appliance/blocked seen false || true
+    db_input critical dns-appliance/blocked || true
+    db_go || true
+    return 1
+}
+
+case "${1:-}" in
+    identify|select-disk) record_failures=true ;;
+esac
+
 # Source at script scope: confmodule may re-exec $0 with the phase arguments.
-if [ "$install_mode" = guided ] && [ "${1:-}" = identify ]; then
+if { [ "$install_mode" = guided ] && [ "${1:-}" = identify ]; } || [ "${1:-}" = partman-hook ]; then
     # shellcheck source=/dev/null
     . "${DNS_INSTALLER_DEBCONF_MODULE:-/usr/share/debconf/confmodule}"
 fi
@@ -656,6 +695,9 @@ case "${1:-}" in
     select-disk)
         match_node
         match_disk
+        ;;
+    partman-hook)
+        partman_hook
         ;;
     *)
         fail "unknown gate phase"

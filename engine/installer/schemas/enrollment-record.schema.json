@@ -22,7 +22,7 @@
     "generation_id": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
     "hostname": { "enum": ["dns01", "dns02", "dns03"] },
     "role": { "enum": ["primary", "secondary"] },
-    "address": { "type": "string", "pattern": "^10\\.0\\.5\\.[123]$" },
+    "address": { "type": "string", "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$" },
     "hardware": {
       "type": "object",
       "additionalProperties": false,

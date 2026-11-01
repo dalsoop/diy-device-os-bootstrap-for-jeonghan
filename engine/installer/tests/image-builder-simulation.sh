@@ -320,13 +320,14 @@ for prepare_failure in components filesystem hardware; do
     if grep -q '^gate ' "$prepare_fixture/log"; then
         echo 'image-builder-simulation: identity prompt reached after preparation failure' >&2; exit 1
     fi
-    if [ ! -x "$DNS_INSTALLER_PARTMAN_INIT_DIR/02dns-appliance-gate" ] ||
-        [ ! -x "$DNS_INSTALLER_FINISH_DIR/07dns-appliance" ]; then
+    if [ ! -x "$DNS_INSTALLER_PARTMAN_INIT_DIR/11dns-appliance-gate" ] ||
+        [ ! -x "$DNS_INSTALLER_FINISH_DIR/07dns-appliance" ] ||
+        [ -n "$(find "$DNS_INSTALLER_PARTMAN_INIT_DIR" "$DNS_INSTALLER_FINISH_DIR" -name '.*' -type f)" ]; then
         echo 'image-builder-simulation: installer hooks missing after preparation failure' >&2; exit 1
     fi
 done
 : > "$prepare_fixture/log"
-"$DNS_INSTALLER_PARTMAN_INIT_DIR/02dns-appliance-gate"
+"$DNS_INSTALLER_PARTMAN_INIT_DIR/11dns-appliance-gate"
 grep -qx 'gate partman-hook' "$prepare_fixture/log" || {
     echo 'image-builder-simulation: partman hook does not run the disk gate' >&2; exit 1
 }

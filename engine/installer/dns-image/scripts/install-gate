@@ -501,6 +501,14 @@ match_disk() {
         [ "$(cat "$state_dir/erase-confirmation")" = "$confirmation" ] ||
             fail "erase confirmation no longer matches the target"
     fi
+    if [ "${1:-}" = verify ]; then
+        # A later partman start repeats every identity and consent check but
+        # never clears signatures again; the target must be the one prepared.
+        assert_target_unmounted "$matched_name"
+        grep -qx "TARGET_DISK=$matched_disk" "$prepared_state_file" ||
+            fail "target disk changed after preparation"
+        return 0
+    fi
     prepare_target_disk "$matched_name" "$matched_sectors"
     {
         printf 'TARGET_DISK=%s\n' "$matched_disk"
@@ -656,12 +664,16 @@ esac
 # disk it sees, the USB stick included. The disk gate therefore runs as a
 # partman init.d hook (installed by prepare-installer), because a failing
 # init.d script aborts partman back to the main menu every time it starts.
+# The first start selects and prepares the target; every later start repeats
+# the checks without clearing signatures again.
 partman_hook() {
-    [ ! -e "$state_dir/disk-selected" ] || return 0
-    if /bin/sh "$0" select-disk >/dev/null 2>&1; then
+    phase=select-disk
+    [ ! -e "$state_dir/disk-selected" ] || phase=verify-disk
+    if /bin/sh "$0" "$phase" >/dev/null 2>&1; then
         : > "$state_dir/disk-selected"
         return 0
     fi
+    # The first refusal is the root cause, usually from the identity step.
     reason=
     [ ! -r "$state_dir/failures" ] || reason=$(sed -n '1p' "$state_dir/failures")
     [ -n "$reason" ] || reason="disk selection failed"
@@ -675,7 +687,7 @@ partman_hook() {
 }
 
 case "${1:-}" in
-    identify|select-disk) record_failures=true ;;
+    identify|select-disk|verify-disk) record_failures=true ;;
 esac
 
 # Source at script scope: confmodule may re-exec $0 with the phase arguments.
@@ -695,6 +707,18 @@ case "${1:-}" in
     select-disk)
         match_node
         match_disk
+        ;;
+    verify-disk)
+        # Verification writes a scratch state; the prepared state, which
+        # dns-finish-install later reads, is never rewritten, so a refused
+        # start leaves the next one able to verify again.
+        prepared_state_file=$state_file
+        grep -q '^TARGET_DISK_PREPARED=true$' "$prepared_state_file" ||
+            fail "prepared target state is missing"
+        state_file=$state_dir/install.env.verify
+        match_node
+        match_disk verify
+        rm -f "$state_file"
         ;;
     partman-hook)
         partman_hook

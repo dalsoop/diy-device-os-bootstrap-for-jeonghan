@@ -543,6 +543,7 @@ for _ in 1 2; do
     }
 done
 if [ ! -e "$root/run/disk-selected" ] ||
+    ! grep -qx 'TARGET_DISK_PREPARED=true' "$root/run/install.env" ||
     [ "$(wc -l < "$root/disk.log" | tr -d ' ')" -ne 2 ] ||
     ! grep -q '^partman-auto/disk /dev/sda$' "$root/debconf.log" ||
     grep -q '^SHOWN ' "$root/debconf.log"; then
@@ -550,6 +551,29 @@ if [ ! -e "$root/run/disk-selected" ] ||
     exit 1
 fi
 printf 'PASS partman_hook_prepares_the_confirmed_target_once\n'
+
+# A later partman start re-verifies: an added internal disk is refused and
+# nothing is cleared again.
+make_disk "$root" sdc 0 'OTHER SSD' 'OTHER-DISK-02' 4194304
+if run_gate "$root" partman-hook > "$root/hook.log" 2>&1 ||
+    [ "$(wc -l < "$root/disk.log" | tr -d ' ')" -ne 2 ] ||
+    ! grep -qx 'SHOWN dns-appliance/blocked' "$root/debconf.log"; then
+    printf 'FAIL partman hook skipped re-verification on a later start\n' >&2
+    exit 1
+fi
+printf 'PASS partman_hook_reverifies_on_every_later_start\n'
+
+# A refused start leaves the prepared state intact: once the extra disk is
+# gone, the next start verifies again.
+rm "$root/sys/class/block/sdc"
+if ! run_gate "$root" partman-hook > "$root/hook.log" 2>&1 ||
+    ! grep -qx 'TARGET_DISK_PREPARED=true' "$root/run/install.env" ||
+    [ "$(wc -l < "$root/disk.log" | tr -d ' ')" -ne 2 ]; then
+    printf 'FAIL a refused start destroyed the prepared target state\n' >&2
+    cat "$root/hook.log" >&2
+    exit 1
+fi
+printf 'PASS partman_hook_recovers_after_a_refused_start\n'
 
 root=$(make_guided_fixture guided-usb)
 make_disk "$root" sda 0 'TEST SSD' 'TEST-DISK-01' 2097152 usb

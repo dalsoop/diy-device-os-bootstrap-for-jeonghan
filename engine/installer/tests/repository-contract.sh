@@ -270,6 +270,8 @@ if grep -q -e '^d-i partman/early_command' -e '^d-i preseed/late_command' \
     exit 1
 fi
 grep -q 'install-gate" partman-hook' "$repo_root/dns-image/scripts/prepare-installer"
+grep -qx 'd-i partman-auto/disk string /dev/dns-appliance-target-not-confirmed' \
+    "$repo_root/dns-image/simple-cdd/profiles/default.preseed"
 grep -q 'dns-finish-install"; then' "$repo_root/dns-image/scripts/prepare-installer"
 [ ! -e "$repo_root/dns-image/simple-cdd/profiles/dns.postinst" ]
 grep -q 'debian-installer/locale string ko_KR.UTF-8' \

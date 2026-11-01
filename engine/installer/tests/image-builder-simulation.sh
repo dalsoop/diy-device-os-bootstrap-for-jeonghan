@@ -1307,7 +1307,8 @@ make_finish_root() {
     fi
     printf '%s\n' ROLE=dns01 ADDRESS=10.77.5.1 NETMASK=255.255.0.0 GATEWAY=10.77.0.1 \
         DNS_SERVERS=10.77.0.1 DOMAIN=home.arpa LAN_CIDR=10.77.0.0/16 \
-        MANAGEMENT_CIDR=10.77.0.0/24 CLUSTER_DOMAIN=home.arpa NIC_NAME=eno1 TARGET_DISK=/dev/sda \
+        MANAGEMENT_CIDR=10.77.0.0/24 CLUSTER_DOMAIN=home.arpa NETBIRD_RANGE=10.78.0.0/16 \
+        NIC_NAME=eno1 TARGET_DISK=/dev/sda \
         > "$root/run/install.env"
     cat > "$root/bin/in-target" <<'EOF'
 #!/bin/sh

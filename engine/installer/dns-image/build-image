@@ -64,6 +64,19 @@ for overlay in $overlays; do
     esac
 done
 
+# The per-node network profiles are generated from the World's network plan.
+# An image never embeds an address the World does not state; a fixture
+# inventory (DNS_APPLIANCE_INVENTORY_DIR) is the tests' own input.
+if [ -z "${DNS_APPLIANCE_INVENTORY_DIR:-}" ]; then
+    if [ -n "${DEVICE_OS_WORLD:-}" ]; then
+        ruby "$monorepo_root/engine/world/bin/render-network-plan" --check --world "$DEVICE_OS_WORLD" ||
+            fail "os-installs do not match the World's network plan"
+    else
+        ruby "$monorepo_root/engine/world/bin/render-network-plan" --check ||
+            fail "os-installs do not match the World's network plan"
+    fi
+fi
+
 case "$source_repository" in
     https://*) ;;
     *) fail "source repository must use HTTPS" ;;

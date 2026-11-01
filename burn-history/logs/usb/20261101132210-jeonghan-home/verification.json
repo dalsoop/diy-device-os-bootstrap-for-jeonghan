@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "writer": "macos-mbr-last",
+  "target": {
+    "display_name": "SanDisk 3.2Gen1",
+    "bytes": 30784094208
+  },
+  "preflight_at": "2026-11-01T04:23:54Z",
+  "completed_at": "2026-11-01T05:11:39Z",
+  "readback": {
+    "method": "mbr-last-raw-compare",
+    "status": "passed"
+  },
+  "event_id": "20261101132210-jeonghan-home-439cfe71",
+  "generation_id": "20261101132210-jeonghan-home",
+  "repository_revision": "3a2dea1e813fdbddfa4914bff5b40014abfee051",
+  "catalog_tree": "f454bdf3312b3934f2d49a6ddf9468ff371e7cbd"
+}

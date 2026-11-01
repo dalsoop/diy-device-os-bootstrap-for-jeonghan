@@ -23,6 +23,7 @@ DOMAIN=
 LAN_CIDR=
 MANAGEMENT_CIDR=
 CLUSTER_DOMAIN=
+NETBIRD_RANGE=
 NIC_NAME=
 TARGET_DISK=
 
@@ -37,6 +38,7 @@ while IFS='=' read -r key value; do
         LAN_CIDR) LAN_CIDR=$value ;;
         MANAGEMENT_CIDR) MANAGEMENT_CIDR=$value ;;
         CLUSTER_DOMAIN) CLUSTER_DOMAIN=$value ;;
+        NETBIRD_RANGE) NETBIRD_RANGE=$value ;;
         NIC_NAME) NIC_NAME=$value ;;
         TARGET_DISK) TARGET_DISK=$value ;;
     esac
@@ -91,9 +93,10 @@ peer_address() {
 }
 
 # Renders the firewall template $1 for the overlay selection file $2 into $3:
-# the role profile's LAN and management CIDRs, the three cluster addresses from
-# the embedded role profiles, and only the selected overlays' lines and
-# interfaces. A marker left after rendering stops the install.
+# the role profile's LAN and management CIDRs, the NetBird range from the
+# World's network plan, the three cluster addresses from the embedded role
+# profiles, and only the selected overlays' lines and interfaces. A marker left
+# after rendering stops the install.
 render_firewall() {
     for cidr in "$LAN_CIDR" "$MANAGEMENT_CIDR"; do
         ipv4_cidr "$cidr" || {
@@ -115,6 +118,10 @@ render_firewall() {
         esac
         firewall_interfaces="${firewall_interfaces:+$firewall_interfaces, }$interface"
     done
+    if [ "$firewall_netbird" = true ] && ! ipv4_cidr "$NETBIRD_RANGE"; then
+        echo "dns-finish-install: NetBird is selected but '$NETBIRD_RANGE' is not an IPv4 CIDR" >&2
+        exit 1
+    fi
     firewall_peers=
     for peer in dns01 dns02 dns03; do
         peer_ip=$(peer_address "/cdrom/simple-cdd/$peer.conf") || {
@@ -125,10 +132,11 @@ render_firewall() {
     done
     awk -v lan="$LAN_CIDR" -v management="$MANAGEMENT_CIDR" -v peers="$firewall_peers" \
         -v interfaces="$firewall_interfaces" -v tailscale="$firewall_tailscale" \
-        -v netbird="$firewall_netbird" '
+        -v netbird="$firewall_netbird" -v netbird_range="$NETBIRD_RANGE" '
         /@@TAILSCALE@@/ { if (tailscale != "true") next; sub(/@@TAILSCALE@@/, "") }
         /@@NETBIRD@@/ { if (netbird != "true") next; sub(/@@NETBIRD@@/, "") }
         {
+            gsub(/@@NETBIRD_RANGE@@/, netbird_range)
             gsub(/@@LAN_CIDR@@/, lan)
             gsub(/@@MANAGEMENT_CIDR@@/, management)
             gsub(/@@CLUSTER_PEERS@@/, peers)

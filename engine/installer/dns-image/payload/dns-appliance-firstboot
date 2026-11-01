@@ -46,6 +46,7 @@ DOMAIN=
 LAN_CIDR=
 MANAGEMENT_CIDR=
 CLUSTER_DOMAIN=
+NETBIRD_RANGE=
 NIC_NAME=
 NIC_MAC=
 TARGET_DISK=
@@ -59,6 +60,7 @@ while IFS='=' read -r key value; do
         LAN_CIDR) LAN_CIDR=$value ;;
         MANAGEMENT_CIDR) MANAGEMENT_CIDR=$value ;;
         CLUSTER_DOMAIN) CLUSTER_DOMAIN=$value ;;
+        NETBIRD_RANGE) NETBIRD_RANGE=$value ;;
         NIC_NAME) NIC_NAME=$value ;;
         NIC_MAC) NIC_MAC=$value ;;
         TARGET_DISK) TARGET_DISK=$value ;;
@@ -124,14 +126,16 @@ fi
 
 # Prints the recursion ACL: loopback, the LAN, and the address range of each
 # overlay listed in the selection file. nftables accepts each overlay range
-# only on its own interface.
+# only on its own interface. The NetBird range is the World's network plan
+# value carried in the install state.
 recursion_acl() {
     acl="127.0.0.0/8,$2"
     if grep -qx tailscale "$1"; then
         acl="$acl,100.64.0.0/10"
     fi
     if grep -qx netbird "$1"; then
-        acl="$acl,10.78.0.0/16"
+        [ -n "$NETBIRD_RANGE" ] || fail "NetBird is selected but the install state has no NetBird range"
+        acl="$acl,$NETBIRD_RANGE"
     fi
     printf '%s\n' "$acl"
 }

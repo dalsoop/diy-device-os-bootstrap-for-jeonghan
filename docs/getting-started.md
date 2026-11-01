@@ -115,6 +115,50 @@ An unknown or duplicate ID is rejected. The contributor-only top-level `include`
 `exclude` commands edit only the contributor reference collection; ordinary
 operators should manage their World instead.
 
+### Set your network plan
+
+Every operator sets their own network. The World's `networkPlan` picks a
+reviewed preset from `engine/world/presets/network-plans.yaml` and overrides any
+field; the LAN, router, upstream DNS, management range, the three node addresses
+and the NetBird range all come from it, and nothing else in the repository
+carries an address:
+
+```yaml
+spec:
+  networkPlan:
+    preset: home-router-24        # or home-10-77, or no preset and every field
+    gateway: 192.168.1.254        # any field overrides the preset
+    nodes:
+      dns01: 192.168.1.60         # one node at a time
+```
+
+| Field | Meaning |
+| --- | --- |
+| `lan` | the router's LAN, a private IPv4 network |
+| `gateway` | the router address |
+| `upstreamDns` | where the nodes send queries they cannot answer |
+| `management` | the part of the LAN allowed to reach SSH, Cockpit and metrics |
+| `domain`, `clusterDomain` | the local zone and the cluster's own domain |
+| `dhcpRange` | optional `FIRST-LAST`; node addresses must stay outside it |
+| `netbirdRange` | required when NetBird is selected; set the same value in the NetBird dashboard (Settings > Networks) before any peer enrolls |
+| `nodes` | `dns01`, `dns02`, `dns03` addresses |
+
+The plan is refused when the LAN is public or not a network address, a node or
+the gateway is outside the LAN, a node repeats an address or sits in the DHCP
+range, the management range leaves the LAN, or the LAN or NetBird range overlaps
+each other, Tailscale (`100.64.0.0/10`), Docker's pools, k3s, or Podman's
+networks. Then generate the per-node installer profiles and update the node
+records in `burn-history/dns-records.zone` by hand:
+
+```sh
+engine/world/bin/render-network-plan --write
+engine/world/bin/render-network-plan --check
+```
+
+The image builder runs `--check` and refuses an image whose profiles differ
+from the World. The guided installer shows the plan (LAN, management range,
+upstream DNS and NetBird range) next to the erase confirmation.
+
 ## 4. Check USB capacity
 
 An initial estimate may contact vendor HTTPS endpoints for content lengths but

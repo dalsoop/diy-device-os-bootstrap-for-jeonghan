@@ -33,6 +33,9 @@ Usage:
   sudo ./device-os world burn <options>  Burn a verified removable USB on Linux
   sudo ./device-os world burn-image-macos <options>
                                         Burn a World image on macOS and record it
+  sudo ./device-os world refresh-image-macos <options>
+                                        Copy only the changed files of a new image
+                                        onto a USB this writer made (confirm word REFRESH)
 
 Reference/contributor commands:
   ./device-os targets                    List live removable targets and confirmations
@@ -332,6 +335,17 @@ case "$command" in
                     --writer macos-mbr-last \
                     --device "$target_device" \
                     -- "$repo_root/usb-media/write-image-macos" "$@"
+                ;;
+            refresh-image-macos)
+                shift
+                resolve_world
+                target_device=$(option_value --device "$@") || fail "world refresh-image-macos requires --device"
+                USB_MEDIA_CATALOG=$resolved exec "$event_recorder" \
+                    --world-plan "$world_plan" \
+                    --catalog "$resolved" \
+                    --writer macos-file-refresh \
+                    --device "$target_device" \
+                    -- "$repo_root/usb-media/write-image-macos" --mode refresh "$@"
                 ;;
             help|-h|--help)
                 usage

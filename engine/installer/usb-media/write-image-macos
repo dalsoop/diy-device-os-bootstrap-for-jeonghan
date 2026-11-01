@@ -9,6 +9,7 @@ distribution_policy=$script_dir/distribution-policy.json
 image=
 device=
 confirmation=
+mode=write
 write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
 
 usage() {
@@ -16,11 +17,20 @@ usage() {
 usage: sudo usb-media/write-image-macos \
   --image /absolute/path/device-os.raw \
   --device /dev/diskN \
-  --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
+  [--mode write|refresh] \
+  --confirm 'ERASE|REFRESH /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
 
 The raw MBR image must have exactly the same byte size as the removable target.
-The command keeps the partition map hidden while it writes and verifies the
-image body, commits and verifies the first MiB last, then unmounts and ejects.
+write (the default, confirmation word ERASE) keeps the partition map hidden
+while it writes and verifies the image body, commits and verifies the first MiB
+last, then unmounts and ejects.
+
+refresh (confirmation word REFRESH) is for a USB this writer already made from
+the same composition: it proceeds only when the target's first MiB, partition
+map and Ventoy EFI partition equal the image's, then copies only the files that
+differ into the data partition, replaces the enrollment partition's installer
+metadata when that partition holds no enrollment or reinstall record yet, and
+passes only when both partitions' file trees hash equal to the image's.
 EOF
     exit 2
 }
@@ -38,8 +48,14 @@ emit_write_evidence() {
     [[ "$write_evidence" = /* ]] || fail "DEVICE_OS_WRITE_EVIDENCE must be an absolute path"
     [ -d "$(dirname -- "$write_evidence")" ] || fail "write-evidence directory is missing"
     evidence_temporary=$write_evidence.tmp.$$
+    local evidence_writer=macos-mbr-last evidence_method=mbr-last-raw-compare
+    if [ "$mode" = refresh ]; then
+        evidence_writer=macos-file-refresh
+        evidence_method=file-tree-compare
+    fi
     jq -n \
-        --arg writer macos-mbr-last \
+        --arg writer "$evidence_writer" \
+        --arg method "$evidence_method" \
         --arg device_path "$device" \
         --arg display_name "$media_name" \
         --argjson bytes "$device_bytes" \
@@ -53,7 +69,7 @@ emit_write_evidence() {
           target: {display_name: $display_name, bytes: $bytes},
           preflight_at: $preflight_at,
           completed_at: (if $completed_at == "" then null else $completed_at end),
-          readback: {method: "mbr-last-raw-compare", status: $readback_status}
+          readback: {method: $method, status: $readback_status}
         }' > "$evidence_temporary"
     chmod 0600 "$evidence_temporary"
     mv "$evidence_temporary" "$write_evidence"
@@ -64,12 +80,14 @@ while [ "$#" -gt 0 ]; do
         --image) image=${2:-}; shift 2 ;;
         --device) device=${2:-}; shift 2 ;;
         --confirm) confirmation=${2:-}; shift 2 ;;
+        --mode) mode=${2:-}; shift 2 ;;
         *) usage ;;
     esac
 done
 
 [ "$(uname -s)" = Darwin ] || fail "macOS is required"
 [ "$(id -u)" -eq 0 ] || fail "run with sudo"
+case "$mode" in write|refresh) ;; *) usage ;; esac
 command -v jq >/dev/null 2>&1 || fail "jq is required"
 command -v shasum >/dev/null 2>&1 || fail "shasum is required"
 command -v ioreg >/dev/null 2>&1 || fail "ioreg is required"
@@ -195,9 +213,22 @@ fi
 [ "$mbr_type" -ne 238 ] || fail "GPT images are not supported by the two-phase macOS writer"
 body_bytes=$((image_bytes - prefix_bytes))
 
-expected="ERASE $device $media_name $serial $device_bytes"
+confirmation_word=ERASE
+[ "$mode" = write ] || confirmation_word=REFRESH
+expected="$confirmation_word $device $media_name $serial $device_bytes"
 [ "$confirmation" = "$expected" ] ||
     fail "exact confirmation required: $expected"
+
+if [ "$mode" = refresh ]; then
+    # shellcheck source=engine/installer/usb-media/refresh-image-macos.sh
+    . "$script_dir/refresh-image-macos.sh"
+    preflight_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    emit_write_evidence pending
+    refresh_from_image "$image" "$device"
+    emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "write-image-macos: file-tree refresh passed and $device was ejected"
+    exit 0
+fi
 
 # SHA-256 of the 1 MiB prefix (prefix) or of everything after it (body), read
 # in 1 MiB blocks. A byte-wise cmp of the raw device made a 30 GB readback take

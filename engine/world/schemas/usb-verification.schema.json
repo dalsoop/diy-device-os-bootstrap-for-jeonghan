@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schema_version": { "const": 2 },
-    "writer": { "enum": ["linux-ventoy", "macos-mbr-last"] },
+    "writer": { "enum": ["linux-ventoy", "macos-mbr-last", "macos-file-refresh"] },
     "target": {
       "type": "object",
       "additionalProperties": false,

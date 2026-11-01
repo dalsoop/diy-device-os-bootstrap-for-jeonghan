@@ -34,7 +34,7 @@
     },
     "world_slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
     "media_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-    "writer": { "enum": ["linux-ventoy", "macos-mbr-last"] },
+    "writer": { "enum": ["linux-ventoy", "macos-mbr-last", "macos-file-refresh"] },
     "repository_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "catalog_tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "status": { "enum": ["pending", "succeeded", "failed", "cancelled", "interrupted"] },

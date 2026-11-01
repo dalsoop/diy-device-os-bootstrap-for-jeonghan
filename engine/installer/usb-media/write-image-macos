@@ -268,6 +268,7 @@ if [ "$mode" = mapped ]; then
     echo "warning: all existing partitions and data will be erased"
     diskutil unmountDisk "$device"
     python3 "$script_dir/mapped-write.py" --image "$image" --bmap "$bmap" \
+        --image-sha256 "$image_sha256" \
         --device "/dev/r${device#/dev/}" || fail "mapped write or readback failed"
     release_disk "$device"
     emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"

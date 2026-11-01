@@ -13,6 +13,7 @@ the device held; file systems treat them as free space.
 """
 
 import argparse
+import errno
 import hashlib
 import json
 import mmap
@@ -27,7 +28,7 @@ def fail(message):
     sys.exit(1)
 
 
-def load_map(path, image_bytes):
+def load_map(path, image_bytes, image_sha256):
     try:
         with open(path, encoding="utf-8") as handle:
             document = json.load(handle)
@@ -36,6 +37,10 @@ def load_map(path, image_bytes):
     if not isinstance(document, dict) or document.get("schema_version") != 1 or \
             document.get("block_size") != BLOCK or document.get("image_bytes") != image_bytes:
         fail("the block map does not describe this image")
+    # A same-size map made for another image could leave out blocks this one
+    # needs; the map must name this image's digest.
+    if document.get("image_sha256") != image_sha256:
+        fail("the block map was made for another image (SHA-256 differs); regenerate it")
     ranges = document.get("ranges")
     total = (image_bytes + BLOCK - 1) // BLOCK
     if not isinstance(ranges, list) or not ranges:
@@ -64,7 +69,11 @@ def read_into(fd, buffer, block, image_bytes):
     view = memoryview(buffer)[:length]
     done = 0
     while done < length:
-        count = os.preadv(fd, [view[done:]], block * BLOCK + done)
+        if hasattr(os, "preadv"):
+            count = os.preadv(fd, [view[done:]], block * BLOCK + done)
+        else:
+            os.lseek(fd, block * BLOCK + done, os.SEEK_SET)
+            count = os.readv(fd, [view[done:]])
         if count <= 0:
             fail(f"short read at block {block}")
         done += count
@@ -92,29 +101,33 @@ def main():
     parser.add_argument("--image", required=True)
     parser.add_argument("--bmap", required=True)
     parser.add_argument("--device", required=True)
+    parser.add_argument("--image-sha256", required=True,
+                        help="the image digest the writer verified against the image manifest")
     args = parser.parse_args()
 
     image_bytes = os.path.getsize(args.image)
-    blocks, total = load_map(args.bmap, image_bytes)
+    blocks, total = load_map(args.bmap, image_bytes, args.image_sha256)
     mapped = set(blocks)
     buffer = mmap.mmap(-1, BLOCK)  # page aligned, as raw devices may require
     image = os.open(args.image, os.O_RDONLY)
 
     # Every unmapped block must be zero: skip holes, read what is allocated.
+    # Only ENXIO means "no data after this offset"; any other answer, or no
+    # hole reporting at all, makes every remaining block count as allocated.
     zero = bytes(BLOCK)
+    holes_reported = hasattr(os, "SEEK_DATA") and hasattr(os, "SEEK_HOLE")
     offset = 0
     while offset < image_bytes:
-        try:
-            data = os.lseek(image, offset, os.SEEK_DATA)
-        except OSError:
-            break
-        except AttributeError:
-            data = offset
-        hole = image_bytes
-        try:
-            hole = os.lseek(image, data, os.SEEK_HOLE)
-        except (AttributeError, OSError):
-            pass
+        data, hole = offset, image_bytes
+        if holes_reported:
+            try:
+                data = os.lseek(image, offset, os.SEEK_DATA)
+                hole = os.lseek(image, data, os.SEEK_HOLE)
+            except OSError as error:
+                if error.errno == errno.ENXIO:
+                    break
+                holes_reported = False
+                data, hole = offset, image_bytes
         for block in range(data // BLOCK, (min(hole, image_bytes) - 1) // BLOCK + 1):
             if block in mapped:
                 continue

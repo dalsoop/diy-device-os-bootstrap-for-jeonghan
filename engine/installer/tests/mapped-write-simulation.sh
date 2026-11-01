@@ -67,9 +67,14 @@ else:
 assert document["image_bytes"] == 40 << 20
 PY
 
+image_sha256() {
+    python3 -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$1"
+}
+
 # The device starts full of old bytes.
 python3 -c 'import sys; open(sys.argv[1], "wb").write(b"\xaa" * (40 << 20))' "$temporary/device"
 python3 "$mapped_write" --image "$temporary/image.raw" --bmap "$temporary/image.raw.bmap.json" \
+    --image-sha256 "$(image_sha256 "$temporary/image.raw")" \
     --device "$temporary/device" > "$temporary/write.log" 2>&1 ||
     fail "the mapped write failed: $(cat "$temporary/write.log")"
 python3 - "$temporary/image.raw" "$temporary/image.raw.bmap.json" "$temporary/device" <<'PY'
@@ -88,6 +93,21 @@ for block in range(40):
 PY
 echo "PASS mapped_write_writes_and_verifies_only_mapped_blocks"
 
+# A same-size map made for another image is refused before the device changes.
+cp "$temporary/image.raw" "$temporary/other.raw"
+python3 -c 'import sys; f = open(sys.argv[1], "r+b"); f.seek(10 << 20); f.write(b"\x44")' "$temporary/other.raw"
+python3 -c 'import sys; open(sys.argv[1], "wb").write(b"\xaa" * (40 << 20))' "$temporary/device"
+if python3 "$mapped_write" --image "$temporary/other.raw" --bmap "$temporary/image.raw.bmap.json" \
+    --image-sha256 "$(image_sha256 "$temporary/other.raw")" \
+    --device "$temporary/device" > "$temporary/stale.log" 2>&1; then
+    fail "a same-size map for another image was accepted"
+fi
+grep -q 'made for another image' "$temporary/stale.log" ||
+    fail "the stale map refusal did not say why: $(cat "$temporary/stale.log")"
+python3 -c 'import sys; assert open(sys.argv[1], "rb").read() == b"\xaa" * (40 << 20)' "$temporary/device" ||
+    fail "a refused stale map changed the device"
+echo "PASS mapped_write_refuses_a_same_size_map_for_another_image"
+
 if [ "$holes" != yes ]; then
     echo "SKIP the refusal cases need hole reporting, which this file system lacks"
     echo "mapped-write simulations: passed"
@@ -97,7 +117,16 @@ fi
 # Data the map leaves out is refused before the device changes.
 python3 -c 'import sys; f = open(sys.argv[1], "r+b"); f.seek(20 << 20); f.write(b"\x33")' "$temporary/image.raw"
 python3 -c 'import sys; open(sys.argv[1], "wb").write(b"\xaa" * (40 << 20))' "$temporary/device"
+# The map is regenerated for the changed image's digest but keeps its old
+# ranges, so only the zero proof can catch the unmapped data.
+python3 - "$temporary/image.raw.bmap.json" "$(image_sha256 "$temporary/image.raw")" <<'PY'
+import json, sys
+document = json.load(open(sys.argv[1]))
+document["image_sha256"] = sys.argv[2]
+json.dump(document, open(sys.argv[1], "w"))
+PY
 if python3 "$mapped_write" --image "$temporary/image.raw" --bmap "$temporary/image.raw.bmap.json" \
+    --image-sha256 "$(image_sha256 "$temporary/image.raw")" \
     --device "$temporary/device" > "$temporary/refuse.log" 2>&1; then
     fail "an image with data outside the map was written"
 fi
@@ -110,6 +139,7 @@ echo "PASS mapped_write_refuses_data_outside_the_map_before_writing"
 # A map made for another image is refused.
 python3 -c 'import sys; open(sys.argv[1], "ab").write(bytes(1 << 20))' "$temporary/image.raw"
 if python3 "$mapped_write" --image "$temporary/image.raw" --bmap "$temporary/image.raw.bmap.json" \
+    --image-sha256 "$(image_sha256 "$temporary/image.raw")" \
     --device "$temporary/device" > /dev/null 2>&1; then
     fail "a map for a different image size was accepted"
 fi

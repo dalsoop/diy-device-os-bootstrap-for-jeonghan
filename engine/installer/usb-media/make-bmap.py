@@ -14,6 +14,8 @@ and refuses an image whose unmapped blocks are not all zero.
 """
 
 import argparse
+import errno
+import hashlib
 import json
 import os
 import sys
@@ -48,21 +50,33 @@ def partitions(path):
 
 def allocated_blocks(fd, size):
     """Indices of 1 MiB blocks that hold allocated extents of the raw file."""
+    every_block = set(range((size + BLOCK - 1) // BLOCK))
+    if not hasattr(os, "SEEK_DATA") or not hasattr(os, "SEEK_HOLE"):
+        return every_block  # no hole reporting here: every block counts as written
     blocks = set()
     offset = 0
-    try:
-        while offset < size:
-            try:
-                data = os.lseek(fd, offset, os.SEEK_DATA)
-            except OSError:
-                break  # ENXIO: no data after offset
+    while offset < size:
+        try:
+            data = os.lseek(fd, offset, os.SEEK_DATA)
+        except OSError as error:
+            if error.errno == errno.ENXIO:
+                break  # no data after offset
+            return every_block  # EINVAL, ENOTSUP, EIO: do not guess
+        try:
             hole = os.lseek(fd, data, os.SEEK_HOLE)
-            blocks.update(range(data // BLOCK, (min(hole, size) - 1) // BLOCK + 1))
-            offset = hole
-    except (AttributeError, OSError):
-        # No hole reporting here: every block counts as written.
-        return set(range((size + BLOCK - 1) // BLOCK))
+        except OSError:
+            return every_block
+        blocks.update(range(data // BLOCK, (min(hole, size) - 1) // BLOCK + 1))
+        offset = hole
     return blocks
+
+
+def image_sha256(path):
+    hasher = hashlib.sha256()
+    with open(path, "rb") as image:
+        for chunk in iter(lambda: image.read(8 * BLOCK), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def main():
@@ -103,6 +117,8 @@ def main():
         "schema_version": 1,
         "block_size": BLOCK,
         "image_bytes": size,
+        # Binds the map to this exact image; a same-size stale map is refused.
+        "image_sha256": image_sha256(args.image),
         "metadata_mib": args.metadata_mib,
         "mapped_bytes": mapped_bytes,
         "ranges": ranges,

@@ -387,7 +387,7 @@ cmp -s "$script_dir/scripts/prepare-installer" "$iso_verify_dir/prepare-installe
 cmp -s "$script_dir/scripts/dns-finish-install" "$iso_verify_dir/dns-finish-install" ||
     fail "built ISO contains a stale appliance setup step"
 if xorriso -indev "$iso" -find /simple-cdd -name '*.postinst' 2>/dev/null | grep -q .; then
-    fail "built ISO contains a simple-cdd postinst; appliance setup must run as preseed/late_command"
+    fail "built ISO contains a simple-cdd postinst; appliance setup must run as the finish-install hook"
 fi
 cmp -s "$builder_dir/profiles/default.preseed" "$iso_verify_dir/default.preseed" ||
     fail "built ISO contains stale installer answers"

@@ -13,12 +13,15 @@ mkdir -p "$test_root/bin"
 cat > "$test_root/bin/confmodule" <<'EOF'
 db_set() { :; }
 db_fset() { printf 'FLAG %s\n' "$*" >> "$DNS_TEST_DEBCONF_LOG"; }
-db_input() { :; }
+db_input() {
+    [ "$2" != dns-appliance/blocked ] || printf 'SHOWN %s\n' "$2" >> "$DNS_TEST_DEBCONF_LOG"
+}
 db_go() { [ "${DNS_TEST_CANCEL:-false}" = false ]; }
 db_stop() { echo 'shared installer frontend must remain connected' >&2; return 1; }
 db_x_loadtemplatefile() { :; }
 db_subst() {
     if [ "$2" = confirmation ]; then printf '%s\n' "$3" > "$DNS_TEST_CONFIRMATION"; fi
+    if [ "$1" = dns-appliance/blocked ]; then printf 'BLOCKED %s\n' "$3" >> "$DNS_TEST_DEBCONF_LOG"; fi
 }
 db_get() {
     case "$1" in
@@ -507,6 +510,70 @@ unset DNS_TEST_CANCEL
 root=$(make_guided_fixture guided-second-disk)
 make_disk "$root" sdc 0 'OTHER SSD' 'OTHER-DISK-02' 4194304
 expect_identify_failure guided_rejects_multiple_internal_disks "$root"
+
+# Firmware in RAID/RST/VMD mode hides the internal disk: only the USB is left.
+# Debian Installer carries on after the failed identity step, so the partman
+# hook must refuse on every start and show the first cause.
+root=$(make_guided_fixture guided-no-internal-disk)
+rm "$root/sys/class/block/sda"
+expect_identify_failure guided_rejects_machine_without_visible_internal_disk "$root"
+no_disk_reason='no internal disk is visible; set the firmware storage mode to AHCI (not RAID, Intel RST or VMD)'
+for _ in 1 2; do
+    if run_gate "$root" partman-hook > "$root/hook.log" 2>&1; then
+        printf 'FAIL partman hook allowed partitioning without an internal disk\n' >&2
+        exit 1
+    fi
+done
+if [ "$(grep -cx "BLOCKED $no_disk_reason" "$root/debconf.log")" -ne 2 ] ||
+    [ "$(grep -cx 'SHOWN dns-appliance/blocked' "$root/debconf.log")" -ne 2 ] ||
+    [ -s "$root/disk.log" ] || [ -e "$root/run/disk-selected" ]; then
+    printf 'FAIL partman hook did not refuse with the identity cause\n' >&2
+    cat "$root/debconf.log" "$root/hook.log" >&2
+    exit 1
+fi
+printf 'PASS partman_hook_refuses_every_start_without_an_internal_disk\n'
+
+root=$(make_guided_fixture guided-partman-hook)
+identify_guided "$root"
+for _ in 1 2; do
+    run_gate "$root" partman-hook > "$root/hook.log" 2>&1 || {
+        printf 'FAIL partman hook refused a confirmed target\n' >&2
+        cat "$root/hook.log" >&2
+        exit 1
+    }
+done
+if [ ! -e "$root/run/disk-selected" ] ||
+    ! grep -qx 'TARGET_DISK_PREPARED=true' "$root/run/install.env" ||
+    [ "$(wc -l < "$root/disk.log" | tr -d ' ')" -ne 2 ] ||
+    ! grep -q '^partman-auto/disk /dev/sda$' "$root/debconf.log" ||
+    grep -q '^SHOWN ' "$root/debconf.log"; then
+    printf 'FAIL partman hook did not prepare the confirmed target exactly once\n' >&2
+    exit 1
+fi
+printf 'PASS partman_hook_prepares_the_confirmed_target_once\n'
+
+# A later partman start re-verifies: an added internal disk is refused and
+# nothing is cleared again.
+make_disk "$root" sdc 0 'OTHER SSD' 'OTHER-DISK-02' 4194304
+if run_gate "$root" partman-hook > "$root/hook.log" 2>&1 ||
+    [ "$(wc -l < "$root/disk.log" | tr -d ' ')" -ne 2 ] ||
+    ! grep -qx 'SHOWN dns-appliance/blocked' "$root/debconf.log"; then
+    printf 'FAIL partman hook skipped re-verification on a later start\n' >&2
+    exit 1
+fi
+printf 'PASS partman_hook_reverifies_on_every_later_start\n'
+
+# A refused start leaves the prepared state intact: once the extra disk is
+# gone, the next start verifies again.
+rm "$root/sys/class/block/sdc"
+if ! run_gate "$root" partman-hook > "$root/hook.log" 2>&1 ||
+    ! grep -qx 'TARGET_DISK_PREPARED=true' "$root/run/install.env" ||
+    [ "$(wc -l < "$root/disk.log" | tr -d ' ')" -ne 2 ]; then
+    printf 'FAIL a refused start destroyed the prepared target state\n' >&2
+    cat "$root/hook.log" >&2
+    exit 1
+fi
+printf 'PASS partman_hook_recovers_after_a_refused_start\n'
 
 root=$(make_guided_fixture guided-usb)
 make_disk "$root" sda 0 'TEST SSD' 'TEST-DISK-01' 2097152 usb

@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 set -eu
 
-# Runs as preseed/late_command in the installer environment, where /cdrom is
-# the install medium and /target is the new system. It must not be named
+# Runs from the finish-install hook prepare-installer installs, in the installer
+# environment, where /cdrom is the install medium and /target is the new
+# system. A failure there backs up instead of finishing. It must not be named
 # <profile>.postinst: simple-cdd runs those inside the target chroot, where
 # neither path exists.
 

@@ -269,7 +269,16 @@ cat > "$prepare_fixture/install-gate" <<'EOF'
 #!/bin/sh
 printf 'gate %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
 EOF
+cat > "$prepare_fixture/dns-finish-install" <<'EOF'
+#!/bin/sh
+printf 'finish\n' >> "$DNS_TEST_PREPARE_LOG"
+[ "${DNS_TEST_FINISH_FAILURE:-false}" = false ]
+EOF
 cat > "$prepare_fixture/confmodule" <<'EOF'
+db_x_loadtemplatefile() { :; }
+db_fset() { :; }
+db_input() { printf 'shown %s\n' "$2" >> "$DNS_TEST_PREPARE_LOG"; }
+db_go() { :; }
 db_set() { printf 'debconf %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"; }
 anna() {
     printf 'components %s\n' "$*" >> "$DNS_TEST_PREPARE_LOG"
@@ -293,20 +302,47 @@ PATH="$prepare_fixture/bin:$PATH"
 export PATH
 export DNS_INSTALLER_DEBCONF_MODULE=$prepare_fixture/confmodule
 export DNS_TEST_PREPARE_LOG=$prepare_fixture/log
+export DNS_INSTALLER_PARTMAN_INIT_DIR=$prepare_fixture/partman-init.d
+export DNS_INSTALLER_FINISH_DIR=$prepare_fixture/finish-install.d
 /bin/sh "$prepare_fixture/prepare-installer"
 printf '%s\n' 'debconf debconf/language ko' 'queue simple-cdd-profiles fat-modules' \
     'components cdrom-retriever default' 'filesystem vfat' 'hardware --configure ethdetect' \
     'gate identify' > "$prepare_fixture/expected"
 cmp "$prepare_fixture/expected" "$prepare_fixture/log"
+# A failed preseeded command does not stop Debian Installer, so the disk gate
+# and appliance setup are hooks that must exist before any preparation step.
 for prepare_failure in components filesystem hardware; do
     : > "$prepare_fixture/log"
+    rm -rf "$DNS_INSTALLER_PARTMAN_INIT_DIR" "$DNS_INSTALLER_FINISH_DIR"
     if DNS_TEST_PREPARE_FAILURE=$prepare_failure /bin/sh "$prepare_fixture/prepare-installer"; then
         echo 'image-builder-simulation: failed preparation accepted' >&2; exit 1
     fi
     if grep -q '^gate ' "$prepare_fixture/log"; then
         echo 'image-builder-simulation: identity prompt reached after preparation failure' >&2; exit 1
     fi
+    if [ ! -x "$DNS_INSTALLER_PARTMAN_INIT_DIR/11dns-appliance-gate" ] ||
+        [ ! -x "$DNS_INSTALLER_FINISH_DIR/07dns-appliance" ] ||
+        [ -n "$(find "$DNS_INSTALLER_PARTMAN_INIT_DIR" "$DNS_INSTALLER_FINISH_DIR" -name '.*' -type f)" ]; then
+        echo 'image-builder-simulation: installer hooks missing after preparation failure' >&2; exit 1
+    fi
 done
+: > "$prepare_fixture/log"
+"$DNS_INSTALLER_PARTMAN_INIT_DIR/11dns-appliance-gate"
+grep -qx 'gate partman-hook' "$prepare_fixture/log" || {
+    echo 'image-builder-simulation: partman hook does not run the disk gate' >&2; exit 1
+}
+: > "$prepare_fixture/log"
+"$DNS_INSTALLER_FINISH_DIR/07dns-appliance" || {
+    echo 'image-builder-simulation: finish hook failed after successful setup' >&2; exit 1
+}
+printf 'finish\n' | cmp - "$prepare_fixture/log"
+: > "$prepare_fixture/log"
+finish_code=0
+DNS_TEST_FINISH_FAILURE=true "$DNS_INSTALLER_FINISH_DIR/07dns-appliance" || finish_code=$?
+if [ "$finish_code" -ne 10 ] || ! grep -qx 'shown dns-appliance/finish-failed' "$prepare_fixture/log"; then
+    echo 'image-builder-simulation: failed appliance setup did not back up the installer' >&2; exit 1
+fi
+unset DNS_INSTALLER_PARTMAN_INIT_DIR DNS_INSTALLER_FINISH_DIR
 
 installer_dir=$repo_root/dns-image
 simulation_fail() {

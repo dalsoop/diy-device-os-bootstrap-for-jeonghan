@@ -262,8 +262,17 @@ grep -q 'NETBIRD_AMD64_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'overlay-selection" resolve' "$repo_root/dns-image/build-image"
 grep -q '/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md' \
     "$repo_root/dns-image/scripts/dns-finish-install"
-grep -q 'preseed/late_command string /bin/sh /cdrom/simple-cdd/dns-finish-install' \
+# Debian Installer only warns on a failed preseeded command, so the disk gate
+# and appliance setup must be installer hooks, never preseeded commands.
+if grep -q -e '^d-i partman/early_command' -e '^d-i preseed/late_command' \
+    "$repo_root/dns-image/simple-cdd/profiles/default.preseed"; then
+    echo "repository-contract: the disk gate or appliance setup is a non-fatal preseeded command" >&2
+    exit 1
+fi
+grep -q 'install-gate" partman-hook' "$repo_root/dns-image/scripts/prepare-installer"
+grep -qx 'd-i partman-auto/disk string /dev/dns-appliance-target-not-confirmed' \
     "$repo_root/dns-image/simple-cdd/profiles/default.preseed"
+grep -q 'dns-finish-install"; then' "$repo_root/dns-image/scripts/prepare-installer"
 [ ! -e "$repo_root/dns-image/simple-cdd/profiles/dns.postinst" ]
 grep -q 'debian-installer/locale string ko_KR.UTF-8' \
     "$repo_root/dns-image/simple-cdd/profiles/default.preseed"

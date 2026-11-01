@@ -7,6 +7,40 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 # shellcheck source=/dev/null
 . "${DNS_INSTALLER_DEBCONF_MODULE:-/usr/share/debconf/confmodule}"
 
+# Debian Installer only warns when a preseeded command fails and then carries
+# on, so the disk gate and the appliance setup run as installer hooks whose
+# failure stops the step: a failing partman init.d script returns to the main
+# menu before any partitioning, and finish-install backs up on exit code 10
+# instead of rebooting into a bare system. They are installed first so that a
+# later preparation failure still leaves partitioning blocked, and each one
+# appears only complete and executable (partman skips a non-executable
+# script). The gate runs after partman's own 10umount_target so a later
+# partman start can re-verify an unmounted target.
+partman_init_dir=${DNS_INSTALLER_PARTMAN_INIT_DIR:-/lib/partman/init.d}
+finish_dir=${DNS_INSTALLER_FINISH_DIR:-/usr/lib/finish-install.d}
+mkdir -p "$partman_init_dir" "$finish_dir"
+cat > "$partman_init_dir/.11dns-appliance-gate" <<EOF
+#!/bin/sh
+exec /bin/sh "$script_dir/install-gate" partman-hook
+EOF
+chmod 0755 "$partman_init_dir/.11dns-appliance-gate"
+mv -f "$partman_init_dir/.11dns-appliance-gate" "$partman_init_dir/11dns-appliance-gate"
+cat > "$finish_dir/.07dns-appliance" <<EOF
+#!/bin/sh
+. "\${DNS_INSTALLER_DEBCONF_MODULE:-/usr/share/debconf/confmodule}"
+if /bin/sh "$script_dir/dns-finish-install"; then
+    exit 0
+fi
+logger -t dns-appliance-installer "appliance setup failed; installation not finished" 2>/dev/null || true
+db_x_loadtemplatefile "$script_dir/guided.templates" dns-appliance || true
+db_fset dns-appliance/finish-failed seen false || true
+db_input critical dns-appliance/finish-failed || true
+db_go || true
+exit 10
+EOF
+chmod 0755 "$finish_dir/.07dns-appliance"
+mv -f "$finish_dir/.07dns-appliance" "$finish_dir/07dns-appliance"
+
 # file-preseed runs before Debian's normal component/network detection step.
 # Load the offline components and detect the NIC before asking for its identity.
 db_set debconf/language ko

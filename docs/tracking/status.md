@@ -66,6 +66,8 @@ Physical media (2026-11-01 and 2026-11-02), same SanDisk 3.2Gen1, operator works
 
 Neither write is HP firmware boot or install evidence.
 
+First physical HP attempt (2026-11-02, `faff60b` stick): the installer booted the guided entry with the preseed (`/proc/cmdline` confirmed), but Linux saw no internal disk, only the stick (`/sys/block`: `sdb` SanDisk plus the Ventoy mapper devices). The identity gate refused, Debian Installer only warned and continued, and the stock partitioner then targeted the stick: its partition table was rewritten (`mkfs.fat: unable to open /dev/sda1: Device or resource busy`), destroying the installer media; a later retry after re-plugging asked to format `sda` and failed in `mkfs.fat`. No HP disk was written. Cause in source: `preseed_command` returns success after a failed command, so `partman/early_command` and `preseed/late_command` were never fail-closed. The disk gate and appliance setup now run as partman init.d and finish-install hooks that stop the step (see engineering notes), the gate names firmware RAID/RST/VMD mode when no internal disk is visible, and the stick must be rewritten. The HP's storage mode and the reason its disk was invisible are still open.
+
 The source contract suite passed on the build host, including World, Catalog, media, inventory wizard, management, Tailscale and Agent Gateway simulations. Signed Debian installer fetch rejection fixtures also pass. The first real image build exposed Simple-CDD 0.6.9 requesting a removed i386 installer; the candidate now uses signed/checksummed amd64-only custom-installer inputs and still needs a successful image build.
 
 ## 10.77 LAN, kernel fix snapshot, overlays per World, and unattended upgrades (2026-11-01)

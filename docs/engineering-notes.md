@@ -237,7 +237,7 @@ and compares all of them before live target inspection or any write.
 
 **Cause:** Debian Installer's BusyBox awk omits exponentiation, and file-preseed executes before the normal offline component and network hardware detection stages. Host-side simulations do not reproduce either property.
 
-**Response:** network arithmetic uses repeated multiplication. `prepare-installer` initializes the CD retriever, loads the offline components, and configures `ethdetect` before identity collection. Each failure stops before the identity prompt or partitioning. Qualify these steps with the signed installer's BusyBox and actual BIOS/UEFI boots; desktop awk and fake NIC fixtures are insufficient evidence.
+**Response:** network arithmetic uses repeated multiplication. `prepare-installer` initializes the CD retriever, loads the offline components, and configures `ethdetect` before identity collection. It installs the partitioning and finish hooks before any of these steps, so each failure skips the identity prompt and the partitioning hook then refuses to partition. Qualify these steps with the signed installer's BusyBox and actual BIOS/UEFI boots; desktop awk and fake NIC fixtures are insufficient evidence.
 
 ## Debian Installer cannot read exFAT enrollment media
 
@@ -269,7 +269,15 @@ and compares all of them before live target inspection or any write.
 
 **Cause:** simple-cdd 0.6.9 runs `<profile>.postinst` through `in-target`, where `/cdrom` and `/target` do not exist, and treats its failure as a warning.
 
-**Response:** appliance setup is `scripts/dns-finish-install`, run as `preseed/late_command` in the installer environment, which stops the install on failure. `build-image` rejects any `*.postinst` on the ISO.
+**Response:** appliance setup is `scripts/dns-finish-install`, run in the installer environment from the finish-install hook described below. `build-image` rejects any `*.postinst` on the ISO.
+
+## A failed preseeded command does not stop Debian Installer
+
+**Symptom:** the gate refuses a machine (for example "no internal disk is visible"), yet the installer goes on to the stock partitioner, asks "바뀐 점을 디스크에 쓰시겠습니까?" for `sda` and can erase the installer USB itself. VT4 shows `mkfs.fat: unable to open /dev/sda1: Device or resource busy`.
+
+**Cause:** `preseed_command` (Debian Installer's runner for `preseed/early_command`, `partman/early_command` and `preseed/late_command`) shows `preseed/command_failed` and then exits successfully. partman's `01early_command` marks the command as run and partman continues with the stock recipe; without an eligible internal disk the only disk left is the USB stick. finish-install likewise only logs a failing late command and reboots into a bare system. Firmware in RAID, Intel RST or VMD mode hides the internal disk and triggers this path.
+
+**Response:** only the identity step stays a preseeded command. `prepare-installer` first installs `/lib/partman/init.d/11dns-appliance-gate` (after partman's `10umount_target`; written to a hidden name, made executable, then renamed, because partman silently skips a non-executable script), which runs `install-gate partman-hook`: the first start selects and prepares the target, every later start repeats the identity, consent, media and single-disk checks without clearing signatures again and requires the same target, and any refusal shows `dns-appliance/blocked` with the first recorded refusal and exits non-zero, so partman aborts to the main menu. Verification writes a scratch state and never rewrites the prepared one. partman's own swap stays active after a finished partitioning (`10umount_target` unmounts only `/target`), so re-entering the partitioner after that is refused as "backs active swap"; reboot to start over. The preseed names a nonexistent `partman-auto/disk` that the gate replaces, so if the hooks were never installed automatic partitioning cannot silently take the only visible disk. It also installs `/usr/lib/finish-install.d/07dns-appliance`, which runs `dns-finish-install` and on failure shows `dns-appliance/finish-failed` and exits 10, so finish-install backs up instead of rebooting. A visible "no internal disk" refusal is fixed in firmware (AHCI), not by retrying.
 
 ## GRUB asks for the BIOS boot device when the USB is attached
 

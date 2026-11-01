@@ -336,7 +336,7 @@ awk '
 ' "$iso_verify_dir"/isolinux/*.cfg || fail "built ISO enables automatic BIOS boot"
 for embedded in install-gate prepare-installer dns-finish-install default.preseed disk-identity guided.templates install-mode dns01.conf dns02.conf dns03.conf \
     operator-authorized-keys age-recipient sources.env overlays netbird.service \
-    nftables.conf nftables-own-table.conf enrollment-record.schema.json \
+    nftables.conf nftables-own-table.conf dns-appliance-reboot-required enrollment-record.schema.json \
     diy-device-os-bootstrap-for-jeonghan-license.txt license-history.md \
     third-party-notices.md $selected_payload \
     source.md source-snapshot.tar.gz distribution-policy.json distribution-status.md \
@@ -361,6 +361,8 @@ for firewall_file in nftables.conf nftables-own-table.conf; do
     cmp -s "$script_dir/payload/$firewall_file" "$iso_verify_dir/$firewall_file" ||
         fail "built ISO contains a stale $firewall_file"
 done
+cmp -s "$script_dir/payload/dns-appliance-reboot-required" "$iso_verify_dir/dns-appliance-reboot-required" ||
+    fail "built ISO contains a stale kernel reboot-required hook"
 cmp -s "$script_dir/scripts/install-gate" "$iso_verify_dir/install-gate" ||
     fail "built ISO contains a stale install-gate"
 cmp -s "$script_dir/scripts/prepare-installer" "$iso_verify_dir/prepare-installer" ||

@@ -112,6 +112,7 @@ for file in \
     engine/installer/dns-image/payload/dns-appliance-backup \
     engine/installer/dns-image/payload/dns-appliance-technitium-run \
     engine/installer/dns-image/payload/dns-appliance-reboot \
+    engine/installer/dns-image/payload/dns-appliance-reboot-required \
     engine/installer/dns-image/fetch-locked-sources \
     engine/installer/dns-image/overlay-selection \
     engine/installer/dns-image/render-build-records \
@@ -247,6 +248,11 @@ fi
 grep -qx 'ExecStop=/usr/sbin/nft destroy table inet dns_appliance' \
     "$repo_root/dns-image/payload/nftables-own-table.conf"
 grep -qx '../payload/nftables-own-table.conf' "$repo_root/dns-image/simple-cdd/profiles/default.extra"
+# The appliance writes its own reboot marker from a kernel postinst hook.
+grep -qx '../payload/dns-appliance-reboot-required' "$repo_root/dns-image/simple-cdd/profiles/default.extra"
+grep -q '/target/etc/kernel/postinst.d/zz-dns-appliance-reboot-required' \
+    "$repo_root/dns-image/scripts/dns-finish-install"
+grep -q 'built ISO contains a stale kernel reboot-required hook' "$repo_root/dns-image/build-image"
 grep -q 'preauthorized:true' "$repo_root/management/tailscale-enroll"
 grep -q 'TAILSCALE_LICENSES_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'tailscale-dependency-licenses.md' "$repo_root/dns-image/build-image"

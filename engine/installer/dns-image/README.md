@@ -28,8 +28,9 @@ This directory contains the first implementation of the Debian OS installer:
   health (with one status entry per selected overlay), backup, the firewall
   template and its `nftables.service` drop-in, NTP, SSH, Cockpit integration,
   the NetBird unit, and the unattended-upgrade configuration: deb822 Debian
-  sources, the per-role `apt-daily-upgrade` timer and refresh drop-ins, and the
-  `dns-appliance-reboot` script, service, and timer.
+  sources, the per-role `apt-daily-upgrade` timer and refresh drop-ins, the
+  `dns-appliance-reboot` script, service, and timer, and the kernel postinst
+  hook `dns-appliance-reboot-required` that writes `/run/reboot-required`.
 
 The firewall is the single nftables table `inet dns_appliance`, rendered at
 installation for the selected overlays; loading, reloading, and stopping it
@@ -51,7 +52,10 @@ available.
 After installation, each node installs Debian updates at its role's time
 (dns01 02:00, dns02 02:30, dns03 03:00 `Asia/Seoul`) and reboots one hour later
 only when a reboot is required and every peer that has ever answered DNS still
-answers. Skips are logged under the journal tag `dns-appliance-reboot` and
+answers. A reboot is required when a kernel package was installed since boot:
+its postinst runs the appliance's hook in `/etc/kernel/postinst.d`, which
+writes `/run/reboot-required` and names the package in
+`/run/reboot-required.pkgs`. Skips are logged under the journal tag `dns-appliance-reboot` and
 exported as `dns_appliance_reboot_*` node-exporter metrics.
 
 See [`docs/os-install.md`](../docs/os-install.md) before building or booting it.

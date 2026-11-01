@@ -1378,6 +1378,96 @@ for case_name in 'both|"tailscale0", "wt0"' 'netbird|"wt0"' 'tailscale|"tailscal
         simulation_fail "the ${case_name%%|*} install lacks the nftables.service drop-in"
 done
 
+# A kernel package's postinst runs /etc/kernel/postinst.d through run-parts.
+# The installed hook is run exactly that way, as root in a private mount
+# namespace whose /run is a fresh tmpfs, so the marker it writes is the one
+# the installed dns-appliance-reboot reads at its default path. A read-only
+# /run must not fail the kernel installation. This needs passwordless sudo and
+# mount namespaces; without them the check fails, it never skips.
+kernel_hook=$finish/both/target/etc/kernel/postinst.d/zz-dns-appliance-reboot-required
+[ -f "$kernel_hook" ] || simulation_fail "the installed system has no kernel reboot-required hook"
+cmp -s "$installer_dir/payload/dns-appliance-reboot-required" "$kernel_hook" ||
+    simulation_fail "the installed kernel hook is not the repository-owned hook"
+[ "$(stat -c %a "$kernel_hook")" = 755 ] || simulation_fail "the installed kernel hook is not mode 0755"
+for installed in etc/dns-appliance/peers usr/local/sbin/dns-appliance-reboot; do
+    [ -e "$finish/both/target/$installed" ] || simulation_fail "the dual-overlay install lacks $installed"
+done
+hook_bin=$overlay/hook-bin
+mkdir -p "$hook_bin"
+printf '#!/bin/sh\nprintf "127.0.0.1\\n"\n' > "$hook_bin/dig"
+# shellcheck disable=SC2016
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "$SIM_JOURNAL"\n' > "$hook_bin/logger"
+# shellcheck disable=SC2016
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "$SIM_REBOOTS"\n' > "$hook_bin/systemctl"
+chmod 0755 "$hook_bin/dig" "$hook_bin/logger" "$hook_bin/systemctl"
+cat > "$overlay/kernel-hook-check.sh" <<'EOF'
+set -eu
+hook_dir=$1
+reboot=$2
+peers=$3
+sim_bin=$4
+version=6.12.113+deb13-amd64
+fail() {
+    echo "kernel hook check: $*" >&2
+    exit 1
+}
+kernel_postinst() {
+    run-parts --report --exit-on-error --arg="$1" --arg="/boot/vmlinuz-$1" "$hook_dir"
+}
+window() {
+    : > /run/dns-sim/reboots
+    env -u DNS_APPLIANCE_REBOOT_REQUIRED_FILE PATH="$sim_bin:$PATH" \
+        SIM_JOURNAL=/run/dns-sim/journal SIM_REBOOTS=/run/dns-sim/reboots \
+        DNS_APPLIANCE_REBOOT_STATE_DIR=/run/dns-sim/state DNS_APPLIANCE_PEERS_FILE="$peers" \
+        "$reboot" window
+}
+
+mount -t tmpfs -o mode=0755 tmpfs /run || fail "cannot mount a private /run"
+[ -z "$(ls -A /run)" ] || fail "the private /run is not empty"
+mkdir /run/dns-sim
+window || fail "the reboot window failed before any kernel was installed"
+[ ! -s /run/dns-sim/reboots ] || fail "a reboot was issued before any kernel was installed"
+
+(DPKG_MAINTSCRIPT_PACKAGE="linux-image-$version"; export DPKG_MAINTSCRIPT_PACKAGE
+    kernel_postinst "$version") || fail "the kernel postinst hooks failed"
+[ "$(cat /run/reboot-required)" = '*** System restart required ***' ] ||
+    fail "the marker reads '$(cat /run/reboot-required)'"
+[ "$(stat -c %a /run/reboot-required)" = 644 ] || fail "the marker is not mode 0644"
+[ "$(cat /run/reboot-required.pkgs)" = "linux-image-$version" ] ||
+    fail "the package list reads '$(cat /run/reboot-required.pkgs)'"
+(DPKG_MAINTSCRIPT_PACKAGE="linux-image-$version"; export DPKG_MAINTSCRIPT_PACKAGE
+    kernel_postinst "$version") || fail "the repeated kernel postinst hooks failed"
+[ "$(cat /run/reboot-required.pkgs)" = "linux-image-$version" ] ||
+    fail "a repeated kernel install duplicated its package: '$(cat /run/reboot-required.pkgs)'"
+(unset DPKG_MAINTSCRIPT_PACKAGE; kernel_postinst 6.12.114+deb13-amd64) ||
+    fail "the kernel postinst hooks failed without a package name"
+[ "$(cat /run/reboot-required.pkgs)" = "$(printf 'linux-image-%s\nlinux-image-6.12.114+deb13-amd64' "$version")" ] ||
+    fail "the package list after a second kernel reads '$(cat /run/reboot-required.pkgs)'"
+[ "$(ls -A /run | tr '\n' ' ')" = 'dns-sim reboot-required reboot-required.pkgs ' ] ||
+    fail "the hook left other files in /run: $(ls -A /run | tr '\n' ' ')"
+
+window || fail "the reboot window failed after the kernel install"
+[ "$(cat /run/dns-sim/reboots)" = reboot ] || fail "the reboot guard did not reboot into the new kernel"
+grep -q 'rebooting' /run/dns-sim/journal || fail "the reboot was not logged"
+
+mount -t tmpfs -o ro tmpfs /run || fail "cannot mount a read-only /run"
+output=$(DPKG_MAINTSCRIPT_PACKAGE="linux-image-$version"; export DPKG_MAINTSCRIPT_PACKAGE
+    kernel_postinst "$version" 2>&1) || fail "an unwritable /run failed the kernel installation: $output"
+printf '%s\n' "$output" | grep -q 'dns-appliance-reboot-required: cannot write /run/reboot-required' ||
+    fail "an unwritable /run was not reported: $output"
+[ ! -e /run/reboot-required ] || fail "a marker appeared on a read-only /run"
+echo "kernel hook check: passed"
+EOF
+# The log is written by this unprivileged shell on purpose, so the temporary
+# tree stays removable; only the check itself runs as root.
+# shellcheck disable=SC2024
+sudo -n unshare --mount --propagation private sh "$overlay/kernel-hook-check.sh" \
+    "$(dirname "$kernel_hook")" "$finish/both/target/usr/local/sbin/dns-appliance-reboot" \
+    "$finish/both/target/etc/dns-appliance/peers" "$hook_bin" > "$overlay/kernel-hook.log" 2>&1 ||
+    simulation_fail "the installed kernel hook check failed: $(cat "$overlay/kernel-hook.log")"
+grep -qx 'kernel hook check: passed' "$overlay/kernel-hook.log" ||
+    simulation_fail "the installed kernel hook check did not complete: $(cat "$overlay/kernel-hook.log")"
+
 for case_name in absent empty unknown reversed duplicate; do
     case "$case_name" in
         absent) selection=absent ;;
@@ -1444,7 +1534,8 @@ done
 # only the selected ones, and Simple-CDD skips absent extra files.
 for listed in generated/overlays generated/tailscale.tgz generated/tailscale-license.txt \
     generated/tailscale-dependency-licenses.md generated/netbird.tar.gz generated/netbird-license.txt \
-    ../payload/netbird.service ../payload/nftables.conf ../payload/nftables-own-table.conf; do
+    ../payload/netbird.service ../payload/nftables.conf ../payload/nftables-own-table.conf \
+    ../payload/dns-appliance-reboot-required; do
     grep -qx "$listed" "$installer_dir/simple-cdd/profiles/default.extra" ||
         simulation_fail "default.extra does not list $listed"
 done

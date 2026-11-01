@@ -49,13 +49,23 @@ answering (counter reset), a never-seen peer down (no block), a seen peer down
 (skip, counter increment, journal line, no reboot), both peers down, persistence
 of the seen set and counter across runs, a peer answering only the retry,
 malformed state, and metrics rendering, and checks the rendered per-role
-install and reboot timers (`Asia/Seoul`, no random delay, no catch-up).
+install and reboot timers (`Asia/Seoul`, no random delay, no catch-up) and
+each role's executable kernel reboot-required hook.
 
 `image-builder-simulation.sh` also covers World overlay resolution, the
 conditional build records for Tailscale-only, NetBird-only, and dual
 selections, the per-selection appliance install step, World/image agreement in
 every direction, readiness blockers, and both Linux writers' manifest checks
-with no target command reached.
+with no target command reached. It runs the kernel hook that the install step
+put in the fake target's `/etc/kernel/postinst.d` through `run-parts` with a
+kernel version and image path, as a kernel package's postinst does, as root in
+a private mount namespace (`sudo -n unshare --mount`) over a fresh tmpfs
+`/run`. It asserts the marker text, a package list without duplicates, the
+package-name fallback, no leftover temporary files, that the installed
+`dns-appliance-reboot` at its default marker path does not reboot before and
+does reboot after, and that a read-only `/run` is reported without failing the
+kernel installation. It fails, never skips, when the namespace or mount cannot
+be created.
 
 `repository-contract.sh` also runs the documentation check over every tracked
 text file; `repository-contract.sh --documentation-only <checkout>` runs only

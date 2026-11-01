@@ -46,6 +46,11 @@ first-boot enrollment.
   skips the window while any seen peer fails to answer DNS. Keep install one
   hour before reboot, no random delay, and no catch-up after downtime. Overlay
   clients and Technitium are not updated this way.
+- Nothing in Debian writes `/run/reboot-required` by default. The appliance's
+  kernel hook `payload/dns-appliance-reboot-required`, installed as
+  `/etc/kernel/postinst.d/zz-dns-appliance-reboot-required`, is the only
+  writer. It always exits zero so it never fails a kernel installation. Do not
+  replace it with `reboot-notifier`, which pulls in a mail transport agent.
 - A build is not installation proof. Keep VM, physical hardware, power-loss, and
   firmware verification as separate evidence.
 

@@ -16,6 +16,15 @@ This module runs from a trusted management host after appliance installation.
   existing SSH, delete its remote file, attempt API revocation, and verify
   restrictive preferences. Revocation is currently best-effort; investigate a
   failed or interrupted enrollment until the one-hour key has expired.
+- The NetBird API token never leaves the management host and travels only in
+  a curl-config header. `netbird-enroll` creates one one-off, single-use key
+  per node in the appliance group, sends only that key over existing SSH,
+  deletes it after use and on failure, and fails naming the key ID when the
+  deletion is unconfirmed. It verifies DNS management, client and server
+  routes, and the NetBird SSH server disabled, no routing-peer role, an
+  address in `10.78.0.0/16`, and an unchanged resolver. Verify `netbird up`
+  flags and status or configuration field names against the pinned client
+  source before changing them.
 - Backup collection transfers only already-encrypted files. A collected file is
   not a verified restore.
 - Restore requires an exact target URL confirmation. The current command uses
@@ -24,7 +33,13 @@ This module runs from a trusted management host after appliance installation.
 - Reinstall authorization must bind the active generation and hardware UUID; an
   old token must not authorize a replacement generation.
 - The status monitor is read-only and dependency-free. It must not become an
-  apply surface.
+  apply surface. It reaches nodes by role name; the management host resolves
+  those names without the DNS cluster (hosts file or an overlay's own DNS).
+- Enroll only the overlays the World selects, and only after their
+  preconditions: the reviewed tailnet policy for Tailscale; the network range
+  `10.78.0.0/16`, the `Default` policy removed or disabled, and the reviewed
+  policies for NetBird. Remove a reinstalled node's stale peer by hand before
+  re-enrolling it.
 - Router mutation is outside this module until a model-specific authenticated,
   reversible API and console recovery are proven.
 

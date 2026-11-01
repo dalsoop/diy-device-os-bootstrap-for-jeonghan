@@ -142,14 +142,14 @@ make_fixture() {
 
     cat > "$root/media/dns01.conf" <<EOF
 role=dns01
-address=10.0.5.1
+address=10.77.5.1
 prefix_length=16
 netmask=255.255.0.0
-gateway=10.0.0.1
-dns_servers=10.0.0.1
+gateway=10.77.0.1
+dns_servers=10.77.0.1
 domain=home.arpa
-lan_cidr=10.0.0.0/16
-management_cidr=10.0.0.0/16
+lan_cidr=10.77.0.0/16
+management_cidr=10.77.0.0/16
 cluster_domain=dns-cluster.home.arpa
 expected_product_name_sha256=$(hash_value 'HP ProDesk Test')
 expected_product_sku_sha256=$(hash_value 'TEST-SKU')
@@ -426,7 +426,7 @@ identify_guided "$root"
 expect_success guided_sata_identity_is_rechecked_before_install "$root"
 DNS_INVENTORY_SYS_ROOT="$root/sys" DNS_INVENTORY_DEVICE_ROOT="$root/dev" \
     DNS_DISK_ATA_ID_COMMAND="$test_root/bin/ata-id" \
-    /bin/sh "$repo_root/dns-image/capture-inventory" dns01 10.0.5.1 en0 /dev/sda \
+    /bin/sh "$repo_root/dns-image/capture-inventory" dns01 10.77.5.1 en0 /dev/sda \
     > "$root/captured.conf"
 grep -qx "expected_disk_serial_sha256=$(hash_value TEST-DISK-01)" "$root/captured.conf"
 printf 'PASS capture_and_install_share_sata_serial_identity\n'
@@ -542,12 +542,12 @@ printf 'unknown\n' > "$root/media/install-mode"
 expect_failure unknown_install_mode_is_blocked "$root"
 
 root=$(make_guided_fixture guided-invalid-network)
-sed 's/gateway=10.0.0.1/gateway=192.168.0.1/' "$root/media/dns01.conf" > "$root/media/dns01.new"
+sed 's/gateway=10.77.0.1/gateway=192.168.0.1/' "$root/media/dns01.conf" > "$root/media/dns01.new"
 mv "$root/media/dns01.new" "$root/media/dns01.conf"
 expect_identify_failure guided_rejects_unreachable_gateway "$root"
 
 root=$(make_guided_fixture guided-duplicate-profile-field)
-printf 'address=10.0.5.9\n' >> "$root/media/dns01.conf"
+printf 'address=10.77.5.9\n' >> "$root/media/dns01.conf"
 expect_identify_failure guided_rejects_duplicate_profile_fields "$root"
 
 root=$(make_guided_fixture guided-unsafe-network)

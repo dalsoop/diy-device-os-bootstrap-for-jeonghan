@@ -34,10 +34,24 @@ cat > "$catalog" <<EOF
   },
   "world": {
     "world": {"slug": "test-home"},
-    "media": {"id": "inventory-capture"}
+    "media": {"id": "inventory-capture"},
+    "overlays": ["tailscale", "netbird"]
   }
 }
 EOF
+# The resolved Catalog is hashed for real so that its digest binds the World
+# plan it embeds; the image and the policy keep fixed mock digests.
+real_hash=$temporary/real-hash
+# shellcheck disable=SC2016
+if command -v sha256sum >/dev/null 2>&1; then
+    printf '#!/bin/sh\nexec %s "$1"\n' "$(command -v sha256sum)" > "$real_hash"
+else
+    printf '#!/bin/sh\nexec %s -a 256 "$1"\n' "$(command -v shasum)" > "$real_hash"
+fi
+chmod +x "$real_hash"
+catalog_digest=$("$real_hash" "$catalog")
+catalog_digest=${catalog_digest%% *}
+export TEST_CATALOG=$catalog TEST_REAL_HASH=$real_hash
 cat > "$image.manifest.json" <<EOF
 {
   "schema_version": 2,
@@ -48,7 +62,7 @@ cat > "$image.manifest.json" <<EOF
     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
   "catalog": {
-    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sha256": "$catalog_digest",
     "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   },
@@ -91,6 +105,9 @@ make_mock stat 'echo 2097152'
 # the region. TEST_FAIL_BODY_COMPARE corrupts the device body readback.
 # shellcheck disable=SC2016
 make_mock shasum '
+if [ "$#" -ge 3 ] && [ "$3" = "$TEST_CATALOG" ]; then
+  exec "$TEST_REAL_HASH" "$3"
+fi
 if [ "$#" -ge 3 ]; then
   echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  $3"
   exit 0
@@ -218,6 +235,38 @@ if grep -qE '^(dd |diskutil unmountDisk |diskutil eject )' "$log"; then
     exit 1
 fi
 cp "$temporary/valid-image-manifest.json" "$image.manifest.json"
+
+# The World's overlays change after `world build-image`: the re-resolved
+# Catalog embeds the new World plan, its digest no longer matches the one the
+# raw-image manifest bound, and the writer refuses before inspecting the target.
+cp "$catalog" "$temporary/built-catalog.json"
+for changed_overlays in '["tailscale"]' '["netbird"]'; do
+    # shellcheck disable=SC2016
+    "$jq_bin" --argjson overlays "$changed_overlays" '.world.overlays = $overlays' \
+        "$temporary/built-catalog.json" > "$catalog"
+    : > "$log"
+    if PATH="$test_path" TEST_LOG="$log" USB_MEDIA_CATALOG="$catalog" \
+        DEVICE_OS_LICENSE_CHECKER="$checker" \
+        DEVICE_OS_WRITE_EVIDENCE="$temporary/changed-overlays-evidence.json" \
+        "$writer" --image "$image" --device /dev/disk9 \
+            --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' \
+            >/dev/null 2> "$temporary/changed-overlays.err"; then
+        echo "macos-writer-simulation: World overlays $changed_overlays changed after the build were accepted" >&2
+        exit 1
+    fi
+    grep -q 'raw image manifest does not match the image and selected media' "$temporary/changed-overlays.err" || {
+        echo "macos-writer-simulation: changed World overlays were not refused by the Catalog binding" >&2
+        exit 1
+    }
+    if [ -s "$log" ] || [ -e "$temporary/changed-overlays-evidence.json" ]; then
+        echo "macos-writer-simulation: changed World overlays reached target inspection" >&2
+        exit 1
+    fi
+done
+cp "$temporary/built-catalog.json" "$catalog"
+: > "$log"
+run_writer >/dev/null ||
+    { echo "macos-writer-simulation: the unchanged World was refused" >&2; exit 1; }
 
 : > "$log"
 if PATH="$test_path" TEST_LOG="$log" TEST_FAIL_BODY_COMPARE=1 \

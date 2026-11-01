@@ -24,11 +24,48 @@ The reviewed-mode cases cover:
 - a matching generation-bound reinstall token being accepted;
 - a stale reinstall token being rejected.
 
-`repository-contract.sh` validates immutable source lock shapes, required
-artifacts, executable modes, the enrollment schema, and the presence of the
-first-boot safety contracts. GitHub Actions runs the installer, management,
-Tailscale enrollment, media-catalog, and repository-contract simulations plus
-ShellCheck and Python syntax validation.
+`repository-contract.sh` validates immutable source lock shapes (including
+`verify-locks` rejecting a Simple-CDD mirror that differs from
+`DEBIAN_SNAPSHOT`), required artifacts, executable modes, the enrollment
+schema, the presence of the first-boot safety contracts, and that CI runs every
+simulation listed here. GitHub Actions runs every simulation in this directory
+plus ShellCheck and Python syntax validation.
+
+`tailscale-enrollment-simulation.sh` and `netbird-enrollment-simulation.sh`
+drive the enrollment commands with fake `curl` and `ssh`. The NetBird
+simulation covers usage errors, one and all nodes, a self-hosted management
+URL, a non-HTTPS URL, an already enrolled node, missing, unset, and invalid
+token files, missing and ambiguous groups, key creation failure, remote `up`
+failure, wrong hostname, an address outside `10.78.0.0/16`, missing group
+membership, DNS, route, and SSH settings, routing peers by peer and by group, a
+changed resolver, and unconfirmed key deletion, and proves that neither the
+token nor any setup key reaches command arguments or output.
+
+`appliance-update-simulation.sh` checks the offline package set, apt sources,
+and configuration, renders the per-role timers through `dns-finish-install`,
+and runs `dns-appliance-reboot` with `dig`, `logger`, `systemctl`, and
+`in-target` replaced on `PATH` and a temporary state directory. It covers no reboot required (peers still learned), a reboot with both seen peers
+answering (counter reset), a never-seen peer down (no block), a seen peer down
+(skip, counter increment, journal line, no reboot), both peers down, persistence
+of the seen set and counter across runs, a peer answering only the retry,
+malformed state, and metrics rendering, and checks the rendered per-role
+install and reboot timers (`Asia/Seoul`, no random delay, no catch-up) and
+each role's executable kernel reboot-required hook.
+
+`image-builder-simulation.sh` also covers World overlay resolution, the
+conditional build records for Tailscale-only, NetBird-only, and dual
+selections, the per-selection appliance install step, World/image agreement in
+every direction, readiness blockers, and both Linux writers' manifest checks
+with no target command reached. It runs the kernel hook that the install step
+put in the fake target's `/etc/kernel/postinst.d` through `run-parts` with a
+kernel version and image path, as a kernel package's postinst does, as root in
+a private mount namespace (`sudo -n unshare --mount`) over a fresh tmpfs
+`/run`. It asserts the marker text, a package list without duplicates, the
+package-name fallback, no leftover temporary files, that the installed
+`dns-appliance-reboot` at its default marker path does not reboot before and
+does reboot after, and that a read-only `/run` is reported without failing the
+kernel installation. It fails, never skips, when the namespace or mount cannot
+be created.
 
 `repository-contract.sh` also runs the documentation check over every tracked
 text file; `repository-contract.sh --documentation-only <checkout>` runs only
@@ -42,9 +79,30 @@ file, plan-bound apply that rejects a wrong confirmation, plan hash, endpoint,
 source commit, modified zone, live-zone drift, or replay without importing,
 generation-bound reinstall authorization, and
 the `/16` network prerequisite, generated first-boot recursion permissions for
-LAN and Tailscale clients, and the firewall's Tailscale source-address guard.
-It also verifies root-only environment-file permissions and bootstrap-password
-omission after enrollment. It stubs network calls and never contacts a DNS server.
+the LAN and each selected overlay, the firewall rendered by
+`dns-finish-install` for Tailscale-only, NetBird-only, and both (own table, no
+`flush ruleset`, exact prerouting and input rules in order, source-range
+guards), its rejection of unrendered markers and invalid inputs, and the
+health report's per-overlay `health.json` entries and metrics with the reboot
+metrics unchanged. It also verifies root-only environment-file permissions and
+bootstrap-password omission after enrollment. It stubs network calls and never
+contacts a DNS server.
+
+`firewall-namespace-simulation.sh` loads the rendered firewall into a
+throwaway network namespace whose veth interfaces are named `wt0`,
+`tailscale0`, and `eno1`, and sends real packets from a second namespace to
+listeners on every tested port. Each selection passes `nft -c`. With
+`iifname "wt0" accept` (and `iifname "tailscale0" accept`) inserted at the top
+of the input and forward chains, as the NetBird client does, TCP 8080 and 5380
+stay dropped on the selected overlay interfaces while DNS 53 and TCP 22, 9090,
+9100, 53443 answer; an unselected overlay interface reaches nothing, and the
+LAN rules hold (DNS from the LAN, SSH only from the management network, TCP
+8080 from neither). A control without the prerouting chain
+shows the inserted rule would open TCP 8080. Loading twice, the `nftables.service`
+drop-in's stop (also with the table absent), and its reload leave stand-in
+`inet netbird` and `ip ts-filter` tables unchanged. It needs CAP_NET_ADMIN,
+re-runs itself through passwordless `sudo`, fails rather than skips when
+namespaces cannot be created, and changes nothing outside its namespaces.
 
 `media-catalog-simulation.sh` also checks capacity planning with
 checksum-matched sparse cache files, a runtime artifact with a matching
@@ -66,6 +124,15 @@ that a wrong confirmation, ended input, repeated invalid numbers, a non-root
 user, an unmounted or read-only medium, or a missing internal disk saves
 nothing. An existing file is replaced only after `overwrite`. It does not prove
 that Debian Live renders Hangul or that real HP sysfs values match the fixture.
+
+`status-monitor-simulation.sh` runs the status monitor's `--check-once`
+against a fake node exporter on `127.0.0.1:9100`, a name resolved through the
+hosts file, an unused loopback address, and an unresolvable `.invalid` name. It
+proves that the reboot metrics are parsed (including a zero last-skip time read
+as never skipped), that unknown values are `null`, that name-resolution failure
+is reported per node, that the monitor only sends `GET /metrics`, that the HTML
+page highlights only a node with skipped reboots, and that an `address` field or
+an invalid host is rejected. It contacts no real node.
 
 This simulation is necessary but not sufficient. It does not replace building
 the ISO, booting Debian Installer under BIOS and UEFI, or the physical `dns01`

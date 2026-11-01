@@ -58,6 +58,9 @@ engine/world/tests/usb-event-simulation.rb
 (cd engine/installer && tests/install-gate-simulation.sh)
 (cd engine/installer && tests/management-simulation.sh)
 (cd engine/installer && tests/tailscale-enrollment-simulation.sh)
+(cd engine/installer && tests/netbird-enrollment-simulation.sh)
+(cd engine/installer && tests/status-monitor-simulation.sh)
+(cd engine/installer && tests/appliance-update-simulation.sh)
 (cd engine/installer && tests/dns-license-simulation.sh)
 (cd engine/installer && tests/license-policy-simulation.sh)
 (cd engine/installer && tests/media-catalog-simulation.sh)
@@ -139,11 +142,17 @@ Edit `burn-history/home.yaml` to change desired devices or media. Keep real hard
 From the management host, inspect the expected `/16` topology, node reachability, and Internet readiness separately:
 
 ```sh
-engine/installer/management/network-preflight --json 10.0.0.1/16 | jq
-engine/installer/management/network-preflight --offline --json 10.0.0.1/16 | jq
+engine/installer/management/network-preflight --json 10.77.0.1/16 | jq
+engine/installer/management/network-preflight --offline --json 10.77.0.1/16 | jq
 ```
 
-The offline form marks outbound DNS and HTTPS readiness unknown. Internet is required to fetch public artifacts and enroll Tailscale, but the already-built DNS installer boots and installs offline. A passing Internet probe does not establish LAN routing, node health, or DNS readiness.
+The offline form marks outbound DNS and HTTPS readiness unknown. Internet is required to fetch public artifacts and enroll Tailscale or NetBird (`network_gates.post_install_tailscale` and `post_install_netbird`), but the already-built DNS installer boots and installs offline. Installed appliances also reach the Debian archive over HTTPS for their unattended updates. A passing Internet probe does not establish LAN routing, node health, or DNS readiness.
+
+Moving the router to `10.77.0.1/16` is a manual operator step; follow the address prerequisite in [`engine/installer/docs/network-cutover.md`](../engine/installer/docs/network-cutover.md), keep a wired recovery client and the old router values, and prove node reachability before any DHCP DNS change.
+
+## Retired USB generation
+
+USB generation `20261022024140-jeonghan-home` carries the previous LAN addresses and a Debian snapshot with the vulnerable kernel. It is retired: do not install or reinstall a node from it. Its record under `burn-history/logs/usb/` stays unchanged. Build a new DNS image from the current source and write new media.
 
 ## One USB: guided Debian OS and DNS installation
 
@@ -154,7 +163,7 @@ DNS_APPLIANCE_INSTALL_MODE=guided engine/installer/dns-image/build-image
 DNS_APPLIANCE_INSTALL_MODE=guided engine/installer/dns-image/check-readiness
 ```
 
-Only operator SSH public keys and the public age recipient enter the image. Keep the corresponding private keys outside the checkout on the management host. The default network profiles retain the planned `10.0.0.0/16` LAN and `10.0.5.1` through `.3`; do not deploy them on a `192.168.0.0/24` LAN without a coordinated network/profile change.
+Only operator SSH public keys and the public age recipient enter the image. Keep the corresponding private keys outside the checkout on the management host. The default network profiles retain the planned `10.77.0.0/16` LAN and `10.77.5.1` through `.3`; do not deploy them on a `192.168.0.0/24` LAN without a coordinated network/profile change.
 
 For changes limited to the guided Debian Installer flow (`install-gate`,
 `prepare-installer`, `disk-identity`, guided templates, or the shared preseed),
@@ -179,7 +188,7 @@ checks once for the exact committed source before preparing production media.
 
 Use the resulting ISO and matching build manifest with the existing `dns-install` World media assembly. Boot the USB deliberately, select the role and connected wired NIC, review the network and internal disk, and type the exact erase phrase shown. Debian and DNS install in that pass; the USB need not return to the management host for an inventory rebuild. An ambiguous, mounted, removable, USB-backed or unreadable internal target blocks installation. Never bypass a rejection by editing a hardware hash.
 
-Keep the USB connected through first boot until encrypted enrollment completes. Qualify and recover `dns01` before repeating for `dns02` and `dns03`. Tailscale enrollment and cluster bootstrap still run from the management host after OS installation. An active role needs its existing generation-bound reinstall token plus a fresh on-target erase confirmation.
+Keep the USB connected through first boot until encrypted enrollment completes. Qualify and recover `dns01` before repeating for `dns02` and `dns03`. Overlay enrollment (Tailscale, NetBird, or both, as the World selects) and cluster bootstrap still run from the management host after OS installation. An active role needs its existing generation-bound reinstall token plus a fresh on-target erase confirmation.
 
 The reviewed-inventory path below uses the default `reviewed` mode.
 
@@ -219,7 +228,7 @@ The resulting media contains Debian Live only. Boot each HP computer deliberatel
 
 ```sh
 sudo engine/installer/dns-image/capture-inventory \
-  dns01 10.0.5.1 enp1s0 /dev/sda \
+  dns01 10.77.5.1 enp1s0 /dev/sda \
   > burn-history/os-installs/dns01/hardware.conf
 ```
 
@@ -237,15 +246,17 @@ age-keygen -y /secure/dns-recovery-age-key.txt \
   > burn-history/keys/age-recipient
 ```
 
-Install build dependencies, verify locked external inputs, fetch the digest-pinned Technitium source, and build:
+Install build dependencies, verify locked external inputs, fetch the digest-pinned Technitium source and the World's selected overlay clients, and build:
 
 ```sh
 sudo apt-get install -y simple-cdd debian-cd debian-archive-keyring \
-  reprepro rsync xorriso isolinux syslinux-common skopeo jq curl
+  reprepro rsync xorriso isolinux syslinux-common skopeo jq curl ruby
 engine/installer/build/verify-locks
 engine/installer/dns-image/fetch-locked-sources
 engine/installer/dns-image/build-image
 ```
+
+`fetch-locked-sources` and `build-image` resolve the World (`DEVICE_OS_WORLD` when set) with Ruby and use its `overlays`: only the selected Tailscale and NetBird clients and their license material are fetched and embedded, and the build manifest records the selection. Changing the World's overlays requires a new build; `world readiness`, `world build-image`, and `world burn` refuse an image built for a different selection.
 
 For the guided one-USB path, prefix the build with
 `DNS_APPLIANCE_INSTALL_MODE=guided`; the default `reviewed` mode needs the
@@ -323,6 +334,26 @@ Boot both BIOS and UEFI paths on disposable media before a production pilot. At 
 
 After the internal-disk boot, verify host-key fingerprint and key-only SSH, DNS over UDP and TCP, Cockpit, Technitium certificate fingerprint, NTP, metrics, encrypted enrollment output, and the active generation. Keep `dns02` and `dns03` disabled until the preceding role passes every gate.
 
+## Unattended updates and guarded reboots
+
+Each installed node updates itself from the Debian archive (point release and security) and reboots into updates one role at a time, in `Asia/Seoul`:
+
+| Role | Install time | Reboot window |
+| --- | --- | --- |
+| `dns01` | 02:00 | 03:00 |
+| `dns02` | 02:30 | 03:30 |
+| `dns03` | 03:00 | 04:00 |
+
+The package lists are refreshed immediately before each install. At its window a node reboots only when a reboot is required and every peer that has ever answered DNS still answers; a peer that has never answered, such as a node not installed yet, does not block. A missed time is not run at boot; the next attempt is the next night. Check the state on a node and from the management host:
+
+```sh
+systemctl list-timers apt-daily-upgrade.timer dns-appliance-reboot.timer
+journalctl -t dns-appliance-reboot
+curl -s http://dns01:9100/metrics | grep dns_appliance_reboot_
+```
+
+A node with consecutive skips is highlighted by the status monitor. Restore the failing peer before anything else; see "A guarded reboot can be skipped night after night" in `docs/engineering-notes.md`. Tailscale, NetBird, and Technitium are not updated this way; they change only through a reviewed lock update, a new image, and a reinstall.
+
 ## Import enrollment and form the DNS cluster
 
 After all three standalone nodes have complete enrollment records:
@@ -340,7 +371,11 @@ DNS_CLUSTER_ACCESS_OUTPUT=/secure/cluster-access.json.age \
 
 Move imported values into the principal secret store, rotate bootstrap credentials, and delete temporary plaintext. Verify cluster peers and a DNS canary before enabling another management step.
 
-## Enroll Tailscale
+## Enroll the overlays
+
+Enroll each overlay the World selects (`overlays` in `burn-history/home.yaml`); an unselected client is not installed on the appliances. Both commands reach the nodes over LAN SSH at `10.77.5.1` through `10.77.5.3`, need Internet access to the overlay control plane, and never move a long-lived credential to an appliance. Before re-enrolling a reinstalled node, remove its stale peer with the same role name from the overlay by hand; otherwise the new peer is renamed (for example `dns01-1`) and access by role name breaks.
+
+### Tailscale
 
 Apply the reviewed tailnet policy first. Then provide protected OAuth file paths:
 
@@ -352,18 +387,36 @@ TAILSCALE_OAUTH_CLIENT_SECRET_FILE=/secure/tailscale/client-secret \
 
 Confirm each node's hostname, `tag:dns-appliance`, Tailscale address, peer reachability, `accept-dns=false`, and absence of routes, exit-node behavior, Tailscale SSH, Serve, and Funnel.
 
-For remote DNS, use the three enrolled nodes' Tailscale IPv4 addresses as tailnet nameservers, not their `10.0.5.x` LAN addresses. No subnet routing is required. First allow the intended client identities to reach `tag:dns-appliance` on both UDP and TCP 53 in the tailnet policy. The appliance recursion ACL includes `100.64.0.0/10`; nftables accepts DNS on `tailscale0` and rejects that source range on other network interfaces.
+For remote DNS, use the three enrolled nodes' Tailscale IPv4 addresses as tailnet nameservers, not their `10.77.5.x` LAN addresses. No subnet routing is required. First allow the intended client identities to reach `tag:dns-appliance` on both UDP and TCP 53 in the tailnet policy. The appliance recursion ACL includes `100.64.0.0/10`; nftables accepts DNS on `tailscale0` and rejects that source range on other network interfaces.
 
 Before changing tailnet DNS, run `dig @<node-tailscale-ip> home.arpa SOA` and `dig @<node-tailscale-ip> example.com A` from an approved remote client for each node, then repeat both with `+tcp`. Check that an unauthorized peer cannot query them. These live checks require installed, enrolled appliances and are separate from source simulations.
 
 Choose restricted nameservers for `home.arpa` when only internal names should use the appliances. To send public lookups through them as well, configure global nameservers and enable the tailnet DNS override on clients. Keep all three appliances on `--accept-dns=false` to avoid making their own resolver depend on this client configuration. All three nameservers must serve the same intended data; listing them does not establish strict primary/secondary query order. Technitium web administration still uses the LAN listener or a verified SSH tunnel to loopback.
+
+### NetBird
+
+Complete these preconditions in the NetBird dashboard before the first appliance enrolls:
+
+1. Under Settings > Networks, set the network range to `10.78.0.0/16`. It must stay outside `100.64.0.0/10`, which Tailscale claims on every interface of a node that runs both clients.
+2. Remove or disable the built-in all-to-all `Default` policy.
+3. Create the appliance group (`dns-appliances` by default) and an admin group, then create the policies in `engine/installer/management/netbird-policy.example.json` after replacing each `<group-id:NAME>` placeholder with that group's ID. They let the admin group reach the appliances on TCP 22, 53, 9090, 9100, and 53443 and UDP 53, and the appliances reach each other on TCP 53443.
+4. Create a dedicated service user and a personal access token with the narrowest role that can create and delete setup keys and read groups, peers, routes, and network routers. Store the token on one line of a protected file outside the checkout.
+
+Then enroll:
+
+```sh
+NETBIRD_API_TOKEN_FILE=/secure/netbird/api-token \
+  engine/installer/management/netbird-enroll --all
+```
+
+`NETBIRD_MANAGEMENT_URL` selects a self-hosted management server by its HTTPS origin instead of hosted NetBird Cloud. The command creates one one-off setup key per node, deletes it after use, and verifies each node's hostname, address in `10.78.0.0/16`, group membership, disabled DNS management, routes and NetBird SSH server, absence of any routing-peer role, and a resolver naming only `127.0.0.1`. If it reports that a setup key's deletion could not be confirmed, delete the named key ID in the dashboard.
 
 ## DNS change and router cutover
 
 Check health, create a plan, compare it with the reviewed zone change, then apply from the exact approved clean commit using the command's literal confirmation:
 
 ```sh
-export TECHNITIUM_URL=https://10.0.5.1:53443
+export TECHNITIUM_URL=https://10.77.5.1:53443
 export TECHNITIUM_TOKEN_FILE=/secure/dns/reader-token
 export TECHNITIUM_CA_FILE=/secure/dns/technitium-ca.pem
 engine/installer/management/dnsctl health
@@ -411,6 +464,10 @@ engine/installer/management/authorize-reinstall \
   --confirm 'ERASE dns01'
 ```
 
+## Resolve role names on the management host
+
+The status monitor and the Agent Gateway reach the nodes as `dns01`, `dns02`, and `dns03`; the management host's resolver decides which path a name takes (LAN, Tailscale, or NetBird). The management host must resolve these names without depending on the DNS cluster itself, so that both still reach the nodes when the cluster fails. Use a hosts file entry or an overlay's own DNS (Tailscale MagicDNS or NetBird DNS), never the appliances as the management host's resolver for these names. The status monitor reports a name that does not resolve as a per-node name-resolution failure.
+
 ## Deploy the Agent Gateway
 
 Use a dedicated non-sudo management-host account and a checkout at `/srv/diy-device-os-bootstrap-for-jeonghan`. Create a Python 3.10-or-newer environment outside the checkout and install only the locked dependencies:
@@ -442,7 +499,7 @@ Omit the applier token and `DEVICE_OS_AGENT_ALLOW_APPLY` for the initial read-on
 restrict,command="/srv/diy-device-os-bootstrap-for-jeonghan/engine/agent/run" ssh-ed25519 AAAA... operator-agent
 ```
 
-The SSH server must not use `AcceptEnv` for gateway variables. Tailnet ACL and the host firewall permit only the reviewed client identity to reach this account's SSH port; no router port is forwarded. Configure the remote MCP client to invoke ordinary SSH:
+When an overlay CLI is not on the account's `PATH`, also set `DEVICE_OS_AGENT_TAILSCALE_COMMAND` or `DEVICE_OS_AGENT_NETBIRD_COMMAND` to its absolute executable path. The SSH server must not use `AcceptEnv` for gateway variables. The overlay access policy (a tailnet ACL, or a NetBird policy from the client's group to the management host's group on TCP 22 as in `engine/agent/netbird-policy.example.json`) and the host firewall permit only the reviewed client identity to reach this account's SSH port; no router port is forwarded. Configure the remote MCP client to invoke ordinary SSH:
 
 ```json
 {
@@ -489,12 +546,16 @@ Prove repository, World, capacity, network, tunnel, DNS health, and DNS plan cal
 | `TECHNITIUM_TOKEN_FILE` | Protected role-specific token file for direct management commands |
 | `TAILSCALE_OAUTH_CLIENT_ID_FILE` | Protected file containing the OAuth client ID; value must not be passed directly |
 | `TAILSCALE_OAUTH_CLIENT_SECRET_FILE` | Protected file containing the OAuth secret; value must not be passed directly |
+| `NETBIRD_API_TOKEN_FILE` | Protected file whose first line is the NetBird service user's personal access token; value must not be passed directly |
+| `NETBIRD_MANAGEMENT_URL` | HTTPS origin of the NetBird management server for the API and `netbird up`; defaults to `https://api.netbird.io` |
+| `NETBIRD_APPLIANCE_GROUP` | NetBird group assigned by each setup key; defaults to `dns-appliances` |
+| `NETBIRD_SSH_USER` | Appliance SSH account used by `netbird-enroll`; defaults to `dns-operator` |
 | `TECHNITIUM_CA_FILE` | Trusted CA bundle required for DNS apply through the agent path |
 | `DEVICE_OS_AGENT_STATE_DIR` | Protected management-host runtime state directory for the gateway |
 | `DEVICE_OS_AGENT_DNS_READER_TOKEN_FILE`, `DEVICE_OS_AGENT_DNS_PLANNER_TOKEN_FILE`, `DEVICE_OS_AGENT_DNS_APPLIER_TOKEN_FILE` | Fixed protected files for separate DNS authorities; token values are never environment variables |
 | `DEVICE_OS_AGENT_DNS01_URL`, `DEVICE_OS_AGENT_DNS02_URL`, `DEVICE_OS_AGENT_DNS03_URL` | Administrator-fixed appliance URLs; callers cannot supply URLs through tools |
 | `DEVICE_OS_AGENT_TECHNITIUM_CA_FILE` | Administrator-fixed trusted CA path forwarded as `TECHNITIUM_CA_FILE` for apply |
 | `DEVICE_OS_AGENT_ALLOW_APPLY` | Management-host policy switch; the tool remains discoverable, but only literal `1` permits execution and all delegated gates still run |
-| `DEVICE_OS_AGENT_TAILSCALE_COMMAND` | Administrator-fixed absolute executable path for read-only tunnel status; never a tool argument |
+| `DEVICE_OS_AGENT_TAILSCALE_COMMAND`, `DEVICE_OS_AGENT_NETBIRD_COMMAND` | Administrator-fixed absolute executable paths of the overlay CLIs for read-only tunnel status when they are not on `PATH`; never a tool argument |
 
 The principal secret store remains intentionally implementation-neutral. All concrete paths in examples are operator-selected protected locations outside the checkout.

@@ -1,0 +1,19 @@
+[
+  {
+    "name": "admins to management host",
+    "description": "Send each object to POST /api/policies after replacing every <group-id:NAME> with the ID of group NAME.",
+    "enabled": true,
+    "rules": [
+      {
+        "name": "admins to management host",
+        "enabled": true,
+        "action": "accept",
+        "bidirectional": false,
+        "protocol": "tcp",
+        "ports": ["22"],
+        "sources": ["<group-id:admins>"],
+        "destinations": ["<group-id:device-os-management>"]
+      }
+    ]
+  }
+]

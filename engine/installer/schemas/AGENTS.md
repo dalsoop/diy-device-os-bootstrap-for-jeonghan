@@ -12,4 +12,10 @@ management.
 - Never add passwords, tokens, private keys, recovery plaintext, or OAuth data.
 - A schema change must update producers, consumers, fixtures, and rejection
   cases in the same pull request.
+- The DNS build manifest requires `overlays`; overlay version and digest
+  fields exist exactly for the selected overlays, and the component registry
+  and manifest components are the canonical-order subset that the selection
+  implies. Keep the schemas, `verify-distribution-contracts`,
+  `check-license-policy`, `render-build-records`, both Linux writers, and the
+  Tailscale-only, NetBird-only, dual, and rejection fixtures in agreement.
 

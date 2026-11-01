@@ -5,7 +5,9 @@ generated/install-mode
 generated/operator-authorized-keys
 generated/age-recipient
 generated/technitium.oci.tar
+generated/overlays
 generated/tailscale.tgz
+generated/netbird.tar.gz
 generated/sources.env
 generated/enrollment-record.schema.json
 generated/diy-device-os-bootstrap-for-jeonghan-license.txt
@@ -13,6 +15,7 @@ generated/license-history.md
 generated/third-party-notices.md
 generated/tailscale-license.txt
 generated/tailscale-dependency-licenses.md
+generated/netbird-license.txt
 generated/source.md
 generated/source-snapshot.tar.gz
 generated/distribution-policy.json
@@ -27,6 +30,7 @@ generated/dns-final-review-record.schema.json
 ../disk-identity
 ../scripts/guided.templates
 ../payload/nftables.conf
+../payload/nftables-own-table.conf
 ../payload/sshd-hardening.conf
 ../payload/operator-sudoers
 ../payload/timesyncd.conf
@@ -41,3 +45,12 @@ generated/dns-final-review-record.schema.json
 ../payload/dns-appliance-backup.service
 ../payload/dns-appliance-backup.timer
 ../payload/technitium-dns.service
+../payload/netbird.service
+../payload/debian.sources
+../payload/apt-unattended-upgrades.conf
+../payload/apt-daily-upgrade-refresh.conf
+../payload/apt-daily-upgrade.timer.conf
+../payload/dns-appliance-reboot
+../payload/dns-appliance-reboot.service
+../payload/dns-appliance-reboot.timer
+../payload/dns-appliance-reboot-required

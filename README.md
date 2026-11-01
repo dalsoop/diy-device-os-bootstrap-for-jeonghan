@@ -69,8 +69,11 @@ committed; `logs/` records what happened and is never edited. Everything in
 
 The home definition is
 [`burn-history/home.yaml`](burn-history/home.yaml).
-It defines `dns01`, `dns02`, and `dns03` at `10.0.5.1` through `10.0.5.3`, with
-the router at `10.0.0.1`. Hardware captures (`burn-history/os-installs/<role>/hardware.conf`) and keys
+It defines `dns01`, `dns02`, and `dns03` at `10.77.5.1` through `10.77.5.3`, with
+the router at `10.77.0.1` on the `10.77.0.0/16` LAN, and selects the management
+overlays (`overlays: [tailscale, netbird]`); the DNS image carries only the
+selected clients. Installed nodes take Debian updates unattended and reboot one
+at a time only while their peers answer DNS. Hardware captures (`burn-history/os-installs/<role>/hardware.conf`) and keys
 (`burn-history/keys/`) stay ignored; generated media, credentials, and recovery material stay
 outside Git in the documented ignored locations or the principal secret store.
 
@@ -78,12 +81,20 @@ outside Git in the documented ignored locations or the principal secret store.
 
 1. Boot `inventory-capture` and collect each HP machine's exact hardware data.
 2. Review the private captures in `burn-history/os-installs/<role>/hardware.conf` and enable one machine at a time.
-3. On an amd64 Debian 13 builder, build the offline Korean DNS installer ISO.
-4. Check capacity with the exact ISO and its build manifest.
+3. On an amd64 Debian 13 builder, build the offline Korean DNS installer ISO
+   for the World's overlay selection.
+4. Check capacity with the exact ISO and its build manifest; the burn commands
+   refuse a manifest whose overlays differ from the World's.
 5. On Linux, burn directly, or on macOS build an exact-size raw image in the
    bundled Debian 13 container and write it with verified readback.
 6. Verify the USB, boot one machine, and complete all physical gates before
    enabling the next machine.
+7. From the management host, enroll the selected overlays (Tailscale, NetBird)
+   and form the DNS cluster.
+
+USB generation `20261022024140-jeonghan-home` is retired: it carries the
+previous LAN addresses and a vulnerable kernel snapshot, so no node is
+installed from it.
 
 The destructive command is intentionally explicit:
 
@@ -127,7 +138,7 @@ without printing hardware identities or credentials.
 diy-device-os-bootstrap-for-jeonghan/
 ├── device-os              operator command
 ├── burn-history/          the user's folder
-│   ├── home.yaml          home intent: networks, computers, services, media, policies
+│   ├── home.yaml          home intent: networks, computers, services, media, overlays, policies
 │   ├── dns-records.zone   the DNS zone
 │   ├── os-installs/       per-role folders: os.conf guided profile, hardware.conf real capture (ignored)
 │   ├── keys/              operator public keys, never committed

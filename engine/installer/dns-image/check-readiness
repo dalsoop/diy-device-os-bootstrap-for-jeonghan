@@ -83,10 +83,26 @@ else
     block "age recovery recipient is missing or invalid"
 fi
 
-for required in \
-    "$cache_dir/technitium-dns-$TECHNITIUM_VERSION-amd64.oci.tar" \
-    "$cache_dir/tailscale-$TAILSCALE_VERSION-amd64.tgz" \
-    "$cache_dir/tailscale-$TAILSCALE_VERSION-dependency-licenses.md"; do
+# The image bundles only the overlay clients selected by the World, so only
+# their locked inputs are required.
+declare -a required_inputs=("$cache_dir/technitium-dns-$TECHNITIUM_VERSION-amd64.oci.tar")
+if overlays=$("$script_dir/overlay-selection" resolve 2>/dev/null); then
+    pass "World selects overlays: $(printf '%s' "$overlays" | tr '\n' ' ')"
+    for overlay in $overlays; do
+        case "$overlay" in
+            tailscale)
+                required_inputs+=("$cache_dir/tailscale-$TAILSCALE_VERSION-amd64.tgz"
+                    "$cache_dir/tailscale-$TAILSCALE_VERSION-dependency-licenses.md")
+                ;;
+            netbird)
+                required_inputs+=("$cache_dir/netbird-$NETBIRD_VERSION-linux-amd64.tar.gz")
+                ;;
+        esac
+    done
+else
+    block "World overlay selection cannot be resolved"
+fi
+for required in "${required_inputs[@]}"; do
     if [ -s "$required" ]; then
         pass "cached $(basename -- "$required")"
     else
@@ -111,6 +127,18 @@ if [ -r "$manifest" ]; then
         fi
     else
         block "DNS build manifest does not resolve to a readable ISO"
+    fi
+    # The built image is usable only with the World it was built for. An
+    # unresolvable World is already a blocker above.
+    if [ -n "${overlays:-}" ]; then
+        agreement_error=$(mktemp)
+        if agreement=$("$script_dir/overlay-selection" agree "$manifest" 2> "$agreement_error"); then
+            pass "DNS image overlays match the World ($(printf '%s\n' "$agreement" | paste -sd, - | sed 's/,/, /g'))"
+        else
+            reason=$(sed -n 's/^overlay-selection: //p' "$agreement_error" | sed -n '1p')
+            block "${reason:-DNS image overlays cannot be compared with the World}"
+        fi
+        rm -f "$agreement_error"
     fi
 else
     block "DNS installer ISO and build manifest have not been built"

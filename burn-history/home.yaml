@@ -9,6 +9,10 @@ metadata:
 spec:
   defaultMedia: dns-install
 
+  overlays:
+    - tailscale
+    - netbird
+
   assets:
     - id: hp-dns-01
       type: computer
@@ -22,8 +26,8 @@ spec:
 
   networks:
     - id: home-lan
-      cidr: 10.0.0.0/16
-      gateway: 10.0.0.1
+      cidr: 10.77.0.0/16
+      gateway: 10.77.0.1
       assurance: planned-unverified
 
   nodes:
@@ -31,17 +35,17 @@ spec:
       assetRef: hp-dns-01
       role: dns-appliance
       networkRef: home-lan
-      ipv4: 10.0.5.1
+      ipv4: 10.77.5.1
     - id: dns02
       assetRef: hp-dns-02
       role: dns-appliance
       networkRef: home-lan
-      ipv4: 10.0.5.2
+      ipv4: 10.77.5.2
     - id: dns03
       assetRef: hp-dns-03
       role: dns-appliance
       networkRef: home-lan
-      ipv4: 10.0.5.3
+      ipv4: 10.77.5.3
 
   services:
     - id: dns-cluster

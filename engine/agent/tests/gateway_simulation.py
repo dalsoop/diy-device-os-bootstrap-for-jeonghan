@@ -11,6 +11,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import stat
 import tempfile
 
@@ -40,6 +41,212 @@ def expect_tool_error(action, text: str) -> None:
         assert text in str(error), str(error)
     else:
         raise AssertionError(f"expected ToolError containing: {text}")
+
+
+TAILSCALE_STATUS = {
+    "BackendState": "Running",
+    "Self": {"HostName": "management"},
+    "Peer": {
+        "a": {"HostName": "dns01", "Online": True, "TailscaleIPs": ["100.64.0.1"]},
+        "b": {
+            "HostName": "dns02",
+            "Online": False,
+            "TailscaleIPs": ["100.64.0.2", "fd7a:115c:a1e0::2"],
+        },
+        "c": {"HostName": "unrelated", "Online": True, "TailscaleIPs": ["100.64.0.9"]},
+    },
+}
+NETBIRD_STATUS = {
+    "peers": {
+        "total": 6,
+        "connected": 4,
+        "details": [
+            {
+                "fqdn": "dns01.netbird.cloud",
+                "netbirdIp": "100.92.0.11",
+                "status": "Connected",
+            },
+            {
+                "fqdn": "dns02.netbird.cloud",
+                "netbirdIp": "100.92.0.12",
+                "netbirdIpv6": "fd00:4e42::12",
+                "status": "Idle",
+            },
+            {
+                "fqdn": "dns03.netbird.cloud.",
+                "netbirdIp": "100.92.0.13",
+                "status": "Connecting",
+            },
+            {
+                "fqdn": "dns01-old.netbird.cloud",
+                "netbirdIp": "100.92.0.21",
+                "status": "Connected",
+            },
+            {
+                "fqdn": "workstation.netbird.cloud",
+                "netbirdIp": "100.92.0.31",
+                "status": "Connected",
+            },
+            {"fqdn": "", "netbirdIp": "100.92.0.41", "status": "Connected"},
+        ],
+    },
+    "management": {"url": "https://netbird.example:443", "connected": True, "error": ""},
+    "netbirdIp": "100.92.0.1/16",
+    "fqdn": "management.netbird.cloud",
+    "daemonStatus": "Connected",
+}
+
+
+def printing(path: Path, output: str, require_shlvl: bool = False) -> None:
+    """Write a builtin-only fake CLI so a restricted PATH still runs it."""
+    executable(
+        path,
+        "#!/bin/sh\n"
+        "set -eu\n"
+        + ('[ -n "${SHLVL:-}" ]\n' if require_shlvl else "")
+        + '[ "$*" = "status --json" ]\n'
+        + f"printf '%s\\n' {shlex.quote(output)}\n",
+    )
+
+
+def simulate_tunnel_status(root: Path) -> None:
+    fakes = root / "overlay-fakes"
+    bundle_tailscale = fakes / "bundle" / "tailscale"
+    printing(bundle_tailscale, json.dumps(TAILSCALE_STATUS), require_shlvl=True)
+    printing(fakes / "path-tailscale" / "tailscale", json.dumps(TAILSCALE_STATUS))
+    printing(fakes / "path-netbird" / "netbird", json.dumps(NETBIRD_STATUS))
+    printing(fakes / "fixed" / "netbird", json.dumps(NETBIRD_STATUS))
+    printing(fakes / "invalid" / "netbird", "netbird is not running")
+    printing(fakes / "invalid" / "netbird-shape", json.dumps({"peers": []}))
+    printing(fakes / "invalid" / "tailscale", "not json")
+    not_executable = fakes / "not-executable" / "netbird"
+    not_executable.parent.mkdir(parents=True)
+    not_executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    empty_path = fakes / "empty"
+    empty_path.mkdir()
+
+    saved_path = os.environ["PATH"]
+
+    def configure(
+        path: Path, tailscale: Path | str | None, netbird: Path | str | None
+    ) -> None:
+        os.environ["PATH"] = str(path)
+        for name, value in (
+            ("DEVICE_OS_AGENT_TAILSCALE_COMMAND", tailscale),
+            ("DEVICE_OS_AGENT_NETBIRD_COMMAND", netbird),
+        ):
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = str(value)
+
+    expected_tailscale = {
+        "available": True,
+        "backend_state": "Running",
+        "management_host": {"hostname": "management"},
+        "dns_nodes": {
+            "dns01": {"online": True, "addresses": ["100.64.0.1"]},
+            "dns02": {
+                "online": False,
+                "addresses": ["100.64.0.2", "fd7a:115c:a1e0::2"],
+            },
+        },
+    }
+    expected_netbird = {
+        "available": True,
+        "management_connected": True,
+        "management_host": {"hostname": "management"},
+        "dns_nodes": {
+            "dns01": {"online": True, "addresses": ["100.92.0.11"]},
+            "dns02": {
+                "online": False,
+                "addresses": ["100.92.0.12", "fd00:4e42::12"],
+            },
+            "dns03": {"online": False, "addresses": ["100.92.0.13"]},
+        },
+    }
+    absent_tailscale = {
+        "available": False,
+        "backend_state": None,
+        "management_host": None,
+        "dns_nodes": {},
+    }
+    absent_netbird = {
+        "available": False,
+        "management_connected": None,
+        "management_host": None,
+        "dns_nodes": {},
+    }
+    try:
+        # Both overlays: Tailscale from the fixed bundle path, NetBird from PATH.
+        configure(fakes / "path-netbird", bundle_tailscale, None)
+        both = server.gateway.tunnel_status()
+        assert both["schema_version"] == 2
+        assert both["operation"] == "tunnel.status"
+        assert both["data"] == {
+            "overlays": {
+                "tailscale": expected_tailscale,
+                "netbird": expected_netbird,
+            }
+        }, both
+
+        # Only Tailscale, found on PATH; NetBird is not installed.
+        configure(fakes / "path-tailscale", None, None)
+        only_tailscale = server.gateway.tunnel_status()["data"]["overlays"]
+        assert only_tailscale == {
+            "tailscale": expected_tailscale,
+            "netbird": absent_netbird,
+        }, only_tailscale
+
+        # Only NetBird, from its fixed path; Tailscale is not installed.
+        configure(empty_path, None, fakes / "fixed" / "netbird")
+        only_netbird = server.gateway.tunnel_status()["data"]["overlays"]
+        assert only_netbird == {
+            "tailscale": absent_tailscale,
+            "netbird": expected_netbird,
+        }, only_netbird
+
+        # Neither overlay CLI is installed.
+        configure(empty_path, None, None)
+        expect_tool_error(
+            server.gateway.tunnel_status,
+            "neither the Tailscale nor the NetBird CLI is available",
+        )
+
+        # A present CLI with invalid output fails the whole tool.
+        configure(empty_path, bundle_tailscale, fakes / "invalid" / "netbird")
+        expect_tool_error(
+            server.gateway.tunnel_status, "NetBird returned invalid JSON"
+        )
+        configure(empty_path, None, fakes / "invalid" / "netbird-shape")
+        expect_tool_error(
+            server.gateway.tunnel_status, "NetBird returned invalid JSON"
+        )
+        configure(empty_path, fakes / "invalid" / "tailscale", None)
+        expect_tool_error(
+            server.gateway.tunnel_status, "Tailscale returned invalid JSON"
+        )
+
+        # A set command variable must be an absolute executable path.
+        configure(empty_path, bundle_tailscale, not_executable)
+        expect_tool_error(
+            server.gateway.tunnel_status,
+            "configured NetBird command is unavailable",
+        )
+        configure(empty_path, bundle_tailscale, "relative/netbird")
+        expect_tool_error(
+            server.gateway.tunnel_status,
+            "configured NetBird command is unavailable",
+        )
+        configure(fakes / "path-netbird", "relative/tailscale", None)
+        expect_tool_error(
+            server.gateway.tunnel_status,
+            "configured Tailscale command is unavailable",
+        )
+    finally:
+        os.environ.pop("DEVICE_OS_AGENT_TAILSCALE_COMMAND", None)
+        os.environ.pop("DEVICE_OS_AGENT_NETBIRD_COMMAND", None)
+        os.environ["PATH"] = saved_path
 
 
 async def inspect_tools(race_enabled: Path) -> None:
@@ -135,14 +342,6 @@ def main() -> None:
             "print('{\"status\":\"ok\"}')\n"
             "PY\n",
         )
-        executable(
-            root / "bin" / "tailscale",
-            "#!/bin/sh\n"
-            "set -eu\n"
-            "[ -n \"${SHLVL:-}\" ]\n"
-            "printf '%s\\n' '{\"BackendState\":\"Running\",\"Self\":{\"HostName\":\"management\"},\"Peer\":{\"a\":{\"HostName\":\"dns01\",\"Online\":true,\"TailscaleIPs\":[\"100.64.0.1\"]},\"b\":{\"HostName\":\"unrelated\",\"Online\":true,\"TailscaleIPs\":[\"100.64.0.9\"]}}}'\n",
-        )
-
         os.environ["DEVICE_OS_AGENT_STATE_DIR"] = str(root / "state")
         server.gateway = server.Gateway(root)
         result = server.gateway.world_validate()
@@ -167,22 +366,13 @@ def main() -> None:
             lambda: server.gateway.network_preflight("not-a-network"),
             "router_cidr is invalid",
         )
-        network = server.gateway.network_preflight("10.0.0.1/16")
+        network = server.gateway.network_preflight("10.77.0.1/16")
         assert network["data"]["internet_checked"] is True
         offline_network = server.gateway.network_preflight(
-            "10.0.0.1/16", check_internet=False
+            "10.77.0.1/16", check_internet=False
         )
         assert offline_network["data"]["internet_checked"] is False
-        os.environ["DEVICE_OS_AGENT_TAILSCALE_COMMAND"] = "relative/tailscale"
-        expect_tool_error(
-            server.gateway.tunnel_status,
-            "configured Tailscale command is unavailable",
-        )
-        os.environ["DEVICE_OS_AGENT_TAILSCALE_COMMAND"] = str(
-            root / "bin" / "tailscale"
-        )
-        tunnel = server.gateway.tunnel_status()
-        assert set(tunnel["data"]["dns_nodes"]) == {"dns01"}
+        simulate_tunnel_status(root)
 
         os.environ["DEVICE_OS_AGENT_DNS_PLANNER_TOKEN_FILE"] = str(token)
         os.environ["DEVICE_OS_AGENT_DNS_APPLIER_TOKEN_FILE"] = str(token)

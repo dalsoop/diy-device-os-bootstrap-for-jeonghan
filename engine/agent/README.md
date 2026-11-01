@@ -3,7 +3,7 @@
 The Agent Gateway exposes a constrained MCP tool set from a trusted management
 host. It does not run on a DNS appliance and does not open an Internet-facing
 HTTP endpoint. A remote MCP client launches the stdio server through ordinary
-SSH carried by the Tailscale network.
+SSH carried by an overlay network (Tailscale or NetBird).
 
 ## What the agent can do
 
@@ -12,7 +12,8 @@ SSH carried by the Tailscale network.
   media or the non-destructive `inventory-capture` selection;
 - check the configured LAN prefix, node reachability, and fixed outbound IP,
   DNS-resolution, and HTTPS probes;
-- report the Tailscale state of only `dns01`, `dns02`, and `dns03`;
+- report the Tailscale and NetBird state of only `dns01`, `dns02`, and
+  `dns03`, one entry per overlay;
 - read DNS health and produce a `home.arpa` plan with role-specific tokens;
 - optionally apply one saved, reviewed plan through the `dnsctl` gates.
 
@@ -49,18 +50,35 @@ export DEVICE_OS_AGENT_DNS02_URL=https://dns02:53443
 export DEVICE_OS_AGENT_DNS03_URL=https://dns03:53443
 ```
 
-When the Tailscale CLI is not installed on `PATH`, set its fixed absolute
-executable path on the management host. This is useful for the macOS GUI app,
-whose bundle executable must be invoked by its real path rather than through a
-renamed symbolic link:
+The DNS endpoints default to `https://<role>:53443`, so the gateway reaches
+each node by its role name. The management host's resolver decides which path
+a name takes; it must resolve the role names without depending on the DNS
+cluster itself, through a hosts file or an overlay's own DNS.
+
+`tunnel_status` reads every overlay CLI it finds: `tailscale status --json`
+and `netbird status --json`. Its result has `schema_version: 2` and reports
+`data.overlays.tailscale` and `data.overlays.netbird`, each with `available`,
+`management_host`, and `dns_nodes` (`online` and `addresses` per role).
+Tailscale adds `backend_state`; NetBird adds `management_connected`. A NetBird
+peer counts as a role when the first label of its FQDN is `dns01`, `dns02`, or
+`dns03`. An overlay whose CLI is not installed reports `available: false`; the
+tool fails when neither CLI is installed or when an installed CLI fails or
+returns invalid output.
+
+When an overlay CLI is not installed on `PATH`, set its fixed absolute
+executable path on the management host. A set variable that is not an
+absolute executable path fails the tool. This is useful for the macOS
+Tailscale GUI app, whose bundle executable must be invoked by its real path
+rather than through a renamed symbolic link:
 
 ```sh
 export DEVICE_OS_AGENT_TAILSCALE_COMMAND=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+export DEVICE_OS_AGENT_NETBIRD_COMMAND=/usr/local/bin/netbird
 ```
 
-The gateway supplies the minimal `SHLVL` compatibility value required by that
-bundle executable while continuing to withhold the rest of the parent
-environment from child commands.
+The gateway supplies the minimal `SHLVL` compatibility value required by the
+Tailscale bundle executable while continuing to withhold the rest of the
+parent environment from child commands.
 
 Omit the applier token unless agent writes are intentionally enabled. Agent
 apply rejects an absent or unreadable trusted CA file; it never permits
@@ -94,12 +112,14 @@ Point an MCP host at the following stdio command:
 The wrapper uses `DEVICE_OS_AGENT_PYTHON` when set and otherwise uses
 `python3`.
 
-## Remote connection through Tailscale
+## Remote connection over an overlay
 
 Do not forward a router port. Join the management host and the external MCP
-client to the reviewed tailnet, permit only the client identity to reach the
-management host's SSH port, and keep the appliance policy unchanged.
-Merge the reviewed parts of
+client to a reviewed overlay (Tailscale or NetBird), permit only the client
+identity to reach the management host's SSH port, and keep the appliance
+policy unchanged. On NetBird, grant that access with an access policy from the
+client's group to the management host's group on TCP port 22 only. On
+Tailscale, merge the reviewed parts of
 [`tailscale-policy.example.hujson`](tailscale-policy.example.hujson) into the
 tailnet policy, then narrow its `src` from `autogroup:admin` if a dedicated
 agent identity or group is available.
@@ -124,14 +144,15 @@ Then configure the remote MCP host to launch:
 }
 ```
 
-The SSH account environment must set the fixed Python, optional Tailscale
-executable, and credential-file paths. Do not accept those values from the
+The SSH account environment must set the fixed Python, optional overlay
+executables, and credential-file paths. Do not accept those values from the
 remote client with `AcceptEnv`.
-Use the Tailscale ACL and host firewall to reject non-tailnet SSH traffic.
+Use the overlay access policy and host firewall to reject SSH traffic from
+outside the overlay.
 
-This is ordinary OpenSSH transported over Tailscale. Tailscale SSH, Serve,
+This is ordinary OpenSSH transported over an overlay. Tailscale SSH, Serve,
 Funnel, advertised routes, and an exit node remain disabled on the DNS
-appliances.
+appliances, as do NetBird SSH, routes, and exit nodes.
 
 ## Verification boundary
 
@@ -142,5 +163,5 @@ Run the isolated simulation after installing the locked dependencies:
 ```
 
 The simulation verifies tool exposure and safety delegation. A live rollout
-still requires a management-host Tailscale test, SSH forced-command test, DNS
+still requires a management-host overlay test, SSH forced-command test, DNS
 reader/planner test, and a separately approved canary apply.

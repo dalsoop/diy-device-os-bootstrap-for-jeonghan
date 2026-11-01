@@ -15,6 +15,7 @@
     "component_registry",
     "component_registry_sha256",
     "distribution_policy_sha256",
+    "overlays",
     "components",
     "sbom",
     "sbom_sha256",
@@ -23,8 +24,6 @@
     "technitium_version",
     "technitium_image_digest",
     "technitium_archive_sha256",
-    "tailscale_version",
-    "tailscale_archive_sha256",
     "source_revision",
     "source_repository",
     "source_archive"
@@ -40,20 +39,16 @@
     "component_registry": { "const": "component-redistribution-registry.json" },
     "component_registry_sha256": { "$ref": "#/$defs/sha256" },
     "distribution_policy_sha256": { "$ref": "#/$defs/sha256" },
+    "overlays": {
+      "description": "Overlay clients bundled into the image, non-empty, unique, in the canonical order tailscale, netbird.",
+      "type": "array",
+      "enum": [["tailscale"], ["netbird"], ["tailscale", "netbird"]]
+    },
     "sbom": { "const": "sbom.spdx.json" },
     "sbom_sha256": { "$ref": "#/$defs/sha256" },
     "components": {
       "type": "array",
-      "minItems": 5,
-      "maxItems": 5,
-      "prefixItems": [
-        { "$ref": "#/$defs/debianStatus" },
-        { "$ref": "#/$defs/technitiumStatus" },
-        { "$ref": "#/$defs/tailscaleStatus" },
-        { "$ref": "#/$defs/tailscaleReportStatus" },
-        { "$ref": "#/$defs/sourceStatus" }
-      ],
-      "items": false
+      "items": { "$ref": "#/$defs/componentStatus" }
     },
     "debian_point_release": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
     "debian_snapshot": { "type": "string", "pattern": "^[0-9]{8}T[0-9]{6}Z$" },
@@ -62,10 +57,78 @@
     "technitium_archive_sha256": { "$ref": "#/$defs/sha256" },
     "tailscale_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
     "tailscale_archive_sha256": { "$ref": "#/$defs/sha256" },
+    "netbird_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "netbird_archive_sha256": { "$ref": "#/$defs/sha256" },
     "source_revision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
     "source_repository": { "const": "https://github.com/dalsoop/diy-device-os-bootstrap-for-jeonghan" },
     "source_archive": { "type": "string", "pattern": "^https://github\\.com/dalsoop/diy-device-os-bootstrap-for-jeonghan/archive/[a-f0-9]{40}\\.tar\\.gz$" }
   },
+  "allOf": [
+    {
+      "if": { "required": ["overlays"], "properties": { "overlays": { "const": ["tailscale"] } } },
+      "then": {
+        "properties": {
+          "components": {
+            "minItems": 5,
+            "maxItems": 5,
+            "prefixItems": [
+              { "$ref": "#/$defs/debianStatus" },
+              { "$ref": "#/$defs/technitiumStatus" },
+              { "$ref": "#/$defs/tailscaleStatus" },
+              { "$ref": "#/$defs/tailscaleReportStatus" },
+              { "$ref": "#/$defs/sourceStatus" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "required": ["overlays"], "properties": { "overlays": { "const": ["netbird"] } } },
+      "then": {
+        "properties": {
+          "components": {
+            "minItems": 4,
+            "maxItems": 4,
+            "prefixItems": [
+              { "$ref": "#/$defs/debianStatus" },
+              { "$ref": "#/$defs/technitiumStatus" },
+              { "$ref": "#/$defs/netbirdStatus" },
+              { "$ref": "#/$defs/sourceStatus" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "required": ["overlays"], "properties": { "overlays": { "const": ["tailscale", "netbird"] } } },
+      "then": {
+        "properties": {
+          "components": {
+            "minItems": 6,
+            "maxItems": 6,
+            "prefixItems": [
+              { "$ref": "#/$defs/debianStatus" },
+              { "$ref": "#/$defs/technitiumStatus" },
+              { "$ref": "#/$defs/tailscaleStatus" },
+              { "$ref": "#/$defs/tailscaleReportStatus" },
+              { "$ref": "#/$defs/netbirdStatus" },
+              { "$ref": "#/$defs/sourceStatus" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": { "required": ["overlays"], "properties": { "overlays": { "contains": { "const": "tailscale" } } } },
+      "then": { "required": ["tailscale_version", "tailscale_archive_sha256"] },
+      "else": { "not": { "anyOf": [{ "required": ["tailscale_version"] }, { "required": ["tailscale_archive_sha256"] }] } }
+    },
+    {
+      "if": { "required": ["overlays"], "properties": { "overlays": { "contains": { "const": "netbird" } } } },
+      "then": { "required": ["netbird_version", "netbird_archive_sha256"] },
+      "else": { "not": { "anyOf": [{ "required": ["netbird_version"] }, { "required": ["netbird_archive_sha256"] }] } }
+    }
+  ],
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "componentStatus": {
@@ -81,6 +144,7 @@
     "technitiumStatus": { "allOf": [{ "$ref": "#/$defs/componentStatus" }, { "properties": { "id": { "const": "technitium-oci" } } }] },
     "tailscaleStatus": { "allOf": [{ "$ref": "#/$defs/componentStatus" }, { "properties": { "id": { "const": "tailscale-archive" } } }] },
     "tailscaleReportStatus": { "allOf": [{ "$ref": "#/$defs/componentStatus" }, { "properties": { "id": { "const": "tailscale-dependency-report" } } }] },
+    "netbirdStatus": { "allOf": [{ "$ref": "#/$defs/componentStatus" }, { "properties": { "id": { "const": "netbird-archive" } } }] },
     "sourceStatus": { "allOf": [{ "$ref": "#/$defs/componentStatus" }, { "properties": { "id": { "const": "repository-source-snapshot" } } }] }
   }
 }

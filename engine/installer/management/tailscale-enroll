@@ -163,11 +163,11 @@ enroll_one() {
 
 case "$requested_role" in
     all)
-        enroll_one dns01 10.0.5.1
-        enroll_one dns02 10.0.5.2
-        enroll_one dns03 10.0.5.3
+        enroll_one dns01 10.77.5.1
+        enroll_one dns02 10.77.5.2
+        enroll_one dns03 10.77.5.3
         ;;
-    dns01) enroll_one dns01 10.0.5.1 ;;
-    dns02) enroll_one dns02 10.0.5.2 ;;
-    dns03) enroll_one dns03 10.0.5.3 ;;
+    dns01) enroll_one dns01 10.77.5.1 ;;
+    dns02) enroll_one dns02 10.77.5.2 ;;
+    dns03) enroll_one dns03 10.77.5.3 ;;
 esac

@@ -73,12 +73,49 @@ fi
 
 "$repo_root/build/verify-locks" >/dev/null
 
+# Every Simple-CDD mirror must name the locked Debian snapshot. A temporary
+# copy of the lock verifier must accept the reviewed files and reject each
+# mirror that names another timestamp or is missing.
+locks_copy=$(mktemp -d)
+trap 'rm -rf "$locks_copy"' EXIT HUP INT TERM
+mkdir -p "$locks_copy/build/locks" "$locks_copy/dns-image/simple-cdd"
+cp -p "$repo_root/build/verify-locks" "$repo_root/build/distribution-policy.json" \
+    "$locks_copy/build/"
+cp -p "$repo_root/build/locks/sources.env" "$locks_copy/build/locks/"
+simple_cdd_copy=$locks_copy/dns-image/simple-cdd/simple-cdd.conf
+cp -p "$repo_root/dns-image/simple-cdd/simple-cdd.conf" "$simple_cdd_copy"
+"$locks_copy/build/verify-locks" >/dev/null
+for mirror in debian_mirror security_mirror updates_mirror; do
+    sed "s#^\\($mirror=\"https://snapshot\\.debian\\.org/archive/[a-z-]*/\\)[0-9]*T[0-9]*Z/\"\$#\\119990101T000000Z/\"#" \
+        "$repo_root/dns-image/simple-cdd/simple-cdd.conf" > "$simple_cdd_copy"
+    grep -q "^$mirror=\"https://snapshot\\.debian\\.org/archive/[a-z-]*/19990101T000000Z/\"\$" \
+        "$simple_cdd_copy" || {
+        echo "repository-contract: cannot prepare the $mirror mismatch fixture" >&2
+        exit 1
+    }
+    if "$locks_copy/build/verify-locks" >/dev/null 2>&1; then
+        echo "repository-contract: verify-locks accepted a $mirror that differs from DEBIAN_SNAPSHOT" >&2
+        exit 1
+    fi
+    grep -v "^$mirror=" "$repo_root/dns-image/simple-cdd/simple-cdd.conf" > "$simple_cdd_copy" || true
+    if "$locks_copy/build/verify-locks" >/dev/null 2>&1; then
+        echo "repository-contract: verify-locks accepted a missing $mirror" >&2
+        exit 1
+    fi
+done
+rm -rf "$locks_copy"
+trap - EXIT HUP INT TERM
+
 for file in \
     engine/installer/dns-image/payload/dns-appliance-firstboot \
     engine/installer/dns-image/payload/dns-appliance-health \
     engine/installer/dns-image/payload/dns-appliance-backup \
     engine/installer/dns-image/payload/dns-appliance-technitium-run \
+    engine/installer/dns-image/payload/dns-appliance-reboot \
+    engine/installer/dns-image/payload/dns-appliance-reboot-required \
     engine/installer/dns-image/fetch-locked-sources \
+    engine/installer/dns-image/overlay-selection \
+    engine/installer/dns-image/render-build-records \
     engine/installer/dns-image/disk-identity \
     engine/installer/dns-image/write-usb-linux \
     engine/installer/management/cluster-bootstrap \
@@ -89,6 +126,7 @@ for file in \
     engine/installer/management/import-enrollment \
     engine/installer/management/collect-backups \
     engine/installer/management/tailscale-enroll \
+    engine/installer/management/netbird-enroll \
     engine/agent/run \
     engine/agent/server.py \
     engine/agent/tests/gateway_simulation.py \
@@ -114,6 +152,11 @@ for file in \
     engine/installer/tests/image-builder-simulation.sh \
     engine/installer/tests/macos-writer-simulation.sh \
     engine/installer/tests/management-simulation.sh \
+    engine/installer/tests/firewall-namespace-simulation.sh \
+    engine/installer/tests/status-monitor-simulation.sh \
+    engine/installer/tests/tailscale-enrollment-simulation.sh \
+    engine/installer/tests/netbird-enrollment-simulation.sh \
+    engine/installer/tests/appliance-update-simulation.sh \
     engine/installer/tests/documentation-check-simulation.sh \
     engine/world/bin/resolve-world \
     engine/world/bin/record-usb-event \
@@ -144,7 +187,10 @@ for required in \
     burn-history/os-installs/dns02/os.conf \
     burn-history/os-installs/dns03/os.conf \
     burn-history/keys/README.md \
+    engine/installer/dns-image/payload/nftables.conf \
+    engine/installer/dns-image/payload/nftables-own-table.conf \
     engine/installer/management/tailscale-policy.example.hujson \
+    engine/installer/management/netbird-policy.example.json \
     engine/installer/usb-media/composition.json \
     engine/installer/usb-media/distribution-policy.json \
     engine/installer/usb-media/local-entries/dns-appliance.json \
@@ -159,6 +205,9 @@ for required in \
     engine/agent/README.md \
     engine/agent/requirements.lock \
     engine/agent/tailscale-policy.example.hujson \
+    engine/agent/netbird-policy.example.json \
+    docs/tracking/decisions/0013-select-overlays-per-world.md \
+    docs/tracking/decisions/0014-unattended-upgrades-with-guarded-reboots.md \
     burn-history/.paths.yaml \
     burn-history/home.yaml \
     burn-history/logs/usb/README.md \
@@ -170,7 +219,8 @@ for required in \
     LICENSE \
     docs/licenses/LICENSE_HISTORY.md \
     docs/licenses/THIRD_PARTY_NOTICES.md \
-    docs/licenses/Tailscale-BSD-3-Clause.txt; do
+    docs/licenses/Tailscale-BSD-3-Clause.txt \
+    docs/licenses/NetBird-BSD-3-Clause.txt; do
     [ -r "$monorepo_root/$required" ] || {
         echo "repository-contract: missing $required" >&2
         exit 1
@@ -186,11 +236,30 @@ grep -q 'previous_generation' "$repo_root/dns-image/scripts/install-gate"
 grep -q 'Authorization: Bearer' "$repo_root/dns-image/payload/dns-appliance-health"
 grep -q 'unzip -t' "$repo_root/dns-image/payload/dns-appliance-backup"
 grep -q 'iifname "tailscale0"' "$repo_root/dns-image/payload/nftables.conf"
+grep -q 'iifname "wt0"' "$repo_root/dns-image/payload/nftables.conf"
+grep -q '@@CLUSTER_PEERS@@' "$repo_root/dns-image/payload/nftables.conf"
+grep -qx 'table inet dns_appliance {' "$repo_root/dns-image/payload/nftables.conf"
+grep -q 'type filter hook prerouting' "$repo_root/dns-image/payload/nftables.conf"
+# The appliance firewall owns one table; it never flushes the whole ruleset.
+if grep -q -E '^[^#]*flush' "$repo_root/dns-image/payload/nftables.conf"; then
+    echo "repository-contract: the appliance firewall flushes" >&2
+    exit 1
+fi
+grep -qx 'ExecStop=/usr/sbin/nft destroy table inet dns_appliance' \
+    "$repo_root/dns-image/payload/nftables-own-table.conf"
+grep -qx '../payload/nftables-own-table.conf' "$repo_root/dns-image/simple-cdd/profiles/default.extra"
+# The appliance writes its own reboot marker from a kernel postinst hook.
+grep -qx '../payload/dns-appliance-reboot-required' "$repo_root/dns-image/simple-cdd/profiles/default.extra"
+grep -q '/target/etc/kernel/postinst.d/zz-dns-appliance-reboot-required' \
+    "$repo_root/dns-image/scripts/dns-finish-install"
+grep -q 'built ISO contains a stale kernel reboot-required hook' "$repo_root/dns-image/build-image"
 grep -q 'preauthorized:true' "$repo_root/management/tailscale-enroll"
 grep -q 'TAILSCALE_LICENSES_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'tailscale-dependency-licenses.md' "$repo_root/dns-image/build-image"
-grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/dns-image/build-image"
-grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/dns-image/build-image"
+grep -q 'licenseDeclared:"NOASSERTION"' "$repo_root/dns-image/render-build-records"
+grep -q 'licenseDeclared:"GPL-3.0-only"' "$repo_root/dns-image/render-build-records"
+grep -q 'NETBIRD_AMD64_SHA256' "$repo_root/build/locks/sources.env"
+grep -q 'overlay-selection" resolve' "$repo_root/dns-image/build-image"
 grep -q '/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md' \
     "$repo_root/dns-image/scripts/dns-finish-install"
 grep -q 'preseed/late_command string /bin/sh /cdrom/simple-cdd/dns-finish-install' \
@@ -223,6 +292,20 @@ python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/schemas/raw-image-manifest.schema.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/management/dns-appliance-status-monitor/config.json"
+# The status monitor reaches nodes by role name, so the management host's
+# resolver (hosts file or an overlay's own DNS) decides the path.
+python3 -c '
+import json, sys
+nodes = json.load(open(sys.argv[1]))["nodes"]
+if [sorted(node) for node in nodes] != [["host", "name", "query"]] * 3:
+    sys.exit("repository-contract: status monitor nodes must use exactly name, host, and query")
+if [(node["name"], node["host"]) for node in nodes] != [(role, role) for role in ("dns01", "dns02", "dns03")]:
+    sys.exit("repository-contract: status monitor nodes must use host dns01, dns02, and dns03")
+' "$repo_root/management/dns-appliance-status-monitor/config.json"
+grep -q 'node field address is not accepted' \
+    "$repo_root/management/dns-appliance-status-monitor/server.py"
+grep -q 'dns_appliance_reboot_skipped_consecutive' \
+    "$repo_root/management/dns-appliance-status-monitor/server.py"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
     "$repo_root/usb-media/composition.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
@@ -272,6 +355,10 @@ for contract in \
     tests/dns-license-simulation.sh \
     tests/license-policy-simulation.sh \
     tests/documentation-check-simulation.sh \
+    tests/netbird-enrollment-simulation.sh \
+    tests/firewall-namespace-simulation.sh \
+    tests/status-monitor-simulation.sh \
+    tests/appliance-update-simulation.sh \
     engine/world/schemas/usb-event.schema.json \
     engine/world/schemas/usb-verification.schema.json \
     burn-history/logs/usb/failed; do

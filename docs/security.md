@@ -2,7 +2,7 @@
 
 ## Protected assets and trust boundaries
 
-The protected assets are physical disks, removable media, the integrity of selected OS artifacts, DNS desired state, DNS administrative access, hardware identity, enrollment and recovery material, the operator's SSH and age private keys, Tailscale OAuth credentials, and the append-only evidence history.
+The protected assets are physical disks, removable media, the integrity of selected OS artifacts, DNS desired state, DNS administrative access, hardware identity, enrollment and recovery material, the operator's SSH and age private keys, Tailscale OAuth credentials, the NetBird service-user access token, and the append-only evidence history.
 
 World and Catalog input are not trusted execution authority. The Installer revalidates both before use and re-identifies a live target before any write. The writable USB data partition is transport, not a secret store: it is mounted `nodev,nosuid,noexec`, but it contains public hardware evidence and may carry only already-encrypted secrets, so it still requires controlled custody and disposal.
 
@@ -26,9 +26,9 @@ Routine DNS commands read a role-specific bearer token from a protected file and
 
 ### Agent access
 
-1. The remote client first authenticates to the reviewed Tailscale network.
+1. The remote client first authenticates to a reviewed overlay network, Tailscale or NetBird, whose access policy lets only that client identity reach the management host's SSH port (TCP 22).
 2. Ordinary SSH authenticates a dedicated management-host account and restricts it with a forced command.
-3. The forced command starts the MCP gateway over stdio; no HTTP listener, Tailscale Serve, Funnel, or router port is opened.
+3. The forced command starts the MCP gateway over stdio; no HTTP listener, Tailscale Serve or Funnel, NetBird SSH, or router port is opened.
 4. The gateway validates a fixed tool name and typed arguments, uses fixed credential-file paths and an explicit environment allowlist, and delegates to reviewed commands.
 5. Any unknown tool, free-form command, arbitrary path or URL, invalid role, unavailable executable, or delegated command failure is rejected. Output above 64 KiB is truncated, not rejected, and the gateway does not scan delegated output for credentials.
 
@@ -37,6 +37,14 @@ The `dns_apply` tool is always discoverable but rejects every call unless the ho
 ### Tailscale appliance enrollment
 
 Protected management-host OAuth files mint one distinct, pre-authorized, non-reusable key per node with a one-hour lifetime and `tag:dns-appliance`. Only that key is transferred over existing SSH; the remote temporary file is deleted. The command verifies hostname, tag, peer address, `accept-dns=false`, no advertised route, no exit-node behavior, and no Tailscale SSH. Deployment acceptance additionally requires a separate empty Serve/Funnel status check until that check is automated. The management command attempts immediate key revocation, but a failed revocation leaves a possible credential until its one-hour expiry and requires investigation.
+
+### NetBird appliance enrollment
+
+The management host holds a personal access token of a dedicated NetBird service user with the narrowest role that can create and delete setup keys and read groups, peers, routes, and network routers. The token lives on the first line of a protected management-host file named by `NETBIRD_API_TOKEN_FILE`; it is format-checked and travels only in an `Authorization: Token` header supplied to curl through its configuration on stdin, never in arguments, URLs, logs, or output, and never leaves the management host. Hosted NetBird Cloud (`https://api.netbird.io`) is the default management server; `NETBIRD_MANAGEMENT_URL` selects a self-hosted one by its HTTPS origin.
+
+Per node, `netbird-enroll` creates one one-off setup key (usage limit 1, non-ephemeral, expiring after 86400 seconds, the shortest lifetime the API documents, with the appliance group as its only auto group), checks those properties in the API response, and sends only that key over existing SSH on stdin into a mode-0600 remote temporary file removed by trap. It deletes the key after use and on any failure, and confirms the deletion by the key's absence from the key list. An unconfirmed deletion makes the command fail and print the key's ID, never its value; the operator then deletes that key in the NetBird dashboard. A node already connected to management is verified without minting a key.
+
+Two account preconditions hold before the first NetBird peer enrolls: the account's network range is `10.78.0.0/16` (dashboard Settings > Networks), and the built-in all-to-all `Default` policy is removed or disabled while the policies from `engine/installer/management/netbird-policy.example.json` are in place, so only the admin group reaches the appliance management ports. The range lies outside `100.64.0.0/10` because Tailscale drops traffic from that range arriving on other interfaces. Enrollment verification requires the expected hostname, an address inside `10.78.0.0/16`, appliance-group membership, DNS management, client routes, server routes, and the NetBird SSH server disabled, no routing-peer role in any network route, network router, or exit node, and a resolver that still names only `127.0.0.1`.
 
 ## Authorization matrix
 
@@ -47,7 +55,7 @@ Protected management-host OAuth files mint one distinct, pre-authorized, non-reu
 | `agent-dns-planner` | Reader actions and proposed DNS diff | Fixed role, planner-token file, Git-owned desired state | Applying a change or changing identities |
 | `agent-dns-applier` | Apply an approved DNS zone change | Host apply policy enabled, applier token, trusted CA, exact commit, clean zone, exact confirmation | Bootstrap TLS, arbitrary records/URLs, user or token administration |
 | `dns-backup` | Create and validate encrypted backups | Local protected token and configured age recipient | Plaintext export to removable media, restore, cluster administration |
-| Status monitor | DNS UDP/TCP and fixed TCP reachability probes | Read-only fixed configuration; loopback listener by default | Authentication, repair, apply, shell execution |
+| Status monitor | Name resolution of the configured hosts, DNS UDP/TCP and fixed TCP reachability probes, and one `GET /metrics` per node on port 9100 for the reboot state | Read-only fixed configuration; standard-library Python only; loopback listener by default | Authentication, repair, apply, any other HTTP method or path, shell execution |
 | World/Catalog validators | Read and validate repository data | Safe contained paths and known schema versions | Network credentials, downloads from World code, block-device access |
 
 The agent never receives physical media, OS installation, restore, reinstall authorization, enrollment, router mutation, arbitrary shell, arbitrary path, or arbitrary URL authority. Those absences are security boundaries, not missing convenience tools.
@@ -80,6 +88,8 @@ Routine expiration is not imposed by this repository on externally owned long-li
 | Trusted Technitium CA | Public trust material stored at an administrator-fixed path | Certificate-authority rollover, certificate expiry, or compromise | Install and test the new chain before removing the old one; agent apply remains disabled if no trusted file is readable |
 | Per-node bootstrap passwords | Generated once during first boot and transported only in age ciphertext | Immediately after successful import, and on any suspected exposure | Verify new login, disable or replace the bootstrap value, and remove temporary plaintext |
 | One-off Tailscale node key | Minted per node with one-hour lifetime and non-reusable scope | Immediately after enrollment; expiry is the fallback when revocation fails | Delete the remote file, attempt provider revocation, and confirm no reusable key remains |
+| NetBird service-user access token | Personal access token of a dedicated service user, created in the NetBird dashboard; value lives in one protected management-host file | Suspected exposure, administrator change, role change, or the token's own expiry | Revoke the token in the NetBird dashboard, verify an API call with it fails, replace the protected file, and remove old copies |
+| One-off NetBird setup key | Created per node by `netbird-enroll`, usage limit 1, non-ephemeral, 86400-second expiry, appliance group only | Deleted immediately after enrollment and on failure; expiry is the fallback when deletion cannot be confirmed | Delete the remote file, confirm the key ID is absent from the setup-key list, or delete the reported key ID in the dashboard |
 
 ## Audit policy
 
@@ -87,15 +97,21 @@ Git commits, pull-request review, and required CI checks are the durable record 
 
 `dnsctl` appends redacted JSONL for completed plan operations and apply API outcomes, with the saved plan's `plan_sha256`, and apply reads it to reject replays. Confirmation, hash, commit, dirty-zone, and transport failures can exit before an audit event; live-zone drift is recorded as `drifted`. The log does not prove that a plan was reviewed or a pull request approved.
 
-Installation writes public enrollment evidence, sanitized install logs, `COMPLETE`, and the active generation pointer. Cluster bootstrap, Tailscale enrollment, backup collection, reinstall authorization, restore, and router work do not share a common audit ledger; operators capture protected session records when durable evidence is required.
+Installation writes public enrollment evidence, sanitized install logs, `COMPLETE`, and the active generation pointer. Cluster bootstrap, Tailscale and NetBird enrollment, backup collection, reinstall authorization, restore, and router work do not share a common audit ledger; operators capture protected session records when durable evidence is required.
 
 ## Network exposure
 
-DNS UDP/TCP 53 is allowed from the approved LAN. SSH, Cockpit, metrics, and Technitium administration are limited to management sources; cluster traffic is limited to fixed peers. IPv6 follows an explicit reviewed policy, and an accidental wildcard listener is a failed verification.
+DNS UDP/TCP 53 is allowed from the approved LAN. SSH, Cockpit, metrics, and Technitium administration are limited to management sources; cluster traffic (TCP 53443) is limited to the three role addresses of the embedded role profiles. IPv6 follows an explicit reviewed policy, and an accidental wildcard listener is a failed verification.
 
-Technitium recursion permits loopback, the configured LAN, and Tailscale IPv4 addresses (`100.64.0.0/10`). The firewall drops that source range outside `tailscale0` before established-connection or LAN rules; Tailscale authenticates peers, and the reviewed tailnet policy controls which peers may query UDP/TCP 53. This is a recursive resolver for those approved clients, not a public resolver. The Technitium web listener remains on loopback and the appliance LAN address; a tailnet firewall allowance alone does not make that listener available at a Tailscale address.
+The appliance firewall owns only the nftables table `inet dns_appliance`. The installer renders `/etc/nftables.conf` from the role profile, `/etc/dns-appliance/overlays`, and the embedded role profiles, and stops on any unrendered template marker. Loading the file recreates that one table in a single transaction and never flushes the ruleset, so the overlay clients' own tables survive every load. A drop-in for `nftables.service` replaces Debian's `nft flush ruleset` stop with deleting only `inet dns_appliance` (absence tolerated), and reload re-applies the file; neither touches another table.
 
-Tailscale appliances accept no DNS configuration, advertise no subnet route, provide no exit node, and expose no Tailscale SSH, Serve, or Funnel. The agent path uses a forced command on the management host rather than opening appliance or router ports.
+Overlay ports are limited in the prerouting filter chain `overlay_prerouting` of that table, with the same check for each selected overlay interface (`tailscale0` for Tailscale, `wt0` for NetBird): traffic for a local, broadcast, or multicast address arriving there is accepted only when it is established or related, ICMP or ICMPv6, UDP/TCP 53, or TCP 22, 9090, 9100, or 53443, and is dropped otherwise. The limit lives in prerouting because the NetBird client inserts `iifname "wt0" accept` at the top of every input and forward filter chain it does not own, including the appliance's input chain, and re-inserts it within about half a second of any table or chain change; it never touches prerouting chains. The input chain repeats the overlay allowances as a second layer. The appliance enforces which ports an overlay peer reaches; the overlay access policy enforces which peers, limiting the management ports to the admin group, because the appliance cannot see overlay groups. The reviewed policies are the tailnet policy from `engine/installer/management/tailscale-policy.example.hujson` and the NetBird policies from `engine/installer/management/netbird-policy.example.json`. The forward chain's drop policy is not a barrier for `wt0`, because the NetBird client inserts its accept there too; forwarding through an appliance is prevented by IPv4 forwarding staying disabled and by enrollment disabling NetBird routes and Tailscale route and exit-node advertisement.
+
+Overlay source ranges are trusted only on their own interface: the input chain drops `100.64.0.0/10` outside `tailscale0` (with Tailscale) and `10.78.0.0/16` outside `wt0` (with NetBird) before established-connection or LAN rules. Technitium recursion permits `127.0.0.0/8`, the configured LAN, `100.64.0.0/10` with Tailscale, and `10.78.0.0/16` with NetBird. The overlays authenticate peers, and their reviewed policies control which peers may query UDP/TCP 53. This is a recursive resolver for those approved clients, not a public resolver. The Technitium web listener remains on loopback and the appliance LAN address; an overlay firewall allowance alone does not make that listener available at an overlay address.
+
+Tailscale appliances accept no DNS configuration, advertise no subnet route, provide no exit node, and expose no Tailscale SSH, Serve, or Funnel. NetBird appliances run with DNS management, client routes, server routes, and the NetBird SSH server disabled and are no routing peer or exit node. The agent path uses a forced command on the management host rather than opening appliance or router ports.
+
+Each appliance makes outbound HTTPS connections to `deb.debian.org` and `security.debian.org` for its unattended Debian updates; the sources are signed by `debian-archive-keyring`, and no vendor apt repository is configured.
 
 If a wrong disk becomes writable, all media operations stop. The affected media is preserved, target-resolution logic and simulations are corrected, and disposable physical qualification repeats before any production node is enabled.
 

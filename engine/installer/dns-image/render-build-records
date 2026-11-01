@@ -1,0 +1,236 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 dalsoop
+# SPDX-License-Identifier: GPL-3.0-only
+set -eu
+
+# Renders the SPDX SBOM, component registry and build manifest of one DNS
+# image from the exact bytes it embeds. The overlay selection decides which
+# overlay components, SBOM packages and manifest fields exist. The three
+# records are verified together before any of them is promoted.
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
+policy=$repo_root/build/distribution-policy.json
+validator=$repo_root/build/verify-distribution-contracts
+# shellcheck disable=SC1091
+. "$repo_root/build/locks/sources.env"
+
+artifact_dir=
+iso=
+install_mode=
+overlays_file=
+technitium_archive=
+tailscale_archive=
+tailscale_report=
+netbird_archive=
+closure_manifest=
+packages_file=
+source_revision=
+source_snapshot=
+
+fail() {
+    echo "render-build-records: $*" >&2
+    exit 1
+}
+
+usage() {
+    cat >&2 <<'EOF'
+usage: render-build-records --artifact-dir DIR --iso FILE --install-mode reviewed|guided
+  --overlays FILE --technitium-archive FILE
+  [--tailscale-archive FILE --tailscale-report FILE] [--netbird-archive FILE]
+  --closure-manifest FILE --packages FILE --source-revision SHA --source-snapshot FILE
+EOF
+    exit 2
+}
+
+while [ "$#" -gt 0 ]; do
+    [ "$#" -ge 2 ] || usage
+    case "$1" in
+        --artifact-dir) artifact_dir=$2 ;;
+        --iso) iso=$2 ;;
+        --install-mode) install_mode=$2 ;;
+        --overlays) overlays_file=$2 ;;
+        --technitium-archive) technitium_archive=$2 ;;
+        --tailscale-archive) tailscale_archive=$2 ;;
+        --tailscale-report) tailscale_report=$2 ;;
+        --netbird-archive) netbird_archive=$2 ;;
+        --closure-manifest) closure_manifest=$2 ;;
+        --packages) packages_file=$2 ;;
+        --source-revision) source_revision=$2 ;;
+        --source-snapshot) source_snapshot=$2 ;;
+        *) usage ;;
+    esac
+    shift 2
+done
+
+for value in "$artifact_dir" "$iso" "$install_mode" "$overlays_file" "$technitium_archive" \
+    "$closure_manifest" "$packages_file" "$source_revision" "$source_snapshot"; do
+    [ -n "$value" ] || usage
+done
+command -v jq >/dev/null 2>&1 || fail "jq is required"
+command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
+[ -d "$artifact_dir" ] || fail "artifact directory is missing: $artifact_dir"
+case "$install_mode" in reviewed|guided) ;; *) fail "unknown install mode: $install_mode" ;; esac
+printf '%s' "$source_revision" | grep -Eq '^[0-9a-f]{40}$' ||
+    fail "source revision is not a full Git commit"
+"$script_dir/overlay-selection" check "$overlays_file"
+overlays=$(jq -R . "$overlays_file" | jq -cs .)
+
+selected() {
+    jq -e --arg overlay "$1" 'index($overlay) != null' >/dev/null <<EOF
+$overlays
+EOF
+}
+if selected tailscale; then
+    { [ -n "$tailscale_archive" ] && [ -n "$tailscale_report" ]; } ||
+        fail "Tailscale is selected but its archive or dependency report is missing"
+else
+    { [ -z "$tailscale_archive" ] && [ -z "$tailscale_report" ]; } ||
+        fail "Tailscale is not selected but its archive or dependency report was given"
+fi
+if selected netbird; then
+    [ -n "$netbird_archive" ] || fail "NetBird is selected but its archive is missing"
+else
+    [ -z "$netbird_archive" ] || fail "NetBird is not selected but its archive was given"
+fi
+for input in "$iso" "$technitium_archive" "$closure_manifest" "$packages_file" "$source_snapshot" \
+    "$tailscale_archive" "$tailscale_report" "$netbird_archive"; do
+    [ -z "$input" ] || [ -s "$input" ] || fail "missing build input: $input"
+done
+[ -s "$iso" ] || fail "missing ISO: $iso"
+
+digest() {
+    if [ -n "$1" ]; then
+        sha256sum "$1" | awk '{print $1}'
+    fi
+}
+iso_sha256=$(digest "$iso")
+technitium_sha256=$(digest "$technitium_archive")
+tailscale_sha256=$(digest "$tailscale_archive")
+tailscale_report_sha256=$(digest "$tailscale_report")
+netbird_sha256=$(digest "$netbird_archive")
+closure_sha256=$(digest "$closure_manifest")
+source_snapshot_sha256=$(digest "$source_snapshot")
+policy_sha256=$(digest "$policy")
+source_archive=$SOURCE_REPOSITORY/archive/$source_revision.tar.gz
+created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+short_sha=$(printf '%s' "$iso_sha256" | cut -c1-16)
+build_id="debian-$DEBIAN_POINT_RELEASE-technitium-$TECHNITIUM_VERSION-$short_sha"
+
+sbom=$artifact_dir/sbom.spdx.json
+registry=$artifact_dir/component-redistribution-registry.json
+manifest=$artifact_dir/build-manifest.json
+# Records from an earlier build must never pair with this ISO.
+rm -f "$sbom" "$registry" "$manifest"
+sbom_partial=$sbom.partial.$$
+registry_partial=$registry.partial.$$
+manifest_partial=$manifest.partial.$$
+trap 'rm -f "$sbom_partial" "$registry_partial" "$manifest_partial"' EXIT HUP INT TERM
+
+jq -n \
+    --argjson overlays "$overlays" \
+    --arg name "dns-appliance-installer-$build_id" \
+    --arg debian "$DEBIAN_POINT_RELEASE@$DEBIAN_SNAPSHOT" \
+    --arg technitium "$TECHNITIUM_IMAGE@$TECHNITIUM_AMD64_DIGEST" \
+    --arg tailscale "$TAILSCALE_VERSION" \
+    --arg netbird "$NETBIRD_VERSION" \
+    --arg revision "$source_revision" \
+    --arg source_repository "$SOURCE_REPOSITORY" \
+    --arg source_archive "$source_archive" \
+    --arg created "$created" \
+    --rawfile packages "$packages_file" \
+    'def selected($overlay): ($overlays | index($overlay)) != null;
+     {spdxVersion:"SPDX-2.3",dataLicense:"CC0-1.0",SPDXID:"SPDXRef-DOCUMENT",name:$name,
+      documentNamespace:($source_repository+"/sbom/"+$revision+"/"+$name),
+      creationInfo:{created:$created,creators:["Tool: diy-device-os-bootstrap-for-jeonghan/engine/installer/dns-image/render-build-records"]},
+      documentDescribes:(["SPDXRef-DebianPackageClosure","SPDXRef-Technitium"] +
+        (if selected("tailscale") then ["SPDXRef-Tailscale","SPDXRef-TailscaleDependencyReport"] else [] end) +
+        (if selected("netbird") then ["SPDXRef-NetBird"] else [] end) +
+        ["SPDXRef-DIYDeviceOSBootstrapForJeonghan"]),
+      packages:([($packages|split("\n")[]|select(length>0))|{name:(split("=")[0]),versionInfo:(split("=")[1]),SPDXID:("SPDXRef-Package-"+(gsub("[^A-Za-z0-9.-]";"-"))),downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION"}] +
+        [{name:"debian-package-closure",versionInfo:$debian,SPDXID:"SPDXRef-DebianPackageClosure",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION",comment:"Exact package versions and artifact hashes are retained in debian-package-closure.manifest."},
+         {name:"diy-device-os-bootstrap-for-jeonghan",versionInfo:$revision,SPDXID:"SPDXRef-DIYDeviceOSBootstrapForJeonghan",downloadLocation:$source_archive,filesAnalyzed:false,licenseDeclared:"GPL-3.0-only",licenseConcluded:"GPL-3.0-only",copyrightText:"Copyright (c) 2026 dalsoop"},
+         {name:"technitium-dns-server-container",versionInfo:$technitium,SPDXID:"SPDXRef-Technitium",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION",comment:"The container combines the GPL-3.0 Technitium DNS Server with separately licensed runtime content; inspect its embedded notices."}] +
+        (if selected("tailscale") then
+          [{name:"tailscale-linux-static",versionInfo:$tailscale,SPDXID:"SPDXRef-Tailscale",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"BSD-3-Clause",licenseConcluded:"NOASSERTION",copyrightText:"Copyright (c) 2020 Tailscale Inc & contributors",comment:"The upstream project is BSD-3-Clause; the static binaries include dependencies listed in the pinned Tailscale dependency-license report."},
+           {name:"tailscale-dependency-license-report",versionInfo:$tailscale,SPDXID:"SPDXRef-TailscaleDependencyReport",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"NOASSERTION",licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION"}]
+         else [] end) +
+        (if selected("netbird") then
+          [{name:"netbird-linux-static",versionInfo:$netbird,SPDXID:"SPDXRef-NetBird",downloadLocation:"NOASSERTION",filesAnalyzed:false,licenseDeclared:"BSD-3-Clause",licenseConcluded:"NOASSERTION",copyrightText:"Copyright (c) 2022-2026 NetBird GmbH & AUTHORS",comment:"The client is built from the BSD-3-Clause part of the upstream repository; upstream publishes no license report for the Go modules compiled into the static binary."}]
+         else [] end))}' \
+    > "$sbom_partial"
+
+jq -n \
+    --argjson overlays "$overlays" \
+    --arg debian_version "$DEBIAN_POINT_RELEASE@$DEBIAN_SNAPSHOT" \
+    --arg closure_sha256 "$closure_sha256" \
+    --arg technitium_version "$TECHNITIUM_VERSION" \
+    --arg technitium_archive_sha256 "$technitium_sha256" \
+    --arg technitium_source_identity "$TECHNITIUM_AMD64_DIGEST" \
+    --arg tailscale_version "$TAILSCALE_VERSION" \
+    --arg tailscale_sha256 "$tailscale_sha256" \
+    --arg tailscale_report_sha256 "$tailscale_report_sha256" \
+    --arg netbird_version "$NETBIRD_VERSION" \
+    --arg netbird_sha256 "$netbird_sha256" \
+    --arg source_revision "$source_revision" \
+    --arg source_snapshot_sha256 "$source_snapshot_sha256" \
+    'def selected($overlay): ($overlays | index($overlay)) != null;
+     def personal: {redistribution:{status:"personal-use-only"}};
+     {schema_version:1,artifact_id:"dns-appliance",components:(
+       [{id:"debian-package-closure",version:$debian_version,digest:{algorithm:"sha256",value:$closure_sha256}} + personal,
+        {id:"technitium-oci",version:$technitium_version,digest:{algorithm:"sha256",value:$technitium_archive_sha256},source_identity:{kind:"oci-digest",value:$technitium_source_identity}} + personal] +
+       (if selected("tailscale") then
+         [{id:"tailscale-archive",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_sha256}} + personal,
+          {id:"tailscale-dependency-report",version:$tailscale_version,digest:{algorithm:"sha256",value:$tailscale_report_sha256}} + personal]
+        else [] end) +
+       (if selected("netbird") then
+         [{id:"netbird-archive",version:$netbird_version,digest:{algorithm:"sha256",value:$netbird_sha256}} + personal]
+        else [] end) +
+       [{id:"repository-source-snapshot",version:$source_revision,digest:{algorithm:"sha256",value:$source_snapshot_sha256}} + personal])}' \
+    > "$registry_partial"
+
+jq -n \
+    --argjson overlays "$overlays" \
+    --arg build_id "$build_id" \
+    --arg install_mode "$install_mode" \
+    --arg iso "$(basename -- "$iso")" \
+    --arg iso_sha256 "$iso_sha256" \
+    --arg debian "$DEBIAN_POINT_RELEASE" \
+    --arg snapshot "$DEBIAN_SNAPSHOT" \
+    --arg technitium "$TECHNITIUM_VERSION" \
+    --arg technitium_digest "$TECHNITIUM_AMD64_DIGEST" \
+    --arg technitium_archive_sha256 "$technitium_sha256" \
+    --arg tailscale "$TAILSCALE_VERSION" \
+    --arg tailscale_archive_sha256 "$tailscale_sha256" \
+    --arg netbird "$NETBIRD_VERSION" \
+    --arg netbird_archive_sha256 "$netbird_sha256" \
+    --arg source_revision "$source_revision" \
+    --arg source_repository "$SOURCE_REPOSITORY" \
+    --arg source_archive "$source_archive" \
+    --arg component_registry_sha256 "$(digest "$registry_partial")" \
+    --arg distribution_policy_sha256 "$policy_sha256" \
+    --arg sbom_sha256 "$(digest "$sbom_partial")" \
+    --slurpfile registry "$registry_partial" \
+    'def selected($overlay): ($overlays | index($overlay)) != null;
+     {schema_version:1,artifact_id:"dns-appliance",build_id:$build_id,install_mode:$install_mode,
+      iso:$iso,iso_sha256:$iso_sha256,distribution_status:"personal-use-only",
+      component_registry:"component-redistribution-registry.json",
+      component_registry_sha256:$component_registry_sha256,
+      distribution_policy_sha256:$distribution_policy_sha256,overlays:$overlays,
+      components:($registry[0].components|map({id,status:.redistribution.status})),
+      sbom:"sbom.spdx.json",sbom_sha256:$sbom_sha256,debian_point_release:$debian,
+      debian_snapshot:$snapshot,technitium_version:$technitium,
+      technitium_image_digest:$technitium_digest,technitium_archive_sha256:$technitium_archive_sha256}
+     + (if selected("tailscale") then {tailscale_version:$tailscale,tailscale_archive_sha256:$tailscale_archive_sha256} else {} end)
+     + (if selected("netbird") then {netbird_version:$netbird,netbird_archive_sha256:$netbird_archive_sha256} else {} end)
+     + {source_revision:$source_revision,source_repository:$source_repository,source_archive:$source_archive}' \
+    > "$manifest_partial"
+
+"$validator" --registry "$registry_partial" --policy "$policy" \
+    --build-manifest "$manifest_partial" --sbom "$sbom_partial" >/dev/null ||
+    fail "rendered build records do not satisfy the distribution contracts"
+
+mv "$sbom_partial" "$sbom"
+mv "$registry_partial" "$registry"
+mv "$manifest_partial" "$manifest"
+trap - EXIT HUP INT TERM

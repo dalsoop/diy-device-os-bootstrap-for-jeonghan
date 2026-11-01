@@ -70,13 +70,28 @@ These commands do not download images or write a disk.
 Check the management host's live network path separately:
 
 ```sh
-engine/installer/management/network-preflight --json 10.0.0.1/16 | jq
+engine/installer/management/network-preflight --json 10.77.0.1/16 | jq
 ```
 
 The report distinguishes LAN topology and reachability from outbound IP, DNS,
-and HTTPS connectivity. Internet is needed to prepare public images and enroll
-Tailscale; it is not needed to boot the already-built offline DNS installer.
-An Internet pass does not imply that any DNS node is installed or healthy.
+and HTTPS connectivity. Internet is needed to prepare public images, enroll
+Tailscale or NetBird, and let installed nodes fetch Debian updates; it is not
+needed to boot the already-built offline DNS installer. An Internet pass does
+not imply that any DNS node is installed or healthy.
+
+The router must serve the `10.77.0.0/16` LAN at `10.77.0.1/16`. Moving it there
+is a manual step described in
+[`engine/installer/docs/network-cutover.md`](../engine/installer/docs/network-cutover.md).
+
+The World also selects the management overlays used to reach the DNS nodes:
+
+```yaml
+spec:
+  overlays: [tailscale, netbird]
+```
+
+The list is required, holds `tailscale`, `netbird`, or both, and decides which
+clients the DNS image carries.
 
 Change the media selection in the mutable World draft:
 
@@ -160,7 +175,7 @@ internal target disk, and capture one ignored inventory file at a time:
 
 ```sh
 sudo engine/installer/dns-image/capture-inventory \
-  dns01 10.0.5.1 enp1s0 /dev/sda \
+  dns01 10.77.5.1 enp1s0 /dev/sda \
   > burn-history/os-installs/dns01/hardware.conf
 ```
 
@@ -191,14 +206,21 @@ Install the builder dependencies and build:
 
 ```sh
 sudo apt-get install -y simple-cdd debian-cd debian-archive-keyring \
-  reprepro rsync xorriso isolinux syslinux-common skopeo jq curl
+  reprepro rsync xorriso isolinux syslinux-common skopeo jq curl ruby
 engine/installer/dns-image/fetch-locked-sources
 engine/installer/dns-image/build-image
 ```
 
-The ISO is created under `engine/installer/dns-image/simple-cdd/images/`; its matching
-manifest is `engine/installer/artifacts/build-manifest.json`. Both remain ignored by
-Git. A successful build is not permission to erase a USB or internal disk.
+Both commands resolve the World with Ruby and fetch and embed only the overlay
+clients it selects. The ISO is created under `engine/installer/dns-image/simple-cdd/images/`; its matching
+manifest is `engine/installer/artifacts/build-manifest.json` and records the
+selection. Both remain ignored by Git. A successful build is not permission to
+erase a USB or internal disk, and the burn commands refuse an image whose
+overlays differ from the World's.
+
+Do not install a node from USB generation `20261022024140-jeonghan-home`. It is
+retired because it carries the previous LAN addresses and a vulnerable kernel
+snapshot; build and write new media instead.
 
 The default `dns-install` selection contains only the guarded DNS image. The
 separate `inventory-capture` selection contains only Debian Live. Re-run exact
@@ -288,7 +310,20 @@ DNS_CLUSTER_ACCESS_OUTPUT=/secure/cluster-access.json.age \
 ```
 
 Move imported secrets into the principal secret store and rotate bootstrap
-credentials. Apply the router DHCP DNS change only after all node and rollback
+credentials. Then enroll the World's overlays from the management host with
+`engine/installer/management/tailscale-enroll --all` and
+`engine/installer/management/netbird-enroll --all`. Complete the NetBird
+preconditions first: network range `10.78.0.0/16`, the built-in `Default`
+policy removed or disabled, and the reviewed policies in place. The
+"Enroll the overlays" section of [`docs/operations.md`](operations.md) lists the
+exact steps and credential files.
+
+Installed nodes take Debian updates unattended: `dns01` installs at 02:00 and
+may reboot at 03:00, `dns02` at 02:30 and 03:30, `dns03` at 03:00 and 04:00
+(`Asia/Seoul`). A node reboots only while its peers still answer DNS; the
+status monitor highlights skipped reboots.
+
+Apply the router DHCP DNS change only after all node and rollback
 gates in [`engine/installer/docs/network-cutover.md`](../engine/installer/docs/network-cutover.md)
 pass.
 
@@ -297,7 +332,10 @@ pass.
 Install the pinned Agent Gateway dependencies on the trusted management host,
 keep role-specific DNS token files outside Git, and expose `engine/agent/run` only as a
 dedicated SSH forced command. The SSH service must be reachable only through
-the reviewed Tailscale policy and host firewall.
+the reviewed Tailscale or NetBird access policy and host firewall. The gateway
+and the status monitor reach the nodes as `dns01` through `dns03`; the
+management host must resolve those names without the DNS cluster, through a
+hosts file or an overlay's own DNS.
 
 The gateway's default tools are read-only validation, planning, capacity,
 network, tunnel, and DNS inspection. `network_preflight` checks Internet

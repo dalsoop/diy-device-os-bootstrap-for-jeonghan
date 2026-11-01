@@ -14,3 +14,5 @@
 | [0010](0010-resolve-media-through-declarative-catalog.md) | Resolve media through a pinned declarative Catalog | Accepted |
 | [0011](0011-keep-destructive-actions-target-specific.md) | Keep destructive actions behind target-specific gates | Accepted |
 | [0012](0012-default-to-source-only-releases.md) | Default to source-only releases and require independent prebuilt gates | Accepted |
+| [0013](0013-select-overlays-per-world.md) | Select overlay networks per World and bundle only the selected clients | Accepted |
+| [0014](0014-unattended-upgrades-with-guarded-reboots.md) | Install Debian updates unattended and reboot one node at a time behind a seen-peer guard | Accepted |

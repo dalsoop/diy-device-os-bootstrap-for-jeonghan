@@ -40,7 +40,7 @@ If the wizard cannot run, identify the interface and disk with
 capture command directly:
 
 ```sh
-sudo sh /mnt/tools/capture-inventory dns01 10.0.5.1 enp1s0 /dev/sda | \
+sudo sh /mnt/tools/capture-inventory dns01 10.77.5.1 enp1s0 /dev/sda | \
   sudo tee /mnt/inventory-dns01.conf >/dev/null
 sync
 ```

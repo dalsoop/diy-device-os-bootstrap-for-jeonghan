@@ -18,8 +18,39 @@ first-boot enrollment.
 - Write secrets to USB only inside an age-encrypted archive. Validate public
   output, write temporary files, atomically rename, synchronize, and only then
   mark completion.
-- Tailscale is installed offline but remains unenrolled until the management
-  host supplies a one-off key.
+- Only the overlay clients that the resolved World selects (Tailscale, NetBird,
+  or both) are fetched, embedded, installed, and enabled. Obtain the selection
+  through `overlay-selection`; the embedded `overlays` file and the build
+  manifest record it, and `render-build-records` emits the conditional
+  registry, manifest, and SBOM. An installed client remains unenrolled until
+  the management host supplies a one-off key.
+- The NetBird unit mirrors what `netbird service install` writes for the pinned
+  client (socket `/var/run/netbird.sock`, profile under `/var/lib/netbird/`,
+  logs under `/var/log/netbird/`). Re-read the pinned client source before
+  changing it or the pin.
+- The appliance firewall owns only `table inet dns_appliance`. Never add
+  `flush ruleset` or another table to `payload/nftables.conf`, and keep the
+  `nftables.service` drop-in (`payload/nftables-own-table.conf`) that stops by
+  deleting only that table: the overlay clients keep their own tables.
+  `dns-finish-install` renders the file from the role profile, the installed
+  overlay selection, and the embedded role profiles; a leftover marker fails.
+- Overlay port limits stay in the prerouting chain `overlay_prerouting`, the
+  same check for every selected overlay interface. The NetBird client inserts
+  `iifname "wt0" accept` at the top of every foreign input and forward chain,
+  so input-chain limits alone do not hold on `wt0`. Run
+  `tests/firewall-namespace-simulation.sh` after any firewall change.
+- The recursion ACL and the health report follow `/etc/dns-appliance/overlays`:
+  each selected overlay's range and status, and no other.
+- Installed nodes take Debian point-release and security updates unattended at
+  fixed per-role times and reboot only through `dns-appliance-reboot`, which
+  skips the window while any seen peer fails to answer DNS. Keep install one
+  hour before reboot, no random delay, and no catch-up after downtime. Overlay
+  clients and Technitium are not updated this way.
+- Nothing in Debian writes `/run/reboot-required` by default. The appliance's
+  kernel hook `payload/dns-appliance-reboot-required`, installed as
+  `/etc/kernel/postinst.d/zz-dns-appliance-reboot-required`, is the only
+  writer. It always exits zero so it never fails a kernel installation. Do not
+  replace it with `reboot-notifier`, which pulls in a mail transport agent.
 - A build is not installation proof. Keep VM, physical hardware, power-loss, and
   firmware verification as separate evidence.
 
@@ -40,8 +71,8 @@ these per-role folders. The node inventory example is
   verification.
 - Do not edit hashes merely to satisfy the installer. Recapture only after an
   intentional hardware change.
-- Fixed addresses are `dns01=10.0.5.1`, `dns02=10.0.5.2`, and
-  `dns03=10.0.5.3` unless a coordinated contract decision changes the design.
+- Fixed addresses are `dns01=10.77.5.1`, `dns02=10.77.5.2`, and
+  `dns03=10.77.5.3` unless a coordinated contract decision changes the design.
 - Verify guided profiles with isolated install-gate fixtures; verify real
   captures only on the matching machine before enabling its one-at-a-time
   physical pilot.

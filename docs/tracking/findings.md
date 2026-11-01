@@ -7,7 +7,7 @@ On 2026-10-21, `device-os world readiness` reported no captured inventory for
 SSH public-key input or age recovery recipient, missing locked Technitium and
 Tailscale build inputs, and no DNS installer ISO/build manifest. The offline
 network preflight observed a management gateway of `192.168.0.1`, while the
-planned `10.0.0.1/16` router and `10.0.5.1` through `10.0.5.3` nodes were
+planned `10.77.0.1/16` router and `10.77.5.1` through `10.77.5.3` nodes were
 unreachable. A passing offline-install topology calculation does not establish
 live node reachability or Internet readiness.
 
@@ -111,15 +111,37 @@ described as ready to publish generated media.
 
 ## Management operations lack one complete audit trail
 
-DNS plan/apply records only some completed outcomes, while cluster bootstrap, Tailscale enrollment, backup collection, reinstall authorization, restore, and router changes primarily leave console output and resulting state. Failures before command-specific logging may leave no durable event.
+DNS plan/apply records only some completed outcomes, while cluster bootstrap, Tailscale and NetBird enrollment, backup collection, reinstall authorization, restore, and router changes primarily leave console output and resulting state. Failures before command-specific logging may leave no durable event.
 
 This limits incident reconstruction and proof of who authorized a sensitive operation. Operators must capture protected session records for now. Closing it needs a shared redacted event schema, append-only protected sink, failure-path coverage, retention policy, and operator identity source.
 
 ## Live agent path remains unverified
 
-The MCP gateway passes isolated tool and policy simulations, but no evidence yet proves the dedicated account, Tailscale ACL, forced SSH command, protected credential paths, trusted Technitium CA, and three live DNS nodes operate together. A source pass cannot establish remote identity or network policy.
+The MCP gateway passes isolated tool and policy simulations, but no evidence yet proves the dedicated account, overlay access policy (Tailscale ACL or NetBird policy), forced SSH command, protected credential paths, trusted Technitium CA, and three live DNS nodes operate together. A source pass cannot establish remote identity or network policy. Whether the dedicated gateway account may read the NetBird daemon socket (`/var/run/netbird.sock`) for `netbird status --json` is also unverified; if it cannot, `tunnel_status` fails rather than reporting NetBird state.
 
-Provision the management-host account and tailnet policy only after node installation, then test read-only tools first, verify forbidden tools are absent, and enable one canary apply only after trusted TLS and rollback are proven.
+Provision the management-host account and overlay policy only after node installation, then test read-only tools first, including `tunnel_status` with each installed overlay CLI, verify forbidden tools are absent, and enable one canary apply only after trusted TLS and rollback are proven.
+
+## NetBird publishes no dependency-license report
+
+Tailscale publishes a pinned dependency-license report that the DNS image carries beside its client. NetBird publishes none for the Go modules compiled into its static client binary. The client itself is built from the BSD-3-Clause part of the upstream repository, and `docs/licenses/NetBird-BSD-3-Clause.txt` is the license text at tag `v0.82.0`, but the licenses of the third-party modules among the 739 non-standard Go packages that the client builds from at that tag (`go list -deps ./client`, linux/amd64) are not recorded. The SBOM therefore concludes `NOASSERTION` for `SPDXRef-NetBird`.
+
+This does not limit personal use. It blocks a future redistribution review of any DNS image that selects NetBird, because notice and corresponding-source obligations cannot be dispositioned without that inventory. Closing it requires generating and reviewing a dependency-license report for the exact pinned client source, or an upstream report, bound to the pinned version.
+
+## Overlay clients and Technitium are not updated automatically
+
+Unattended upgrades install only Debian packages. The Tailscale and NetBird clients and the Technitium container are pinned upstream artifacts installed from the image, so a security fix in any of them reaches an appliance only through a reviewed lock update, a rebuilt image, and a reinstall. No vendor apt repository is configured, by decision 0014.
+
+Until a reviewed update path exists, the operator must watch the upstream security announcements of these three components and schedule a lock update and one-at-a-time reinstall when a fix matters.
+
+## The reference collection's personal-use check lists every DNS component
+
+`license check --mode personal-use` for the contributor reference collection names no World, so it cannot know which overlays a DNS image would select. Without a valid build manifest it lists all six known DNS components, including both overlays' components. This is conservative: it may warn about a component that a particular image does not contain, but never omits one. World-driven checks use the World's overlays, and checks with a valid build manifest use the manifest's.
+
+## The overlay port limits are not yet checked with the real clients
+
+The NetBird client inserts `iifname "wt0" accept` at the top of the appliance's input and forward chains and re-inserts it after any change, so the appliance limits overlay ports in the prerouting chain `overlay_prerouting` of its own table, which the client does not touch, and keeps the overlay clients' tables through `nftables.service` load, reload, and stop. `tests/firewall-namespace-simulation.sh` shows both in network namespaces, but with veth interfaces named `wt0` and `tailscale0`, an inserted rule that reproduces the client's, and stand-in tables, not the real NetBird and Tailscale clients.
+
+Closing this requires an installed node with both clients enrolled: `nft list table inet dns_appliance` shows `overlay_prerouting` with both interfaces; from an admin-group peer over each overlay, DNS and the management ports answer while a port outside the allowed set does not; and the clients' tables and connectivity remain after `systemctl reload nftables` and `systemctl restart nftables`. Because the client's accept also sits at the top of the forward chain, the same check confirms `net.ipv4.ip_forward` stays `0` with both clients enrolled; that, not the forward chain's policy, is what keeps an appliance from forwarding overlay traffic.
 
 ## Tailscale enrollment does not inspect Serve or Funnel state
 

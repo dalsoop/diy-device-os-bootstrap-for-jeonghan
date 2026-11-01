@@ -14,6 +14,7 @@ class ContractError < StandardError; end
 
 SAFE_ID = /\A[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\z/
 SAFE_REL = /\A[A-Za-z0-9][A-Za-z0-9._+!\/-]*\z/
+OVERLAYS = %w[tailscale netbird].freeze
 
 def fail_contract(message)
   raise ContractError, message
@@ -154,6 +155,13 @@ begin
     parse_host_ip(asset["managementAddress"], "assets[#{index}].managementAddress") if asset.key?("managementAddress")
   end
 
+  overlays = list(spec["overlays"], "World.spec.overlays").map.with_index do |overlay, index|
+    overlay = text(overlay, "World.spec.overlays[#{index}]")
+    fail_contract("unsupported overlay: #{overlay}") unless OVERLAYS.include?(overlay)
+    overlay
+  end
+  fail_contract("duplicate overlay") unless overlays.uniq.length == overlays.length
+
   networks = list(spec["networks"], "World.spec.networks")
   network_ids = unique_ids(networks, "networks")
   network_by_id = {}
@@ -236,6 +244,7 @@ begin
     "source" => { "playbook" => relative_playbook, "world" => relative_world },
     "world" => { "name" => world_name, "slug" => world_slug, "lifecycle" => lifecycle, "timezone" => timezone },
     "media" => { "id" => requested_media, "language" => language, "entries" => entries },
+    "overlays" => overlays,
     "policies" => policies
   }
   output = JSON.pretty_generate(result) + "\n"

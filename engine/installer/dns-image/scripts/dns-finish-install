@@ -50,8 +50,126 @@ for value in "$ROLE" "$ADDRESS" "$NETMASK" "$GATEWAY" "$DNS_SERVERS" "$DOMAIN" \
     }
 done
 
+# Prints an overlay selection file's values; fails unless it lists tailscale
+# and/or netbird once each, one per line, in that order.
+canonical_overlays() {
+    awk '
+        $0 == "tailscale" && !tailscale && !netbird { tailscale = 1; print; next }
+        $0 == "netbird" && !netbird { netbird = 1; print; next }
+        { bad = 1 }
+        END { exit (bad || NR == 0) }
+    ' "$1"
+}
+
+# Succeeds when the single argument is one IPv4 CIDR.
+ipv4_cidr() {
+    printf '%s\n' "$1" | awk -F/ '
+        NR > 1 || NF != 2 || $2 !~ /^[0-9]+$/ || length($2) > 2 || $2 + 0 > 32 { bad = 1 }
+        {
+            n = split($1, octet, ".")
+            if (n != 4) bad = 1
+            for (i = 1; i <= n; i++)
+                if (octet[i] !~ /^[0-9]+$/ || length(octet[i]) > 3 || octet[i] + 0 > 255) bad = 1
+        }
+        END { exit bad }
+    '
+}
+
+# Prints the single IPv4 address of an embedded role profile.
+peer_address() {
+    awk -F= '
+        $1 == "address" { count++; value = $2 }
+        END {
+            n = split(value, octet, ".")
+            bad = (count != 1 || n != 4)
+            for (i = 1; i <= n; i++)
+                if (octet[i] !~ /^[0-9]+$/ || length(octet[i]) > 3 || octet[i] + 0 > 255) bad = 1
+            if (bad) exit 1
+            print value
+        }
+    ' "$1"
+}
+
+# Renders the firewall template $1 for the overlay selection file $2 into $3:
+# the role profile's LAN and management CIDRs, the three cluster addresses from
+# the embedded role profiles, and only the selected overlays' lines and
+# interfaces. A marker left after rendering stops the install.
+render_firewall() {
+    for cidr in "$LAN_CIDR" "$MANAGEMENT_CIDR"; do
+        ipv4_cidr "$cidr" || {
+            echo "dns-finish-install: '$cidr' is not an IPv4 CIDR" >&2
+            exit 1
+        }
+    done
+    firewall_selection=$(canonical_overlays "$2") || {
+        echo "dns-finish-install: overlay selection $2 is malformed" >&2
+        exit 1
+    }
+    firewall_tailscale=false
+    firewall_netbird=false
+    firewall_interfaces=
+    for overlay in $firewall_selection; do
+        case "$overlay" in
+            tailscale) firewall_tailscale=true; interface='"tailscale0"' ;;
+            netbird) firewall_netbird=true; interface='"wt0"' ;;
+        esac
+        firewall_interfaces="${firewall_interfaces:+$firewall_interfaces, }$interface"
+    done
+    firewall_peers=
+    for peer in dns01 dns02 dns03; do
+        peer_ip=$(peer_address "/cdrom/simple-cdd/$peer.conf") || {
+            echo "dns-finish-install: embedded profile $peer has no single valid address" >&2
+            exit 1
+        }
+        firewall_peers="${firewall_peers:+$firewall_peers, }$peer_ip"
+    done
+    awk -v lan="$LAN_CIDR" -v management="$MANAGEMENT_CIDR" -v peers="$firewall_peers" \
+        -v interfaces="$firewall_interfaces" -v tailscale="$firewall_tailscale" \
+        -v netbird="$firewall_netbird" '
+        /@@TAILSCALE@@/ { if (tailscale != "true") next; sub(/@@TAILSCALE@@/, "") }
+        /@@NETBIRD@@/ { if (netbird != "true") next; sub(/@@NETBIRD@@/, "") }
+        {
+            gsub(/@@LAN_CIDR@@/, lan)
+            gsub(/@@MANAGEMENT_CIDR@@/, management)
+            gsub(/@@CLUSTER_PEERS@@/, peers)
+            gsub(/@@OVERLAY_INTERFACES@@/, interfaces)
+            print
+        }
+    ' "$1" > "$3.tmp"
+    if grep -q '@@' "$3.tmp"; then
+        rm -f "$3.tmp"
+        echo "dns-finish-install: firewall template $1 has an unrendered marker" >&2
+        exit 1
+    fi
+    chmod 0644 "$3.tmp"
+    mv "$3.tmp" "$3"
+}
+
+# The image embeds the World's overlay selection: tailscale and/or netbird,
+# once each, one per line, in that order. Anything else stops the install
+# before the target is changed.
+overlays_file=/cdrom/simple-cdd/overlays
+[ -s "$overlays_file" ] || {
+    echo "dns-finish-install: overlay selection is missing or empty" >&2
+    exit 1
+}
+overlays=$(canonical_overlays "$overlays_file") || {
+    echo "dns-finish-install: overlay selection is malformed" >&2
+    exit 1
+}
+tailscale_selected=false
+netbird_selected=false
+for overlay in $overlays; do
+    case "$overlay" in
+        tailscale) tailscale_selected=true ;;
+        netbird) netbird_selected=true ;;
+    esac
+done
+
 install -d -m 0755 /target/etc/dns-appliance
 install -m 0644 "$state" /target/etc/dns-appliance/install.env
+printf '%s\n' "$overlays" > /target/etc/dns-appliance/overlays
+chmod 0644 /target/etc/dns-appliance/overlays
 install -m 0644 /cdrom/simple-cdd/sources.env /target/etc/dns-appliance/sources.env
 install -m 0644 /cdrom/simple-cdd/age-recipient /target/etc/dns-appliance/age-recipient
 install -d -m 0755 /target/usr/lib/dns-appliance /target/usr/share/dns-appliance
@@ -66,10 +184,6 @@ install -m 0644 /cdrom/simple-cdd/license-history.md \
     /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/LICENSE_HISTORY.md
 install -m 0644 /cdrom/simple-cdd/third-party-notices.md \
     /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/THIRD_PARTY_NOTICES.md
-install -m 0644 /cdrom/simple-cdd/tailscale-license.txt \
-    /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/Tailscale-BSD-3-Clause.txt
-install -m 0644 /cdrom/simple-cdd/tailscale-dependency-licenses.md \
-    /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/Tailscale-Dependencies.md
 install -m 0644 /cdrom/simple-cdd/source.md \
     /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/SOURCE.md
 install -m 0644 /cdrom/simple-cdd/source-snapshot.tar.gz \
@@ -87,34 +201,63 @@ install -m 0644 /cdrom/simple-cdd/dns-build-manifest.schema.json \
 install -m 0644 /cdrom/simple-cdd/dns-final-review-record.schema.json \
     /target/usr/share/dns-appliance/dns-final-review-record.schema.json
 
-# Tailscale is installed from a checksum-pinned upstream static archive so the
-# appliance can be built and installed without package-repository access.
-TAILSCALE_VERSION=$(awk -F= '$1 == "TAILSCALE_VERSION" { print $2 }' \
-    /cdrom/simple-cdd/sources.env)
-[ -n "$TAILSCALE_VERSION" ] || {
-    echo "dns-finish-install: Tailscale version is missing from source locks" >&2
-    exit 1
-}
-tailscale_root=tailscale_${TAILSCALE_VERSION}_amd64
-tailscale_stage=/tmp/dns-appliance-tailscale
-rm -rf "$tailscale_stage"
-install -d -m 0755 "$tailscale_stage"
-tar -xzf /cdrom/simple-cdd/tailscale.tgz -C "$tailscale_stage"
-[ -x "$tailscale_stage/$tailscale_root/tailscale" ] || {
-    echo "dns-finish-install: pinned Tailscale client is missing" >&2
-    exit 1
-}
-[ -x "$tailscale_stage/$tailscale_root/tailscaled" ] || {
-    echo "dns-finish-install: pinned tailscaled is missing" >&2
-    exit 1
-}
-install -m 0755 "$tailscale_stage/$tailscale_root/tailscale" /target/usr/bin/tailscale
-install -m 0755 "$tailscale_stage/$tailscale_root/tailscaled" /target/usr/sbin/tailscaled
-install -m 0644 "$tailscale_stage/$tailscale_root/systemd/tailscaled.service" \
-    /target/lib/systemd/system/tailscaled.service
-install -m 0644 "$tailscale_stage/$tailscale_root/systemd/tailscaled.defaults" \
-    /target/etc/default/tailscaled
-rm -rf "$tailscale_stage"
+# Overlay clients are installed from checksum-pinned upstream static archives
+# so the appliance can be built and installed without package-repository
+# access. Only the selected clients are on the medium and installed; none is
+# enrolled here.
+if [ "$tailscale_selected" = true ]; then
+    TAILSCALE_VERSION=$(awk -F= '$1 == "TAILSCALE_VERSION" { print $2 }' \
+        /cdrom/simple-cdd/sources.env)
+    [ -n "$TAILSCALE_VERSION" ] || {
+        echo "dns-finish-install: Tailscale version is missing from source locks" >&2
+        exit 1
+    }
+    tailscale_root=tailscale_${TAILSCALE_VERSION}_amd64
+    tailscale_stage=/tmp/dns-appliance-tailscale
+    rm -rf "$tailscale_stage"
+    install -d -m 0755 "$tailscale_stage"
+    tar -xzf /cdrom/simple-cdd/tailscale.tgz -C "$tailscale_stage"
+    [ -x "$tailscale_stage/$tailscale_root/tailscale" ] || {
+        echo "dns-finish-install: pinned Tailscale client is missing" >&2
+        exit 1
+    }
+    [ -x "$tailscale_stage/$tailscale_root/tailscaled" ] || {
+        echo "dns-finish-install: pinned tailscaled is missing" >&2
+        exit 1
+    }
+    install -m 0755 "$tailscale_stage/$tailscale_root/tailscale" /target/usr/bin/tailscale
+    install -m 0755 "$tailscale_stage/$tailscale_root/tailscaled" /target/usr/sbin/tailscaled
+    install -m 0644 "$tailscale_stage/$tailscale_root/systemd/tailscaled.service" \
+        /target/lib/systemd/system/tailscaled.service
+    install -m 0644 "$tailscale_stage/$tailscale_root/systemd/tailscaled.defaults" \
+        /target/etc/default/tailscaled
+    rm -rf "$tailscale_stage"
+    install -m 0644 /cdrom/simple-cdd/tailscale-license.txt \
+        /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/Tailscale-BSD-3-Clause.txt
+    install -m 0644 /cdrom/simple-cdd/tailscale-dependency-licenses.md \
+        /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/Tailscale-Dependencies.md
+fi
+
+# NetBird ships one static client binary at the archive root. The unit is the
+# repository's copy of what `netbird service install` writes; the daemon keeps
+# its profile under /var/lib/netbird and logs under /var/log/netbird.
+if [ "$netbird_selected" = true ]; then
+    netbird_stage=/tmp/dns-appliance-netbird
+    rm -rf "$netbird_stage"
+    install -d -m 0755 "$netbird_stage"
+    tar -xzf /cdrom/simple-cdd/netbird.tar.gz -C "$netbird_stage"
+    { [ -f "$netbird_stage/netbird" ] && [ ! -L "$netbird_stage/netbird" ] &&
+        [ -x "$netbird_stage/netbird" ]; } || {
+        echo "dns-finish-install: pinned NetBird client is missing" >&2
+        exit 1
+    }
+    install -m 0755 "$netbird_stage/netbird" /target/usr/bin/netbird
+    rm -rf "$netbird_stage"
+    install -m 0644 /cdrom/simple-cdd/netbird.service /target/etc/systemd/system/netbird.service
+    install -d -m 0750 /target/var/log/netbird
+    install -m 0644 /cdrom/simple-cdd/netbird-license.txt \
+        /target/usr/share/doc/diy-device-os-bootstrap-for-jeonghan/NetBird-BSD-3-Clause.txt
+fi
 
 printf '%s\n' "$ROLE" > /target/etc/hostname
 printf '127.0.0.1 localhost\n127.0.1.1 %s.%s %s\n' "$ROLE" "$DOMAIN" "$ROLE" > /target/etc/hosts
@@ -141,10 +284,13 @@ in-target chown -R dns-operator:dns-operator /home/dns-operator/.ssh
 install -d -m 0755 /target/etc/ssh/sshd_config.d
 install -m 0644 /cdrom/simple-cdd/sshd-hardening.conf \
     /target/etc/ssh/sshd_config.d/60-dns-appliance.conf
-sed -e "s#@@LAN_CIDR@@#$LAN_CIDR#g" \
-    -e "s#@@MANAGEMENT_CIDR@@#$MANAGEMENT_CIDR#g" \
-    /cdrom/simple-cdd/nftables.conf > /target/etc/nftables.conf
-chmod 0644 /target/etc/nftables.conf
+
+# The appliance firewall owns only its table; the drop-in keeps stop and
+# reload from flushing the overlay clients' tables.
+render_firewall /cdrom/simple-cdd/nftables.conf /target/etc/dns-appliance/overlays /target/etc/nftables.conf
+install -d -m 0755 /target/etc/systemd/system/nftables.service.d
+install -m 0644 /cdrom/simple-cdd/nftables-own-table.conf \
+    /target/etc/systemd/system/nftables.service.d/60-dns-appliance.conf
 
 install -m 0440 /cdrom/simple-cdd/operator-sudoers /target/etc/sudoers.d/operator
 in-target visudo -cf /etc/sudoers.d/operator
@@ -174,5 +320,82 @@ in-target systemctl enable cockpit.socket
 in-target systemctl enable nftables.service
 in-target systemctl enable prometheus-node-exporter.service
 in-target systemctl enable systemd-timesyncd.service
-in-target systemctl enable tailscaled.service
+if [ "$tailscale_selected" = true ]; then
+    in-target systemctl enable tailscaled.service
+fi
+if [ "$netbird_selected" = true ]; then
+    in-target systemctl enable netbird.service
+fi
 in-target systemctl enable dns-appliance-firstboot.service
+
+# Unattended Debian upgrades with peer-guarded staggered reboots. The install
+# time and the reboot window are fixed per role in Asia/Seoul, like the fixed
+# role addresses; each install runs one hour before the role's reboot window.
+update_schedule() {
+    case "$1" in
+        dns01) printf '02:00 03:00\n' ;;
+        dns02) printf '02:30 03:30\n' ;;
+        dns03) printf '03:00 04:00\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+install_unattended_upgrades() {
+    schedule=$(update_schedule "$1") || {
+        echo "dns-finish-install: no update schedule for role $1" >&2
+        exit 1
+    }
+    install_time=${schedule% *}
+    reboot_time=${schedule#* }
+
+    # The reboot guard probes the other two roles at the addresses of the
+    # role profiles embedded in this image.
+    peers=/target/etc/dns-appliance/peers
+    : > "$peers.tmp"
+    for peer in dns01 dns02 dns03; do
+        [ "$peer" != "$1" ] || continue
+        peer_ip=$(peer_address "/cdrom/simple-cdd/$peer.conf") || {
+            echo "dns-finish-install: embedded profile $peer has no single valid address" >&2
+            exit 1
+        }
+        printf '%s %s\n' "$peer" "$peer_ip" >> "$peers.tmp"
+    done
+    chmod 0644 "$peers.tmp"
+    mv "$peers.tmp" "$peers"
+
+    # The installer leaves the install medium as the only apt source; the
+    # appliance updates from the Debian archive over HTTPS instead.
+    if [ -f /target/etc/apt/sources.list ]; then
+        sed -e 's/^deb cdrom:/# deb cdrom:/' -e 's/^deb-src cdrom:/# deb-src cdrom:/' \
+            /target/etc/apt/sources.list > /target/etc/apt/sources.list.tmp
+        chmod 0644 /target/etc/apt/sources.list.tmp
+        mv /target/etc/apt/sources.list.tmp /target/etc/apt/sources.list
+    fi
+    install -d -m 0755 /target/etc/apt/sources.list.d /target/etc/apt/apt.conf.d \
+        /target/etc/systemd/system/apt-daily-upgrade.service.d \
+        /target/etc/systemd/system/apt-daily-upgrade.timer.d
+    install -m 0644 /cdrom/simple-cdd/debian.sources /target/etc/apt/sources.list.d/debian.sources
+    install -m 0644 /cdrom/simple-cdd/apt-unattended-upgrades.conf \
+        /target/etc/apt/apt.conf.d/52dns-appliance-unattended-upgrades
+    install -m 0644 /cdrom/simple-cdd/apt-daily-upgrade-refresh.conf \
+        /target/etc/systemd/system/apt-daily-upgrade.service.d/60-dns-appliance.conf
+    sed "s#@@INSTALL_TIME@@#$install_time#g" /cdrom/simple-cdd/apt-daily-upgrade.timer.conf \
+        > /target/etc/systemd/system/apt-daily-upgrade.timer.d/60-dns-appliance.conf
+    chmod 0644 /target/etc/systemd/system/apt-daily-upgrade.timer.d/60-dns-appliance.conf
+    sed "s#@@REBOOT_TIME@@#$reboot_time#g" /cdrom/simple-cdd/dns-appliance-reboot.timer \
+        > /target/etc/systemd/system/dns-appliance-reboot.timer
+    chmod 0644 /target/etc/systemd/system/dns-appliance-reboot.timer
+    install -m 0644 /cdrom/simple-cdd/dns-appliance-reboot.service \
+        /target/etc/systemd/system/dns-appliance-reboot.service
+    install -m 0750 /cdrom/simple-cdd/dns-appliance-reboot /target/usr/local/sbin/dns-appliance-reboot
+    # Debian's unattended-upgrades does not write /run/reboot-required; a
+    # kernel package runs this hook from its postinst. The kernel installed
+    # by the installer ran its postinst before this step, and /run is
+    # recreated at every boot, so the first boot carries no marker.
+    install -d -m 0755 /target/etc/kernel/postinst.d
+    install -m 0755 /cdrom/simple-cdd/dns-appliance-reboot-required \
+        /target/etc/kernel/postinst.d/zz-dns-appliance-reboot-required
+    in-target systemctl enable dns-appliance-reboot.timer
+}
+
+install_unattended_upgrades "$ROLE"

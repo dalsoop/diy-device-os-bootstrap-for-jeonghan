@@ -119,6 +119,62 @@ and compares all of them before live target inspection or any write.
 
 **Response:** treat enrollment as failed unless the expected hostname and `tag:dns-appliance` are present, `accept-dns=false`, no routes or exit node are advertised, and Tailscale SSH/Serve/Funnel are absent. A key revocation failure remains relevant until the one-hour key expires.
 
+## NetBird connectivity can still violate appliance policy
+
+**Symptom:** a node shows as connected in NetBird but its resolver, routes, or SSH behavior changes, or it becomes a routing peer.
+
+**Cause:** NetBird client settings and account-level network routes, network routers, and exit nodes are separate from transport connectivity. A persisted client setting from an earlier `netbird up`, or a route that names the node's group, can enable DNS management, routes, or the NetBird SSH server.
+
+**Response:** treat enrollment as failed unless `netbird-enroll` verifies the hostname, an address in `10.78.0.0/16`, appliance-group membership, `disableDns`, `disableClientRoutes`, `disableServerRoutes`, and a false `serverSSHAllowed` in `netbird debug config`, no route or network router naming the peer or its groups, and `/etc/resolv.conf` naming only `127.0.0.1`. Pass every `netbird up` setting explicitly, because the client sends only flags that were given.
+
+## Tailscale drops carrier-grade NAT traffic from other interfaces
+
+**Symptom:** with both overlays installed, NetBird peers time out against a node, or traffic between NetBird addresses is lost, while Tailscale traffic works.
+
+**Cause:** Tailscale treats `100.64.0.0/10` as its own and drops packets from that range that arrive on any other interface. NetBird also allocates peer addresses from `100.64.0.0/10` by default, so the two overlays collide on a node that runs both.
+
+**Response:** set the NetBird account's network range to `10.78.0.0/16` (dashboard Settings > Networks) before the first peer enrolls. `netbird-enroll` rejects a peer address outside that range.
+
+## The NetBird client inserts rules into foreign input chains
+
+**Symptom:** after NetBird starts, the appliance input chain in `inet dns_appliance` begins with `iifname "wt0" counter accept`, and the rule comes back about half a second after it is deleted or the table is reloaded.
+
+**Cause:** the NetBird client (0.82.0) inserts an accept for its interface at position 1 of every input and forward filter chain of the `ip`, `ip6`, and `inet` families that it does not own, skipping only its own table, firewalld, and `ip`/`ip6` tables named `filter`, `nat`, `mangle`, `raw`, or `security`, and it watches the ruleset to re-insert the rule after any table or chain change. A separate table name does not keep that rule out of an input chain, so input-chain port limits alone do not hold on `wt0`. The client never touches prerouting chains.
+
+**Response:** the appliance limits overlay ports in the prerouting filter chain `overlay_prerouting` of its own table, which drops traffic for this host arriving on `wt0` or `tailscale0` outside established or related traffic, ICMP, DNS 53, and TCP 22, 9090, 9100, and 53443 before any input chain runs. Treat the `wt0` accept in the input chain as expected and do not fight it. `tests/firewall-namespace-simulation.sh` proves the limit holds with that rule inserted. On an enrolled node, `nft list table inet dns_appliance` must show `overlay_prerouting` with the selected interfaces; the NetBird access policy (built-in `Default` policy removed or disabled, reviewed policies in place) still decides which peers reach the allowed ports.
+
+## Restarting nftables can remove the overlay clients' rules
+
+**Symptom:** after `systemctl restart nftables` or a reload, Tailscale or NetBird traffic stops until the client daemon restarts, or `nft list ruleset` no longer shows the clients' tables.
+
+**Cause:** Debian's `nftables.service` stops with `nft flush ruleset`, and a firewall file that begins with `flush ruleset` removes every table on each load, including the tables the overlay clients created.
+
+**Response:** the appliance firewall file only recreates `inet dns_appliance` (create, delete, and recreate in one transaction) and never flushes the ruleset, and the `nftables.service` drop-in `60-dns-appliance.conf` stops by deleting only that table and reloads by re-applying the file. Never add `flush ruleset` to the appliance firewall or remove the drop-in.
+
+## A reinstalled node returns under a renamed peer
+
+**Symptom:** after a reinstall and re-enrollment, the node appears as `dns01-1` (or similar), and the status monitor, gateway, or overlay DNS no longer reach it as `dns01`; enrollment verification fails on the hostname.
+
+**Cause:** the reinstalled node has a new overlay identity while the stale peer with the same role name still exists in Tailscale or NetBird, so the control plane gives the new peer a different name.
+
+**Response:** remove the stale peer from each overlay by hand before re-enrolling the reinstalled node. The enrollment commands do not remove peers.
+
+## A guarded reboot can be skipped night after night
+
+**Symptom:** `/run/reboot-required` stays present for days, or the status monitor highlights a node with consecutive skipped reboots.
+
+**Cause:** at its reboot window, `dns-appliance-reboot` skips the reboot whenever a peer that has answered DNS at least once does not answer now. A peer that is down, readdressed, or permanently removed keeps blocking, because a seen peer stays seen. The skip exits zero, so the systemd unit does not fail.
+
+**Response:** read the skip reason with `journalctl -t dns-appliance-reboot`, and the `dns_appliance_reboot_*` metrics on port 9100 or the status monitor. Restore the failing peer first. Remove a peer from `/var/lib/dns-appliance/reboot-seen-peers` only when it is intentionally gone. Never reboot a node by hand while a peer is down.
+
+## A security kernel installs but the node never reboots
+
+**Symptom:** unattended-upgrades installed a new `linux-image` package, `uname -r` still shows the old kernel, `journalctl -t dns-appliance-reboot` reports "no reboot required" every night, and `dns_appliance_reboot_pending` stays 0.
+
+**Cause:** on Debian nothing writes `/run/reboot-required` by default. unattended-upgrades only reads it, and the kernel packages write no marker themselves; Debian's `reboot-notifier` package supplies the kernel hook that does. Without a hook the reboot guard has nothing to act on. Simulations that create the marker themselves cannot show this.
+
+**Response:** the appliance installs its own kernel hook `/etc/kernel/postinst.d/zz-dns-appliance-reboot-required`, which writes the marker and `/run/reboot-required.pkgs` whenever a kernel package is configured. `reboot-notifier` is not used: it depends on a mail client and a mail transport agent (`bsd-mailx | mailx`, `default-mta | mail-transport-agent`), which installs an Exim daemon on a DNS appliance only to obtain a few-line hook and an unused mail job. `tests/image-builder-simulation.sh` runs the installed hook through `run-parts` the way a kernel postinst does, in a private mount namespace with a fresh `/run`, and then lets the installed `dns-appliance-reboot` reboot. On a node, check that the hook exists and is executable, and after a kernel update that `/run/reboot-required.pkgs` names the package.
+
 ## A collected backup is not a recovery proof
 
 **Symptom:** encrypted backup files exist, but recovery readiness is unknown.
@@ -129,11 +185,11 @@ and compares all of them before live target inspection or any write.
 
 ## Network reachability depends on the router prefix
 
-**Symptom:** the management host can reach `10.0.0.1` but not `10.0.5.1` through `10.0.5.3`.
+**Symptom:** the management host can reach `10.77.0.1` but not `10.77.5.1` through `10.77.5.3`.
 
-**Cause:** the router may still treat the LAN as `10.0.0.0/24`; sharing the first octet does not make `10.0.5.0/24` directly reachable.
+**Cause:** the router may still treat the LAN as `10.77.0.0/24`; sharing the first octet does not make `10.77.5.0/24` directly reachable.
 
-**Response:** preserve a wired recovery client and old router values, then configure a `10.0.0.0/16` LAN or an explicit route. Prove node reachability before changing DHCP DNS advertisement.
+**Response:** preserve a wired recovery client and old router values, then configure a `10.77.0.0/16` LAN or an explicit route. Prove node reachability before changing DHCP DNS advertisement.
 
 ## Simple-CDD requests a removed trixie i386 installer
 

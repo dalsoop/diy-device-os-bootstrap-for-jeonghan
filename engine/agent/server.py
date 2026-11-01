@@ -233,56 +233,159 @@ class Gateway:
             arguments.insert(2, "--offline")
         return self._run("network.preflight", arguments, timeout=30)
 
-    def tunnel_status(self) -> dict[str, object]:
-        configured_command = os.environ.get("DEVICE_OS_AGENT_TAILSCALE_COMMAND")
-        tailscale_environment: dict[str, str] | None = None
+    def _overlay_command(
+        self, label: str, variable: str, executable: str
+    ) -> str | None:
+        """Return the administrator-fixed or PATH executable, or None if absent."""
+        configured_command = os.environ.get(variable)
         if configured_command:
             command_path = Path(configured_command)
             if not command_path.is_absolute() or not os.access(command_path, os.X_OK):
                 raise ToolError(
-                    "tunnel.status: configured Tailscale command is unavailable"
+                    f"tunnel.status: configured {label} command is unavailable"
                 )
-            tailscale = str(command_path)
-            tailscale_environment = {"SHLVL": os.environ.get("SHLVL", "1")}
-        else:
-            tailscale = shutil.which("tailscale", path=self._environment()["PATH"])
-        if not tailscale:
-            raise ToolError("tunnel.status: tailscale CLI is unavailable")
+            return str(command_path)
+        return shutil.which(executable, path=self._environment()["PATH"])
+
+    def _overlay_json(
+        self,
+        label: str,
+        command: str,
+        extra_environment: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         result = self._run(
-            "tunnel.status",
-            [tailscale, "status", "--json"],
+            f"tunnel.status.{label.lower()}",
+            [command, "status", "--json"],
             timeout=20,
-            extra_environment=tailscale_environment,
+            extra_environment=extra_environment,
         )
         raw = result["data"]
         if not isinstance(raw, dict):
+            raise ToolError(f"tunnel.status: {label} returned invalid JSON")
+        return raw
+
+    def _tailscale_overlay(self, command: str | None) -> dict[str, object]:
+        if command is None:
+            return {
+                "available": False,
+                "backend_state": None,
+                "management_host": None,
+                "dns_nodes": {},
+            }
+        environment: dict[str, str] | None = None
+        if os.environ.get("DEVICE_OS_AGENT_TAILSCALE_COMMAND"):
+            environment = {"SHLVL": os.environ.get("SHLVL", "1")}
+        raw = self._overlay_json("Tailscale", command, environment)
+        peers = raw.get("Peer")
+        if peers is None:
+            peers = {}
+        if not isinstance(peers, dict):
             raise ToolError("tunnel.status: Tailscale returned invalid JSON")
-        peers = raw.get("Peer", {})
         visible: dict[str, object] = {}
-        if isinstance(peers, dict):
-            for peer in peers.values():
-                if not isinstance(peer, dict):
-                    continue
-                hostname = peer.get("HostName")
-                if hostname not in ROLES:
-                    continue
-                visible[str(hostname)] = {
-                    "online": bool(peer.get("Online")),
-                    "tailscale_ips": peer.get("TailscaleIPs", []),
-                }
+        for peer in peers.values():
+            if not isinstance(peer, dict):
+                continue
+            hostname = peer.get("HostName")
+            if hostname not in ROLES:
+                continue
+            addresses = peer.get("TailscaleIPs") or []
+            visible[str(hostname)] = {
+                "online": bool(peer.get("Online")),
+                "addresses": [
+                    address for address in addresses if isinstance(address, str)
+                ]
+                if isinstance(addresses, list)
+                else [],
+            }
+        local = raw.get("Self")
         return {
-            "schema_version": 1,
+            "available": True,
+            "backend_state": raw.get("BackendState"),
+            "management_host": {"hostname": local.get("HostName")}
+            if isinstance(local, dict)
+            else None,
+            "dns_nodes": visible,
+        }
+
+    @staticmethod
+    def _netbird_label(fqdn: object) -> str | None:
+        if not isinstance(fqdn, str) or not fqdn:
+            return None
+        return fqdn.rstrip(".").split(".", 1)[0] or None
+
+    @staticmethod
+    def _netbird_address(value: object) -> str | None:
+        if not isinstance(value, str) or not value:
+            return None
+        return value.split("/", 1)[0]
+
+    def _netbird_overlay(self, command: str | None) -> dict[str, object]:
+        if command is None:
+            return {
+                "available": False,
+                "management_connected": None,
+                "management_host": None,
+                "dns_nodes": {},
+            }
+        raw = self._overlay_json("NetBird", command)
+        peers = raw.get("peers")
+        if not isinstance(peers, dict):
+            raise ToolError("tunnel.status: NetBird returned invalid JSON")
+        details = peers.get("details")
+        if details is None:
+            details = []
+        if not isinstance(details, list):
+            raise ToolError("tunnel.status: NetBird returned invalid JSON")
+        visible: dict[str, object] = {}
+        for peer in details:
+            if not isinstance(peer, dict):
+                continue
+            label = self._netbird_label(peer.get("fqdn"))
+            if label not in ROLES:
+                continue
+            addresses = [
+                address
+                for address in (
+                    self._netbird_address(peer.get("netbirdIp")),
+                    self._netbird_address(peer.get("netbirdIpv6")),
+                )
+                if address
+            ]
+            visible[str(label)] = {
+                "online": peer.get("status") == "Connected",
+                "addresses": addresses,
+            }
+        management = raw.get("management")
+        hostname = self._netbird_label(raw.get("fqdn"))
+        return {
+            "available": True,
+            "management_connected": management.get("connected") is True
+            if isinstance(management, dict)
+            else None,
+            "management_host": {"hostname": hostname} if hostname else None,
+            "dns_nodes": visible,
+        }
+
+    def tunnel_status(self) -> dict[str, object]:
+        tailscale = self._overlay_command(
+            "Tailscale", "DEVICE_OS_AGENT_TAILSCALE_COMMAND", "tailscale"
+        )
+        netbird = self._overlay_command(
+            "NetBird", "DEVICE_OS_AGENT_NETBIRD_COMMAND", "netbird"
+        )
+        if tailscale is None and netbird is None:
+            raise ToolError(
+                "tunnel.status: neither the Tailscale nor the NetBird CLI is available"
+            )
+        overlays = {
+            "tailscale": self._tailscale_overlay(tailscale),
+            "netbird": self._netbird_overlay(netbird),
+        }
+        return {
+            "schema_version": 2,
             "operation": "tunnel.status",
             "ok": True,
-            "data": {
-                "backend_state": raw.get("BackendState"),
-                "management_host": {
-                    "hostname": (raw.get("Self") or {}).get("HostName")
-                    if isinstance(raw.get("Self"), dict)
-                    else None,
-                },
-                "dns_nodes": visible,
-            },
+            "data": {"overlays": overlays},
             "diagnostics": None,
         }
 
@@ -475,7 +578,7 @@ def world_capacity(
 
 @mcp.tool(annotations=READ_ONLY_NETWORK, structured_output=True)
 def network_preflight(
-    router_cidr: str = "10.0.0.1/16", check_internet: bool = True
+    router_cidr: str = "10.77.0.1/16", check_internet: bool = True
 ) -> dict[str, object]:
     """Check topology, LAN reachability, and fixed Internet connectivity probes."""
     return gateway.network_preflight(router_cidr, check_internet)
@@ -483,7 +586,7 @@ def network_preflight(
 
 @mcp.tool(annotations=READ_ONLY_NETWORK, structured_output=True)
 def tunnel_status() -> dict[str, object]:
-    """Return only the management host and dns01-dns03 Tailscale state."""
+    """Return the management host and dns01-dns03 state on each overlay (Tailscale, NetBird)."""
     return gateway.tunnel_status()
 
 

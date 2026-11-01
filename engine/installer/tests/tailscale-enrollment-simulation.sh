@@ -37,7 +37,7 @@ cat > "$temporary/bin/ssh" <<'EOF'
 #!/bin/bash
 set -euo pipefail
 count=$(cat "$MOCK_SSH_COUNT")
-[[ "$*" == *'dns-operator@10.0.5.1'* ]]
+[[ "$*" == *'dns-operator@10.77.5.1'* ]]
 count=$((count + 1))
 printf '%s\n' "$count" > "$MOCK_SSH_COUNT"
 case "$count" in

@@ -72,7 +72,7 @@ grep -q '^After=.*apt-daily-upgrade.service' "$service" ||
 for listed in ../payload/debian.sources ../payload/apt-unattended-upgrades.conf \
     ../payload/apt-daily-upgrade-refresh.conf ../payload/apt-daily-upgrade.timer.conf \
     ../payload/dns-appliance-reboot ../payload/dns-appliance-reboot.service \
-    ../payload/dns-appliance-reboot.timer; do
+    ../payload/dns-appliance-reboot.timer ../payload/dns-appliance-reboot-required; do
     grep -qx "$listed" "$installer_dir/simple-cdd/profiles/default.extra" ||
         simulation_fail "default.extra does not list $listed"
 done
@@ -171,6 +171,11 @@ for case_line in 'dns01 02:00 03:00 dns02 10.77.5.2 dns03 10.77.5.3' \
     cmp -s "$service" "$target/etc/systemd/system/dns-appliance-reboot.service" ||
         simulation_fail "$role reboot service is not installed"
     [ -x "$target/usr/local/sbin/dns-appliance-reboot" ] || simulation_fail "$role reboot script is not installed"
+    cmp -s "$payload/dns-appliance-reboot-required" \
+        "$target/etc/kernel/postinst.d/zz-dns-appliance-reboot-required" ||
+        simulation_fail "$role kernel reboot-required hook is not installed"
+    [ -x "$target/etc/kernel/postinst.d/zz-dns-appliance-reboot-required" ] ||
+        simulation_fail "$role kernel reboot-required hook is not executable"
     if grep -q '^deb cdrom:' "$target/etc/apt/sources.list"; then
         simulation_fail "$role keeps the installation medium as an apt source"
     fi

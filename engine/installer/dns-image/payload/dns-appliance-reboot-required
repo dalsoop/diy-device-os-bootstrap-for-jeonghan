@@ -1,0 +1,62 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 dalsoop
+# SPDX-License-Identifier: GPL-3.0-only
+set -eu
+
+# Kernel postinst hook, installed as
+# /etc/kernel/postinst.d/zz-dns-appliance-reboot-required. A kernel package's
+# postinst runs it through run-parts with the arguments
+# <kernel-version> <image-path>. It writes the Debian reboot marker
+# /run/reboot-required that dns-appliance-reboot reads at the reboot window,
+# and adds the package to /run/reboot-required.pkgs once.
+#
+# /run is a tmpfs created at every boot, so a marker never outlives the boot
+# it was written in. A marker that cannot be written is reported on stderr and
+# the hook still exits zero: a reboot notice must not fail the kernel
+# installation, and the next kernel update or a manual reboot brings the node
+# onto the new kernel.
+
+marker=/run/reboot-required
+packages=/run/reboot-required.pkgs
+
+warn() {
+    echo "dns-appliance-reboot-required: $*" >&2
+}
+
+# Replaces $1 atomically with standard input.
+publish() {
+    publish_temporary=$(mktemp "$1.XXXXXX" 2>/dev/null) || return 1
+    if cat > "$publish_temporary" && chmod 0644 "$publish_temporary" &&
+        mv -f "$publish_temporary" "$1"; then
+        return 0
+    fi
+    rm -f "$publish_temporary"
+    return 1
+}
+
+version=${1:-}
+case "$version" in
+    '' | *[!A-Za-z0-9.+~_-]*)
+        warn "invalid kernel version '$version'; no reboot marker written"
+        exit 0
+        ;;
+esac
+
+package=${DPKG_MAINTSCRIPT_PACKAGE:-}
+case "$package" in
+    '' | *[!a-z0-9.+-]*) package=linux-image-$version ;;
+esac
+
+if ! printf '*** System restart required ***\n' | publish "$marker"; then
+    warn "cannot write $marker; the reboot for kernel $version is not scheduled"
+    exit 0
+fi
+
+if [ -f "$packages" ] && grep -qxF -- "$package" "$packages"; then
+    exit 0
+fi
+if ! { if [ -f "$packages" ]; then cat "$packages"; fi; printf '%s\n' "$package"; } |
+    publish "$packages"; then
+    warn "cannot write $packages"
+fi
+exit 0

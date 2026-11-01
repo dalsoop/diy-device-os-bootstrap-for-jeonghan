@@ -388,6 +388,13 @@ install_unattended_upgrades() {
     install -m 0644 /cdrom/simple-cdd/dns-appliance-reboot.service \
         /target/etc/systemd/system/dns-appliance-reboot.service
     install -m 0750 /cdrom/simple-cdd/dns-appliance-reboot /target/usr/local/sbin/dns-appliance-reboot
+    # Debian's unattended-upgrades does not write /run/reboot-required; a
+    # kernel package runs this hook from its postinst. The kernel installed
+    # by the installer ran its postinst before this step, and /run is
+    # recreated at every boot, so the first boot carries no marker.
+    install -d -m 0755 /target/etc/kernel/postinst.d
+    install -m 0755 /cdrom/simple-cdd/dns-appliance-reboot-required \
+        /target/etc/kernel/postinst.d/zz-dns-appliance-reboot-required
     in-target systemctl enable dns-appliance-reboot.timer
 }
 

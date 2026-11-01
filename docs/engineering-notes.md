@@ -167,6 +167,14 @@ and compares all of them before live target inspection or any write.
 
 **Response:** read the skip reason with `journalctl -t dns-appliance-reboot`, and the `dns_appliance_reboot_*` metrics on port 9100 or the status monitor. Restore the failing peer first. Remove a peer from `/var/lib/dns-appliance/reboot-seen-peers` only when it is intentionally gone. Never reboot a node by hand while a peer is down.
 
+## A security kernel installs but the node never reboots
+
+**Symptom:** unattended-upgrades installed a new `linux-image` package, `uname -r` still shows the old kernel, `journalctl -t dns-appliance-reboot` reports "no reboot required" every night, and `dns_appliance_reboot_pending` stays 0.
+
+**Cause:** on Debian nothing writes `/run/reboot-required` by default. unattended-upgrades only reads it, and the kernel packages write no marker themselves; Debian's `reboot-notifier` package supplies the kernel hook that does. Without a hook the reboot guard has nothing to act on. Simulations that create the marker themselves cannot show this.
+
+**Response:** the appliance installs its own kernel hook `/etc/kernel/postinst.d/zz-dns-appliance-reboot-required`, which writes the marker and `/run/reboot-required.pkgs` whenever a kernel package is configured. `reboot-notifier` is not used: it depends on a mail client and a mail transport agent (`bsd-mailx | mailx`, `default-mta | mail-transport-agent`), which installs an Exim daemon on a DNS appliance only to obtain a few-line hook and an unused mail job. `tests/image-builder-simulation.sh` runs the installed hook through `run-parts` the way a kernel postinst does, in a private mount namespace with a fresh `/run`, and then lets the installed `dns-appliance-reboot` reboot. On a node, check that the hook exists and is executable, and after a kernel update that `/run/reboot-required.pkgs` names the package.
+
 ## A collected backup is not a recovery proof
 
 **Symptom:** encrypted backup files exist, but recovery readiness is unknown.

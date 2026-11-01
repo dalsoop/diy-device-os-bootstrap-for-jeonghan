@@ -17,10 +17,14 @@ real hardware.
   state-changing command (`systemctl`, `logger`); never reach a real overlay
   control plane, router, or Debian mirror. Prove that tokens and keys never
   reach arguments or output.
-- Kernel-level checks (`firewall-namespace-simulation.sh`) run only inside
-  throwaway network namespaces they create and delete; they never change the
-  host's ruleset or interfaces, and they fail instead of skipping when
+- Kernel-level checks (`firewall-namespace-simulation.sh`, and the kernel
+  hook check in `image-builder-simulation.sh`) run only inside throwaway
+  network or mount namespaces they create; they never change the host's
+  ruleset, interfaces, or `/run`, and they fail instead of skipping when
   privileges are missing.
+- A file the system writes (such as `/run/reboot-required`) is produced by
+  running the installed writer, not created by the test, wherever the outcome
+  depends on that writer existing.
 - Add every new simulation to the "Run Installer simulations" step in
   `.github/workflows/ci.yml` and to the lists in `repository-contract.sh`.
 - Passing simulation is not physical qualification. Test output must not claim

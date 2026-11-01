@@ -53,3 +53,4 @@ generated/dns-final-review-record.schema.json
 ../payload/dns-appliance-reboot
 ../payload/dns-appliance-reboot.service
 ../payload/dns-appliance-reboot.timer
+../payload/dns-appliance-reboot-required

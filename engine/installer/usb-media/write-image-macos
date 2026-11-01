@@ -9,6 +9,7 @@ distribution_policy=$script_dir/distribution-policy.json
 image=
 device=
 confirmation=
+mode='write'
 write_evidence=${DEVICE_OS_WRITE_EVIDENCE:-}
 
 usage() {
@@ -16,11 +17,26 @@ usage() {
 usage: sudo usb-media/write-image-macos \
   --image /absolute/path/device-os.raw \
   --device /dev/diskN \
-  --confirm 'ERASE /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
+  [--mode write|mapped|refresh] \
+  --confirm 'ERASE|REFRESH /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
 
 The raw MBR image must have exactly the same byte size as the removable target.
-The command keeps the partition map hidden while it writes and verifies the
-image body, commits and verifies the first MiB last, then unmounts and ejects.
+write (the default, confirmation word ERASE) keeps the partition map hidden
+while it writes and verifies the image body, commits and verifies the first MiB
+last, then unmounts and ejects.
+
+mapped (confirmation word ERASE) does the same for only the blocks listed in
+IMAGE.bmap.json (usb-media/make-bmap.py, run where the image was built): it
+first proves every unmapped block of the image is zero, then writes and
+verifies the mapped blocks, first MiB last. Unmapped blocks keep the target's
+old bytes, which the file systems treat as free space.
+
+refresh (confirmation word REFRESH) is for a USB this writer already made from
+the same composition: it proceeds only when the target's first MiB, partition
+map and Ventoy EFI partition equal the image's, then copies only the files that
+differ into the data partition, replaces the enrollment partition's installer
+metadata when that partition holds no enrollment or reinstall record yet, and
+passes only when both partitions' file trees hash equal to the image's.
 EOF
     exit 2
 }
@@ -28,6 +44,24 @@ EOF
 fail() {
     echo "write-image-macos: $*" >&2
     exit 1
+}
+
+# release_disk DEVICE unmounts and ejects the written target. Once the verified
+# partition map is exposed, macOS mounts the new volumes and Spotlight's mdsync
+# can briefly refuse the unmount; retry, then force it (the data is verified and
+# synced, so a forced unmount loses nothing).
+release_disk() {
+    local attempt
+    for attempt in 1 2 3 4 5; do
+        if diskutil unmountDisk "$1"; then
+            diskutil eject "$1"
+            return 0
+        fi
+        echo "write-image-macos: unmount attempt $attempt was refused; retrying" >&2
+        sleep 2
+    done
+    diskutil unmountDisk force "$1" || fail "could not unmount $1 after the verified write"
+    diskutil eject "$1"
 }
 
 emit_write_evidence() {
@@ -38,8 +72,16 @@ emit_write_evidence() {
     [[ "$write_evidence" = /* ]] || fail "DEVICE_OS_WRITE_EVIDENCE must be an absolute path"
     [ -d "$(dirname -- "$write_evidence")" ] || fail "write-evidence directory is missing"
     evidence_temporary=$write_evidence.tmp.$$
+    local evidence_writer=macos-mbr-last evidence_method=mbr-last-raw-compare
+    if [ "$mode" = refresh ]; then
+        evidence_writer=macos-file-refresh
+        evidence_method=file-tree-compare
+    elif [ "$mode" = mapped ]; then
+        evidence_method=mapped-mbr-last-compare
+    fi
     jq -n \
-        --arg writer macos-mbr-last \
+        --arg writer "$evidence_writer" \
+        --arg method "$evidence_method" \
         --arg device_path "$device" \
         --arg display_name "$media_name" \
         --argjson bytes "$device_bytes" \
@@ -53,7 +95,7 @@ emit_write_evidence() {
           target: {display_name: $display_name, bytes: $bytes},
           preflight_at: $preflight_at,
           completed_at: (if $completed_at == "" then null else $completed_at end),
-          readback: {method: "mbr-last-raw-compare", status: $readback_status}
+          readback: {method: $method, status: $readback_status}
         }' > "$evidence_temporary"
     chmod 0600 "$evidence_temporary"
     mv "$evidence_temporary" "$write_evidence"
@@ -64,12 +106,14 @@ while [ "$#" -gt 0 ]; do
         --image) image=${2:-}; shift 2 ;;
         --device) device=${2:-}; shift 2 ;;
         --confirm) confirmation=${2:-}; shift 2 ;;
+        --mode) mode=${2:-}; shift 2 ;;
         *) usage ;;
     esac
 done
 
 [ "$(uname -s)" = Darwin ] || fail "macOS is required"
 [ "$(id -u)" -eq 0 ] || fail "run with sudo"
+case "$mode" in write|mapped|refresh) ;; *) usage ;; esac
 command -v jq >/dev/null 2>&1 || fail "jq is required"
 command -v shasum >/dev/null 2>&1 || fail "shasum is required"
 command -v ioreg >/dev/null 2>&1 || fail "ioreg is required"
@@ -195,9 +239,43 @@ fi
 [ "$mbr_type" -ne 238 ] || fail "GPT images are not supported by the two-phase macOS writer"
 body_bytes=$((image_bytes - prefix_bytes))
 
-expected="ERASE $device $media_name $serial $device_bytes"
+confirmation_word=ERASE
+[ "$mode" != refresh ] || confirmation_word=REFRESH
+expected="$confirmation_word $device $media_name $serial $device_bytes"
 [ "$confirmation" = "$expected" ] ||
     fail "exact confirmation required: $expected"
+
+if [ "$mode" = refresh ]; then
+    # shellcheck source=/dev/null
+    . "$script_dir/refresh-image-macos.sh"
+    preflight_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    emit_write_evidence pending
+    refresh_from_image "$image" "$device"
+    emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "write-image-macos: file-tree refresh passed and $device was ejected"
+    exit 0
+fi
+
+if [ "$mode" = mapped ]; then
+    bmap=$image.bmap.json
+    [ -r "$bmap" ] || fail "block map is missing: $bmap (run usb-media/make-bmap.py where the image was built)"
+    command -v python3 >/dev/null 2>&1 || fail "python3 is required for a mapped write"
+    preflight_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    emit_write_evidence pending
+    echo "target: $device"
+    echo "media: $media_name"
+    echo "bytes: $device_bytes"
+    echo "warning: the partition map and every file system are replaced; old bytes stay in their free space"
+    echo "warning: use the full write mode to erase a stick that held enrollment or other private data"
+    diskutil unmountDisk "$device"
+    python3 "$script_dir/mapped-write.py" --image "$image" --bmap "$bmap" \
+        --image-sha256 "$image_sha256" \
+        --device "/dev/r${device#/dev/}" || fail "mapped write or readback failed"
+    release_disk "$device"
+    emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "write-image-macos: mapped write and readback passed and $device was ejected"
+    exit 0
+fi
 
 # SHA-256 of the 1 MiB prefix (prefix) or of everything after it (body), read
 # in 1 MiB blocks. A byte-wise cmp of the raw device made a 30 GB readback take
@@ -245,8 +323,7 @@ dd if="$image" of="$raw_device" bs=1m count=1 conv=notrunc
 sync
 [ "$(region_sha256 "$raw_device" prefix)" = "$image_prefix_sha256" ] ||
     fail "readback of the first $prefix_bytes bytes does not match"
-diskutil unmountDisk "$device"
-diskutil eject "$device"
+release_disk "$device"
 
 emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 

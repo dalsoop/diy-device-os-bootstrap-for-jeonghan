@@ -114,6 +114,11 @@ if [ "$#" -ge 3 ]; then
 fi
 read_args=$(cat)
 case "$read_args" in
+  *"if=/dev/rdisk9 bs=1m count=1"*)
+    if [ "${TEST_FAIL_PREFIX:-0}" = 1 ]; then
+      echo "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  -"
+      exit 0
+    fi ;;
   *"if=/dev/rdisk9 bs=1m skip=1"*)
     if [ "${TEST_FAIL_BODY_COMPARE:-0}" = 1 ]; then
       echo "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  -"
@@ -300,6 +305,52 @@ if PATH="$test_path" TEST_LOG="$log" TEST_MBR_TYPE=238 \
 fi
 if grep -qE '^(dd |diskutil unmountDisk |diskutil eject )' "$log"; then
     echo "macos-writer-simulation: GPT rejection reached a destructive command" >&2
+    exit 1
+fi
+
+# Refresh mode: its own confirmation word, and a refusal before any mount or
+# write when the target's boot region is not the image's.
+: > "$log"
+if PATH="$test_path" TEST_LOG="$log" USB_MEDIA_CATALOG="$catalog" \
+    DEVICE_OS_LICENSE_CHECKER="$checker" \
+    "$writer" --mode refresh --image "$image" --device /dev/disk9 \
+        --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then
+    echo "macos-writer-simulation: refresh accepted the ERASE confirmation" >&2
+    exit 1
+fi
+if grep -qE '^(dd |diskutil unmountDisk |diskutil mount|diskutil eject )' "$log"; then
+    echo "macos-writer-simulation: a refused refresh confirmation reached the target" >&2
+    exit 1
+fi
+: > "$log"
+rm -f "$temporary/refresh-evidence.json"
+if PATH="$test_path" TEST_LOG="$log" TEST_FAIL_PREFIX=1 USB_MEDIA_CATALOG="$catalog" \
+    DEVICE_OS_LICENSE_CHECKER="$checker" \
+    DEVICE_OS_WRITE_EVIDENCE="$temporary/refresh-evidence.json" \
+    "$writer" --mode refresh --image "$image" --device /dev/disk9 \
+        --confirm 'REFRESH /dev/disk9 Test USB TEST-SERIAL-9 2097152' \
+        >/dev/null 2> "$temporary/refresh.err"; then
+    echo "macos-writer-simulation: refresh accepted a target whose first MiB differs" >&2
+    exit 1
+fi
+grep -q 'refresh refused: the target.s first MiB' "$temporary/refresh.err" || {
+    echo "macos-writer-simulation: refresh did not name the differing boot region" >&2
+    exit 1
+}
+if grep -qE '^(dd if=[^ ]* of=|diskutil unmountDisk |diskutil mount|diskutil eject )' "$log"; then
+    echo "macos-writer-simulation: a refused refresh wrote, mounted or ejected the target" >&2
+    exit 1
+fi
+"$jq_bin" -e '.writer == "macos-file-refresh" and .readback == {method:"file-tree-compare",status:"pending"}' \
+    "$temporary/refresh-evidence.json" >/dev/null || {
+    echo "macos-writer-simulation: a refused refresh left other than pending refresh evidence" >&2
+    exit 1
+}
+if PATH="$test_path" TEST_LOG="$log" USB_MEDIA_CATALOG="$catalog" \
+    DEVICE_OS_LICENSE_CHECKER="$checker" \
+    "$writer" --mode clone --image "$image" --device /dev/disk9 \
+        --confirm 'ERASE /dev/disk9 Test USB TEST-SERIAL-9 2097152' >/dev/null 2>&1; then
+    echo "macos-writer-simulation: an unknown mode was accepted" >&2
     exit 1
 fi
 

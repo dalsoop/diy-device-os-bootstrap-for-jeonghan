@@ -59,13 +59,26 @@ api() {
     printf '%s' "$response"
 }
 
+create_token() {
+    curl --fail --silent --show-error --insecure \
+        -X POST --data-urlencode user=admin --data-urlencode pass="$(cat "$2")" \
+        --data-urlencode tokenName="cluster-bootstrap-$1" \
+        "https://${address[$1]}:53443/api/user/createToken" | jq -er '.token // empty' ||
+        curl --fail --silent --show-error --insecure \
+            -X POST --data-urlencode user=admin --data-urlencode pass="$(cat "$2")" \
+            "https://${address[$1]}:53443/api/user/login" | jq -er '.token // empty'
+}
+
+# A node that already joined the cluster takes the primary's admin account and
+# refuses new API tokens, so a rerun signs in to dns02/dns03 with dns01's
+# password and a session token once their own credentials fail.
 for role in dns01 dns02 dns03; do
-    password=$(cat "$credentials_dir/$role-admin-password")
-    response=$(curl --fail --silent --show-error --insecure \
-        -X POST --data-urlencode user=admin --data-urlencode pass="$password" \
-        --data-urlencode tokenName="cluster-bootstrap-$role" \
-        "https://${address[$role]}:53443/api/user/createToken")
-    token[$role]=$(jq -er '.token' <<<"$response")
+    if ! token[$role]=$(create_token "$role" "$credentials_dir/$role-admin-password") &&
+        { [ "$role" = dns01 ] ||
+            ! token[$role]=$(create_token "$role" "$credentials_dir/dns01-admin-password"); }; then
+        echo "cluster-bootstrap: cannot sign in to $role as admin" >&2
+        exit 1
+    fi
 done
 
 primary_state=$(api dns01 GET '/api/admin/cluster/state?includeServerIpAddresses=true')
@@ -96,8 +109,21 @@ if ! jq -e --arg zone home.arpa '.response.zones[]? | select(.name == $zone)' <<
         --data-urlencode 'zone=home.arpa' --data-urlencode 'type=Primary' \
         --data-urlencode "catalog=$catalog" >/dev/null
 fi
+# The cluster manages the SOA and apex NS records of a zone in its catalog and
+# refuses imported ones, so those keep Technitium's values and every other
+# record is imported.
+zone_import=$(mktemp)
+trap 'rm -f "$zone_import"' EXIT HUP INT TERM
+awk '
+    skip { if (index($0, ")")) skip = 0; next }
+    $0 ~ /[[:space:]]SOA[[:space:]]/ { if (index($0, "(") && !index($0, ")")) skip = 1; next }
+    $1 == "@" && $0 ~ /[[:space:]]NS[[:space:]]/ { next }
+    { print }
+' "$zone_file" > "$zone_import"
 api dns01 POST '/api/zones/import?zone=home.arpa&overwrite=true&overwriteZone=true' \
-    -F "file=@$zone_file;type=text/plain" >/dev/null
+    -F "file=@$zone_import;type=text/plain" >/dev/null
+rm -f "$zone_import"
+trap - EXIT HUP INT TERM
 
 create_user_if_missing() {
     user=$1
@@ -147,12 +173,16 @@ age -r "$recipient" -o "$output.partial" "$access_tmp"
 mv "$output.partial" "$output"
 trap - EXIT HUP INT TERM
 
+# Secondaries receive the zone through the cluster catalog shortly after import.
 for role in dns01 dns02 dns03; do
-    dig +time=2 +tries=1 +short "@${address[$role]}" canary.home.arpa A |
-        grep -qx '10.77.9.9' || {
+    for attempt in $(seq 1 30); do
+        dig +time=2 +tries=1 +short "@${address[$role]}" canary.home.arpa A | grep -qx '10.77.9.9' && break
+        [ "$attempt" -lt 30 ] || {
             echo "cluster-bootstrap: $role canary probe failed" >&2
             exit 1
         }
+        sleep 5
+    done
 done
 
 echo "cluster bootstrap complete; encrypted access bundle: $output"

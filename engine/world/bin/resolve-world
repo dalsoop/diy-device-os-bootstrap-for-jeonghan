@@ -180,8 +180,8 @@ begin
   networks.each_with_index do |network, index|
     network = mapping(network, "networks[#{index}]")
     if plan
-      network["cidr"] ||= plan["lan"]
-      network["gateway"] ||= plan["gateway"]
+      network["cidr"] = plan["lan"] unless network.key?("cidr")
+      network["gateway"] = plan["gateway"] unless network.key?("gateway")
       fail_contract("networks[#{index}] disagrees with networkPlan") unless network["cidr"] == plan["lan"] &&
                                                                          network["gateway"] == plan["gateway"]
     end
@@ -205,7 +205,7 @@ begin
     if plan
       planned = plan["nodes"][node["id"]]
       fail_contract("node is not in networkPlan.nodes: #{node['id']}") unless planned
-      node["ipv4"] ||= planned
+      node["ipv4"] = planned unless node.key?("ipv4")
       fail_contract("nodes[#{index}].ipv4 disagrees with networkPlan") unless node["ipv4"] == planned
     end
     address = parse_host_ip(node["ipv4"], "nodes[#{index}].ipv4")

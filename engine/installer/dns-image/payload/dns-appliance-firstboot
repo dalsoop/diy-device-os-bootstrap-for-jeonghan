@@ -142,6 +142,8 @@ recursion_acl() {
 
 write_technitium_env() {
     include_password=$1
+    # Computed outside the command substitution below so a failure stops here.
+    recursion_networks=$(recursion_acl "$overlay_selection" "$LAN_CIDR") || exit 1
     env_tmp=/etc/dns-appliance/technitium.env.tmp
     {
         printf 'DNS_SERVER_DOMAIN=%s.%s\n' "$ROLE" "$CLUSTER_DOMAIN"
@@ -157,7 +159,7 @@ write_technitium_env() {
         printf 'DNS_SERVER_WEB_SERVICE_USE_SELF_SIGNED_CERT=true\n'
         printf 'DNS_SERVER_WEB_SERVICE_HTTP_TO_TLS_REDIRECT=true\n'
         printf 'DNS_SERVER_RECURSION=UseSpecifiedNetworkACL\n'
-        printf 'DNS_SERVER_RECURSION_NETWORK_ACL=%s\n' "$(recursion_acl "$overlay_selection" "$LAN_CIDR")"
+        printf 'DNS_SERVER_RECURSION_NETWORK_ACL=%s\n' "$recursion_networks"
         printf 'DNS_SERVER_LOG_USING_LOCAL_TIME=false\n'
         printf 'DNS_SERVER_LOG_FOLDER_PATH=/var/log/technitium/dns\n'
         printf 'DNS_SERVER_LOG_MAX_LOG_FILE_DAYS=30\n'

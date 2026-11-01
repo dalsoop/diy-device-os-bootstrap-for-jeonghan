@@ -344,5 +344,5 @@ expected_grants() {
 ]')" ] || die "management-host NetBird policy example grants differ"
 pass policy_examples_match_the_tailscale_grants
 
-[ "$pass_count" -eq 18 ] || die "expected 18 passing groups, got $pass_count"
+[ "$pass_count" -eq 19 ] || die "expected 19 passing groups, got $pass_count"
 echo "RESULT $pass_count/18 NetBird enrollment simulations passed"

@@ -116,7 +116,9 @@ module NetworkPlan
   def validate(plan, overlays)
     lan_cidr, lan_prefix = network(plan, "lan")
     fail_plan("networkPlan.lan prefix must be between /8 and /30") unless lan_prefix.between?(8, 30)
-    fail_plan("networkPlan.lan must be a private (RFC 1918) range") unless PRIVATE.any? { |block| block.include?(lan_cidr) }
+    fail_plan("networkPlan.lan must be a private (RFC 1918) range") unless PRIVATE.any? do |block|
+      block.include?(lan_cidr) && block.prefix <= lan_prefix
+    end
     lan = bounds(lan_cidr, lan_prefix)
     reject_reserved("networkPlan.lan", lan)
 
@@ -130,7 +132,9 @@ module NetworkPlan
                                                                      management[0] >= lan[0] && management[1] <= lan[1]
 
     %w[domain clusterDomain].each do |key|
-      fail_plan("networkPlan.#{key} must be a lowercase DNS name") unless HOSTNAME.match?(text(plan, key))
+      value = text(plan, key)
+      # The installer's own check needs at least two characters.
+      fail_plan("networkPlan.#{key} must be a lowercase DNS name") unless value.length >= 2 && HOSTNAME.match?(value)
     end
 
     dhcp = nil
@@ -157,6 +161,11 @@ module NetworkPlan
     if overlays.include?("netbird")
       netbird_cidr, netbird_prefix = network(plan, "netbirdRange")
       fail_plan("networkPlan.netbirdRange prefix must be between /8 and /28") unless netbird_prefix.between?(8, 28)
+      # The firewall drops this range on every interface but wt0, so a public
+      # range would drop ordinary Internet replies.
+      fail_plan("networkPlan.netbirdRange must be a private (RFC 1918) range") unless PRIVATE.any? do |block|
+        block.include?(netbird_cidr) && block.prefix <= netbird_prefix
+      end
       netbird_range = bounds(netbird_cidr, netbird_prefix)
       fail_plan("networkPlan.netbirdRange overlaps the LAN") if overlaps?(netbird_range, lan)
       reject_reserved("networkPlan.netbirdRange", netbird_range)

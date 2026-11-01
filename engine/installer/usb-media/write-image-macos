@@ -46,6 +46,24 @@ fail() {
     exit 1
 }
 
+# release_disk DEVICE unmounts and ejects the written target. Once the verified
+# partition map is exposed, macOS mounts the new volumes and Spotlight's mdsync
+# can briefly refuse the unmount; retry, then force it (the data is verified and
+# synced, so a forced unmount loses nothing).
+release_disk() {
+    local attempt
+    for attempt in 1 2 3 4 5; do
+        if diskutil unmountDisk "$1"; then
+            diskutil eject "$1"
+            return 0
+        fi
+        echo "write-image-macos: unmount attempt $attempt was refused; retrying" >&2
+        sleep 2
+    done
+    diskutil unmountDisk force "$1" || fail "could not unmount $1 after the verified write"
+    diskutil eject "$1"
+}
+
 emit_write_evidence() {
     local readback_status=$1
     local completed_at=${2:-}
@@ -251,8 +269,7 @@ if [ "$mode" = mapped ]; then
     diskutil unmountDisk "$device"
     python3 "$script_dir/mapped-write.py" --image "$image" --bmap "$bmap" \
         --device "/dev/r${device#/dev/}" || fail "mapped write or readback failed"
-    diskutil unmountDisk "$device"
-    diskutil eject "$device"
+    release_disk "$device"
     emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     echo "write-image-macos: mapped write and readback passed and $device was ejected"
     exit 0
@@ -304,8 +321,7 @@ dd if="$image" of="$raw_device" bs=1m count=1 conv=notrunc
 sync
 [ "$(region_sha256 "$raw_device" prefix)" = "$image_prefix_sha256" ] ||
     fail "readback of the first $prefix_bytes bytes does not match"
-diskutil unmountDisk "$device"
-diskutil eject "$device"
+release_disk "$device"
 
 emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 

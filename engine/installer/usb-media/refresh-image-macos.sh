@@ -65,14 +65,25 @@ refresh_from_image() {
     work=$(mktemp -d /tmp/device-os-refresh.XXXXXX)
     image_disk=
     refresh_cleanup() {
+        local mounted still_mounted=0
         for mounted in "$work/image-data" "$work/image-enroll" "$work/usb-data" "$work/usb-enroll"; do
-            if [ -d "$mounted" ]; then
-                diskutil unmount force "$mounted" >/dev/null 2>&1 || true
+            [ -d "$mounted" ] || continue
+            diskutil unmount force "$mounted" >/dev/null 2>&1 || true
+            # Never delete through a mount point: a USB volume left mounted
+            # here would lose its files. rmdir removes only an empty directory.
+            if mount | grep -Fq " on $mounted "; then
+                still_mounted=1
+                echo "write-image-macos: $mounted is still mounted; leaving $work in place" >&2
+            else
+                rmdir "$mounted" 2>/dev/null || true
             fi
         done
         [ -z "$image_disk" ] || hdiutil detach -force "$image_disk" >/dev/null 2>&1 || true
         image_disk=
-        rm -rf "$work"
+        if [ "$still_mounted" -eq 0 ]; then
+            rm -f "$work"/*.sums "$work"/*.after
+            rmdir "$work" 2>/dev/null || true
+        fi
         cleanup
     }
     trap refresh_cleanup EXIT HUP INT TERM
@@ -135,6 +146,5 @@ refresh_from_image() {
     refresh_cleanup
     # Hand the writer's own cleanup back its traps.
     trap cleanup EXIT HUP INT TERM
-    diskutil unmountDisk "$device" >/dev/null
-    diskutil eject "$device" >/dev/null
+    release_disk "$device"
 }

@@ -148,7 +148,7 @@ if options[:writer] == "macos-file-refresh"
   fail_event("a file refresh must run the writer with exactly one --mode refresh") unless modes == ["refresh"]
 elsif command.include?("--mode") && options[:writer] == "macos-mbr-last"
   modes = command.each_index.filter_map { |index| command[index + 1] if command[index] == "--mode" }
-  fail_event("a full macOS write must not run the writer in another mode") unless modes == ["write"]
+  fail_event("a macOS image write runs the writer in write or mapped mode") unless [["write"], ["mapped"]].include?(modes)
 end
 fail_event("writer command is missing") if command.empty?
 device_arguments = command.each_index.filter_map do |index|

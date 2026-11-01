@@ -57,6 +57,8 @@ jobs:
           python3 -c 'compile(open("engine/installer/management/dns-appliance-status-monitor/server.py", encoding="utf-8").read(), "server.py", "exec")'
           python3 -c 'compile(open("engine/agent/server.py", encoding="utf-8").read(), "server.py", "exec")'
           python3 -c 'compile(open("engine/installer/dns-image/lib/installer_glyphs.py", encoding="utf-8").read(), "installer_glyphs.py", "exec")'
+          python3 -c 'compile(open("engine/installer/usb-media/make-bmap.py", encoding="utf-8").read(), "make-bmap.py", "exec")'
+          python3 -c 'compile(open("engine/installer/usb-media/mapped-write.py", encoding="utf-8").read(), "mapped-write.py", "exec")'
       - name: Check Ruby syntax
         run: |
           ruby -c engine/world/bin/resolve-world
@@ -374,6 +376,7 @@ jobs:
           tests/media-catalog-simulation.sh
           tests/image-builder-simulation.sh
           tests/macos-writer-simulation.sh
+          tests/mapped-write-simulation.sh
           tests/inventory-wizard-simulation.sh
           tests/documentation-check-simulation.sh
           tests/repository-contract.sh

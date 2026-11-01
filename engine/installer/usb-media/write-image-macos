@@ -17,13 +17,19 @@ usage() {
 usage: sudo usb-media/write-image-macos \
   --image /absolute/path/device-os.raw \
   --device /dev/diskN \
-  [--mode write|refresh] \
+  [--mode write|mapped|refresh] \
   --confirm 'ERASE|REFRESH /dev/diskN MEDIA_NAME USB_SERIAL EXACT_BYTES'
 
 The raw MBR image must have exactly the same byte size as the removable target.
 write (the default, confirmation word ERASE) keeps the partition map hidden
 while it writes and verifies the image body, commits and verifies the first MiB
 last, then unmounts and ejects.
+
+mapped (confirmation word ERASE) does the same for only the blocks listed in
+IMAGE.bmap.json (usb-media/make-bmap.py, run where the image was built): it
+first proves every unmapped block of the image is zero, then writes and
+verifies the mapped blocks, first MiB last. Unmapped blocks keep the target's
+old bytes, which the file systems treat as free space.
 
 refresh (confirmation word REFRESH) is for a USB this writer already made from
 the same composition: it proceeds only when the target's first MiB, partition
@@ -52,6 +58,8 @@ emit_write_evidence() {
     if [ "$mode" = refresh ]; then
         evidence_writer=macos-file-refresh
         evidence_method=file-tree-compare
+    elif [ "$mode" = mapped ]; then
+        evidence_method=mapped-mbr-last-compare
     fi
     jq -n \
         --arg writer "$evidence_writer" \
@@ -87,7 +95,7 @@ done
 
 [ "$(uname -s)" = Darwin ] || fail "macOS is required"
 [ "$(id -u)" -eq 0 ] || fail "run with sudo"
-case "$mode" in write|refresh) ;; *) usage ;; esac
+case "$mode" in write|mapped|refresh) ;; *) usage ;; esac
 command -v jq >/dev/null 2>&1 || fail "jq is required"
 command -v shasum >/dev/null 2>&1 || fail "shasum is required"
 command -v ioreg >/dev/null 2>&1 || fail "ioreg is required"
@@ -214,7 +222,7 @@ fi
 body_bytes=$((image_bytes - prefix_bytes))
 
 confirmation_word=ERASE
-[ "$mode" = write ] || confirmation_word=REFRESH
+[ "$mode" != refresh ] || confirmation_word=REFRESH
 expected="$confirmation_word $device $media_name $serial $device_bytes"
 [ "$confirmation" = "$expected" ] ||
     fail "exact confirmation required: $expected"
@@ -227,6 +235,26 @@ if [ "$mode" = refresh ]; then
     refresh_from_image "$image" "$device"
     emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     echo "write-image-macos: file-tree refresh passed and $device was ejected"
+    exit 0
+fi
+
+if [ "$mode" = mapped ]; then
+    bmap=$image.bmap.json
+    [ -r "$bmap" ] || fail "block map is missing: $bmap (run usb-media/make-bmap.py where the image was built)"
+    command -v python3 >/dev/null 2>&1 || fail "python3 is required for a mapped write"
+    preflight_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    emit_write_evidence pending
+    echo "target: $device"
+    echo "media: $media_name"
+    echo "bytes: $device_bytes"
+    echo "warning: all existing partitions and data will be erased"
+    diskutil unmountDisk "$device"
+    python3 "$script_dir/mapped-write.py" --image "$image" --bmap "$bmap" \
+        --device "/dev/r${device#/dev/}" || fail "mapped write or readback failed"
+    diskutil unmountDisk "$device"
+    diskutil eject "$device"
+    emit_write_evidence passed "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "write-image-macos: mapped write and readback passed and $device was ejected"
     exit 0
 fi
 

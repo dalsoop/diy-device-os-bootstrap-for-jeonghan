@@ -301,6 +301,15 @@ install -d -m 0755 /target/etc/systemd/system/nftables.service.d
 install -m 0644 /cdrom/simple-cdd/nftables-own-table.conf \
     /target/etc/systemd/system/nftables.service.d/60-dns-appliance.conf
 
+# Technitium runs under Podman's generated containers-default profile stacked
+# with crun's, a label the base abstraction's self-signal rule does not match;
+# without this rule the .NET runtime's signals to itself are denied and it
+# aborts. The base abstraction includes base.d, and Podman generates and loads
+# its profile at the first container start, after this file exists.
+install -d -m 0755 /target/etc/apparmor.d/abstractions/base.d
+install -m 0644 /cdrom/simple-cdd/dns-appliance-podman-signal \
+    /target/etc/apparmor.d/abstractions/base.d/dns-appliance-podman-signal
+
 install -m 0440 /cdrom/simple-cdd/operator-sudoers /target/etc/sudoers.d/operator
 in-target visudo -cf /etc/sudoers.d/operator
 install -d -m 0755 /target/etc/systemd/timesyncd.conf.d

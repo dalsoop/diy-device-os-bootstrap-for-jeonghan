@@ -15,5 +15,6 @@
 | [0011](0011-keep-destructive-actions-target-specific.md) | Keep destructive actions behind target-specific gates | Accepted |
 | [0012](0012-default-to-source-only-releases.md) | Default to source-only releases and require independent prebuilt gates | Accepted |
 | [0013](0013-select-overlays-per-world.md) | Select overlay networks per World and bundle only the selected clients | Accepted |
-| [0014](0014-unattended-upgrades-with-guarded-reboots.md) | Install Debian updates unattended and reboot one node at a time behind a seen-peer guard | Accepted |
+| [0014](0014-unattended-upgrades-with-guarded-reboots.md) | Install Debian updates unattended and reboot one node at a time behind a seen-peer guard | Accepted; Technitium update path superseded by 0016 |
 | [0015](0015-agent-run-dns-cutover-with-per-step-owner-approval.md) | Run the DNS cutover by agent with per-step owner approval, Tailscale first | Accepted |
+| [0016](0016-update-technitium-in-place-one-node-at-a-time.md) | Update Technitium in place from the locked archive, one node at a time | Accepted |

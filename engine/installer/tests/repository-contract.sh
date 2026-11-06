@@ -153,6 +153,7 @@ for file in \
     engine/installer/tests/macos-writer-simulation.sh \
     engine/installer/tests/management-simulation.sh \
     engine/installer/tests/firewall-namespace-simulation.sh \
+    engine/installer/tests/apparmor-signal-simulation.sh \
     engine/installer/tests/status-monitor-simulation.sh \
     engine/installer/tests/tailscale-enrollment-simulation.sh \
     engine/installer/tests/netbird-enrollment-simulation.sh \
@@ -190,6 +191,7 @@ for required in \
     burn-history/keys/README.md \
     engine/installer/dns-image/payload/nftables.conf \
     engine/installer/dns-image/payload/nftables-own-table.conf \
+    engine/installer/dns-image/payload/dns-appliance-podman-signal \
     engine/installer/management/tailscale-policy.example.hujson \
     engine/installer/management/netbird-policy.example.json \
     engine/installer/usb-media/composition.json \
@@ -254,6 +256,14 @@ grep -qx '../payload/dns-appliance-reboot-required' "$repo_root/dns-image/simple
 grep -q '/target/etc/kernel/postinst.d/zz-dns-appliance-reboot-required' \
     "$repo_root/dns-image/scripts/dns-finish-install"
 grep -q 'built ISO contains a stale kernel reboot-required hook' "$repo_root/dns-image/build-image"
+# The image carries the AppArmor rule that lets the stacked container profile
+# signal itself; tests/apparmor-signal-simulation.sh compiles it.
+grep -qx 'signal peer=@{profile_name}//&{crun,podman},' \
+    "$repo_root/dns-image/payload/dns-appliance-podman-signal"
+grep -qx '../payload/dns-appliance-podman-signal' "$repo_root/dns-image/simple-cdd/profiles/default.extra"
+grep -q '/target/etc/apparmor.d/abstractions/base.d/dns-appliance-podman-signal' \
+    "$repo_root/dns-image/scripts/dns-finish-install"
+grep -q 'built ISO contains a stale AppArmor signal rule' "$repo_root/dns-image/build-image"
 grep -q 'preauthorized:true' "$repo_root/management/tailscale-enroll"
 grep -q 'TAILSCALE_LICENSES_SHA256' "$repo_root/build/locks/sources.env"
 grep -q 'tailscale-dependency-licenses.md' "$repo_root/dns-image/build-image"
@@ -377,6 +387,7 @@ for contract in \
     tests/documentation-check-simulation.sh \
     tests/netbird-enrollment-simulation.sh \
     tests/firewall-namespace-simulation.sh \
+    tests/apparmor-signal-simulation.sh \
     tests/status-monitor-simulation.sh \
     tests/appliance-update-simulation.sh \
     engine/world/schemas/usb-event.schema.json \

@@ -39,13 +39,23 @@ first-boot enrollment.
   `iifname "wt0" accept` at the top of every foreign input and forward chain,
   so input-chain limits alone do not hold on `wt0`. Run
   `tests/firewall-namespace-simulation.sh` after any firewall change.
+- Technitium runs under Podman's generated `containers-default` AppArmor
+  profile stacked with crun's (`…//&crun`, because the container sets
+  `no-new-privileges`). Keep `payload/dns-appliance-podman-signal`, installed
+  as `/etc/apparmor.d/abstractions/base.d/dns-appliance-podman-signal`
+  (0644): it carries `signal peer=@{profile_name}//&{crun,podman},`, without
+  which the .NET runtime's signals to itself are denied and it aborts. Run
+  `tests/apparmor-signal-simulation.sh` after any change to it.
 - The recursion ACL and the health report follow `/etc/dns-appliance/overlays`:
   each selected overlay's range and status, and no other.
 - Installed nodes take Debian point-release and security updates unattended at
   fixed per-role times and reboot only through `dns-appliance-reboot`, which
   skips the window while any seen peer fails to answer DNS. Keep install one
   hour before reboot, no random delay, and no catch-up after downtime. Overlay
-  clients and Technitium are not updated this way.
+  clients and Technitium are not updated this way. Technitium on an installed
+  node changes only through the in-place update in `docs/operations.md`
+  (decision 0016), from the archive `fetch-locked-sources` verified for the
+  reviewed lock.
 - Nothing in Debian writes `/run/reboot-required` by default. The appliance's
   kernel hook `payload/dns-appliance-reboot-required`, installed as
   `/etc/kernel/postinst.d/zz-dns-appliance-reboot-required`, is the only

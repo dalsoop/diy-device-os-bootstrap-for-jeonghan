@@ -27,7 +27,9 @@ This directory contains the first implementation of the Debian OS installer:
 - `payload/` holds the Technitium container service, first-boot enrollment,
   health (with one status entry per selected overlay), backup, the firewall
   template and its `nftables.service` drop-in, NTP, SSH, Cockpit integration,
-  the NetBird unit, and the unattended-upgrade configuration: deb822 Debian
+  the NetBird unit, the AppArmor rule `dns-appliance-podman-signal` that lets
+  the Technitium container's stacked profile signal itself (installed into
+  `/etc/apparmor.d/abstractions/base.d/`), and the unattended-upgrade configuration: deb822 Debian
   sources, the per-role `apt-daily-upgrade` timer and refresh drop-ins, the
   `dns-appliance-reboot` script, service, and timer, and the kernel postinst
   hook `dns-appliance-reboot-required` that writes `/run/reboot-required`.

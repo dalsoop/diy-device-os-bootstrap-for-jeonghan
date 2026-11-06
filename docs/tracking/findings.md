@@ -35,13 +35,6 @@ inside the DHCP range, while that server uses a different static address. If
 the server ever falls back to DHCP, its DNS name would point at the wrong
 address. The reservation is to be removed as part of the router change.
 
-## Wireless clients leave the LAN when the router restarts
-
-When the router restarted on 2026-11-06, wireless workstations joined another
-saved Wi-Fi network nearby and stayed there, leaving the home LAN. Any router
-change that restarts it can strand wireless management clients. The home
-network is being moved to the top of their saved-network order.
-
 ## Installed appliances lack an installation provenance record
 
 The three appliances are installed and serve as one cluster on the

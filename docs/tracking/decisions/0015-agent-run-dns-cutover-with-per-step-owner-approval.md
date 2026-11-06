@@ -6,23 +6,23 @@
 ## Context
 
 The three DNS appliances are installed and run as one Technitium cluster on
-the `10.77.0.0/16` home LAN. The router LAN moved to `10.77.0.1/16` on
-2026-11-06. The management host is at another site and reaches the home only
+the `10.77.0.0/16` site LAN. The router LAN moved to `10.77.0.1/16` on
+2026-11-06. The management host is at another site and reaches the site only
 through an overlay network. The repository describes router mutation as a
 manual operator step, requires a wired recovery client during the cutover, and
 rolls back router DHCP DNS when any canary fails.
 
-The owner wants the whole home LAN on the cluster and wants to manage the
+The owner wants the whole site LAN on the cluster and wants to manage the
 appliances from the remote management host. The owner also wants to approve
-every change that affects the whole home or the owner's own devices, and does
-not want a household-wide outage to wait for a reply when no appliance answers.
+every change that affects the whole site or the owner's own devices, and does
+not want a site-wide outage to wait for a reply when no appliance answers.
 
 ## Decision
 
 - **Execution.** An agent performs checks, records, appliance settings, secret
   store maintenance, and management-host setup itself. Immediately before any
   change to the router, to tailnet-wide overlay settings (policy file, DNS
-  settings), or to a workstation's Wi-Fi order or network location, the agent
+  settings), or to a test workstation's network location, the agent
   shows the exact change to the owner and proceeds only on approval for that
   request. The approval request names everything it covers, such as a rollback
   during the same change.
@@ -69,12 +69,12 @@ not want a household-wide outage to wait for a reply when no appliance answers.
   favor of agent execution with per-step approval.
 - Rolling back on any canary failure was rejected because one or two failed
   appliances leave the cluster able to answer, and a rollback is itself a
-  household-wide change.
+  site-wide change.
 - Exposing the API on the overlay was rejected because it changes the appliance
   image and firewall and widens exposure; tunnels need neither.
 - Enrolling NetBird at the same time was deferred because its account, network
   range, and default-policy preconditions are not in place.
-- Keeping backups only on the management host or only on home storage was
+- Keeping backups only on the management host or only on site storage was
   rejected by the owner in favor of the principal secret store.
 - Renaming the appliances to the unpadded form was rejected because it requires
   rebuilding the cluster.
@@ -82,7 +82,7 @@ not want a household-wide outage to wait for a reply when no appliance answers.
 ## Consequences
 
 The cutover can proceed without a person at the router, but every
-household-wide change still waits for the owner. A total appliance outage is
+site-wide change still waits for the owner. A total appliance outage is
 undone automatically within roughly two check intervals plus the DHCP lease
 time, while partial outages and overlay or Internet failures only alert. The
 management host depends on the overlay and on SSH tunnels for every management

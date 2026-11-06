@@ -16,3 +16,4 @@
 | [0012](0012-default-to-source-only-releases.md) | Default to source-only releases and require independent prebuilt gates | Accepted |
 | [0013](0013-select-overlays-per-world.md) | Select overlay networks per World and bundle only the selected clients | Accepted |
 | [0014](0014-unattended-upgrades-with-guarded-reboots.md) | Install Debian updates unattended and reboot one node at a time behind a seen-peer guard | Accepted |
+| [0015](0015-agent-run-dns-cutover-with-per-step-owner-approval.md) | Run the DNS cutover by agent with per-step owner approval, Tailscale first | Accepted |

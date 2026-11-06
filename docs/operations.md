@@ -39,7 +39,7 @@ Install the CI tools on Ubuntu, create an isolated Python environment, and run t
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y jq python3-jsonschema ruby shellcheck python3-venv
+sudo apt-get install -y apparmor jq python3-jsonschema ruby shellcheck python3-venv
 python3 -m venv /tmp/device-os-agent-check
 /tmp/device-os-agent-check/bin/python -m pip install --requirement engine/agent/requirements.lock
 
@@ -57,6 +57,7 @@ engine/world/tests/world-contract-simulation.rb
 engine/world/tests/usb-event-simulation.rb
 (cd engine/installer && tests/install-gate-simulation.sh)
 (cd engine/installer && tests/management-simulation.sh)
+(cd engine/installer && tests/apparmor-signal-simulation.sh)
 (cd engine/installer && tests/tailscale-enrollment-simulation.sh)
 (cd engine/installer && tests/netbird-enrollment-simulation.sh)
 (cd engine/installer && tests/status-monitor-simulation.sh)
@@ -352,7 +353,73 @@ journalctl -t dns-appliance-reboot
 curl -s http://dns01:9100/metrics | grep dns_appliance_reboot_
 ```
 
-A node with consecutive skips is highlighted by the status monitor. Restore the failing peer before anything else; see "A guarded reboot can be skipped night after night" in `docs/engineering-notes.md`. Tailscale, NetBird, and Technitium are not updated this way; they change only through a reviewed lock update, a new image, and a reinstall.
+A node with consecutive skips is highlighted by the status monitor. Restore the failing peer before anything else; see "A guarded reboot can be skipped night after night" in `docs/engineering-notes.md`. Tailscale, NetBird, and Technitium are not updated this way. Tailscale and NetBird change only through a reviewed lock update, a new image, and a reinstall; Technitium changes through a reviewed lock update and the in-place update below (decision 0016).
+
+## Update Technitium in place
+
+A reviewed lock update on `main` names the new Technitium version and digests. A new image carries it for every later installation; installed nodes take it one at a time with this procedure. Make no DNS or cluster configuration change while it runs.
+
+On the build host, from a clean checkout of the merged commit, verify the lock and fetch the archive; `fetch-locked-sources` checks the registry and archive digests against the lock and prints the archive's SHA-256:
+
+```sh
+engine/installer/build/verify-locks
+engine/installer/dns-image/fetch-locked-sources
+grep '^TECHNITIUM_' engine/installer/build/locks/sources.env
+```
+
+Before the first node, from the management host: all three nodes answer `dig @10.77.5.N canary.home.arpa A` and the same with `+tcp`, return the same `home.arpa` SOA serial, and the Primary's web console (Administration, Cluster) shows both Secondaries connected; a fresh encrypted settings backup of each node exists (the management host's daily backup job, run once more); and each node has `/etc/apparmor.d/abstractions/base.d/dns-appliance-podman-signal` and no `apparmor="DENIED"` signal entry in `journalctl -k` since its last container start.
+
+Update the Secondaries first (`dns03`, then `dns02`) and the Primary `dns01` last. Start the next node only after the previous one has passed every check and run 30 minutes without a restart. For each node, copy `technitium-dns-<version>-amd64.oci.tar` from the build host's cache to the node's `/var/tmp/`, then on the node as `dns-operator`, with `NEW` set to the new `TECHNITIUM_VERSION`:
+
+```sh
+NEW=<version>
+sha256sum /var/tmp/technitium-dns-$NEW-amd64.oci.tar          # the value fetch-locked-sources printed
+sudo podman load -i /var/tmp/technitium-dns-$NEW-amd64.oci.tar
+sudo podman image inspect --format '{{.Digest}}' docker.io/technitium/dns-server:$NEW
+                                                              # the lock's TECHNITIUM_AMD64_DIGEST
+sudo systemctl stop technitium-dns
+sudo cp -p /etc/dns-appliance/sources.env /etc/dns-appliance/sources.env.previous
+sudo tar -C /var/lib -cpf /var/lib/dns-appliance/technitium-previous.tar technitium
+sudo chmod 0600 /var/lib/dns-appliance/technitium-previous.tar
+sudo sed -i \
+  -e "s/^TECHNITIUM_VERSION=.*/TECHNITIUM_VERSION=$NEW/" \
+  -e "s/^TECHNITIUM_INDEX_DIGEST=.*/TECHNITIUM_INDEX_DIGEST=<lock value>/" \
+  -e "s/^TECHNITIUM_AMD64_DIGEST=.*/TECHNITIUM_AMD64_DIGEST=<lock value>/" \
+  /etc/dns-appliance/sources.env
+sudo systemctl start technitium-dns
+```
+
+Within three minutes, check on the node and from the management host:
+
+```sh
+systemctl is-active technitium-dns                                # active
+sudo podman inspect --format '{{.ImageName}}' technitium-dns      # docker.io/technitium/dns-server:<version>
+systemctl show -p NRestarts technitium-dns                        # unchanged afterwards
+sudo journalctl -u technitium-dns --since -10min | \
+  grep -e 'Unhandled exception' -e NullReferenceException -e 'status=134'   # nothing
+sudo journalctl -k --since -10min | grep 'apparmor="DENIED"'      # nothing
+dig @10.77.5.N canary.home.arpa A +short                          # 10.77.9.9, also with +tcp
+dig @10.77.5.N home.arpa SOA +short                               # the other nodes' serial
+```
+
+The Primary's web console must show the node connected with a configuration sync after the restart. When the node has passed and stayed up for 30 minutes, replace its first-boot archive and remove the copy:
+
+```sh
+sudo install -m 0644 /var/tmp/technitium-dns-$NEW-amd64.oci.tar /usr/lib/dns-appliance/technitium.oci.tar
+rm /var/tmp/technitium-dns-$NEW-amd64.oci.tar
+```
+
+Roll a node back when it does not become active, restarts, logs an exception or an AppArmor denial, answers the canary wrongly, or loses its cluster connection. The previous image stays in Podman's storage:
+
+```sh
+sudo systemctl stop technitium-dns
+sudo cp -p /etc/dns-appliance/sources.env.previous /etc/dns-appliance/sources.env
+sudo mv /var/lib/technitium /var/lib/technitium.failed
+sudo tar -C /var/lib -xpf /var/lib/dns-appliance/technitium-previous.tar
+sudo systemctl start technitium-dns
+```
+
+Run the same checks with the previous version, stop the rollout, and keep `/var/lib/technitium.failed` for diagnosis. After all three nodes have run the new version for a day, remove the rollback copies (`sources.env.previous`, `technitium-previous.tar`) and the previous image (`sudo podman image rm docker.io/technitium/dns-server:<previous version>`).
 
 ## Import enrollment and form the DNS cluster
 

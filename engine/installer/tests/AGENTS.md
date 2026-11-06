@@ -22,6 +22,9 @@ real hardware.
   network or mount namespaces they create; they never change the host's
   ruleset, interfaces, or `/run`, and they fail instead of skipping when
   privileges are missing.
+- AppArmor checks (`apparmor-signal-simulation.sh`) compile against a
+  temporary copy of the host policy with `apparmor_parser -Q -K`; they never
+  load, replace, or remove a kernel profile or write under `/etc/apparmor.d`.
 - A file the system writes (such as `/run/reboot-required`) is produced by
   running the installed writer, not created by the test, wherever the outcome
   depends on that writer existing.

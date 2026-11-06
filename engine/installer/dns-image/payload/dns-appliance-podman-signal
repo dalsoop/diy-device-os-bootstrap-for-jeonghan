@@ -1,0 +1,2 @@
+# Podman stacked label (...//&crun): a profile may signal itself (containers-libs PR #919, TetronIO/JIM PR #1975).
+signal peer=@{profile_name}//&{crun,podman},

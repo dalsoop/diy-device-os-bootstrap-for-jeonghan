@@ -151,6 +151,14 @@ and compares all of them before live target inspection or any write.
 
 **Response:** the appliance firewall file only recreates `inet dns_appliance` (create, delete, and recreate in one transaction) and never flushes the ruleset, and the `nftables.service` drop-in `60-dns-appliance.conf` stops by deleting only that table and reloads by re-applying the file. Never add `flush ruleset` to the appliance firewall or remove the drop-in.
 
+## Technitium aborts under Podman's stacked AppArmor label
+
+**Symptom:** `technitium-dns.service` restarts again and again (on 2026-11-06 about nine times per node on all three nodes); the kernel log shows `apparmor="DENIED"` signal entries for the label `containers-default-0.62.2//&crun`; inside the container, `sh -c 'sleep 30 & kill -TERM $!'` fails with "Permission denied".
+
+**Cause:** Debian 13's Podman 5.4.2 (containers-common 0.62.2) runs the container under the AppArmor profile it generates, `containers-default-0.62.2`, and because the container sets `no-new-privileges`, crun stacks its own profile on it. The base abstraction lets a profile signal only itself (`signal peer=@{profile_name},`), which does not match the stacked label, so the .NET runtime's signals to its own threads are denied and the runtime aborts. Upstream container-libs PR #919 adds the stacked peer to Podman's template; Debian's Podman does not carry it.
+
+**Response:** the image installs `/etc/apparmor.d/abstractions/base.d/dns-appliance-podman-signal` (0644) with `signal peer=@{profile_name}//&{crun,podman},`; Debian 13's base abstraction already ends with `include if exists <abstractions/base.d>`, and the directory does not exist before. Podman generates and loads its profile at the first container start and does not regenerate it while it is loaded, so on a fresh installation the rule applies from the first start, while a running node needs the rule file, then `systemctl stop technitium-dns`, `printf containers-default-0.62.2 | sudo tee /sys/kernel/security/apparmor/.remove`, and `systemctl start technitium-dns`. Check the rule with `apparmor_parser -Q -K` on a probe profile that includes `<tunables/global>` and `<abstractions/base>`, and in the running container with the `kill -TERM` test above. `tests/apparmor-signal-simulation.sh` compiles the rule against the host's policy.
+
 ## A reinstalled node returns under a renamed peer
 
 **Symptom:** after a reinstall and re-enrollment, the node appears as `dns01-1` (or similar), and the status monitor, gateway, or overlay DNS no longer reach it as `dns01`; enrollment verification fails on the hostname.

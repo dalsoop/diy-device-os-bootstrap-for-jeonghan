@@ -417,7 +417,8 @@ DNSCTL_TEST_EXPORT=$temporary/export-empty-reverse.zone \
 jq -e --arg plan "$reverse_sha" '.status == "ok" and .plan_sha256 == $plan' \
     "$temporary/reverse-apply.json" >/dev/null
 grep -q 'zone=77.10.in-addr.arpa&overwrite=true' "$temporary/import.log"
-[ "$(grep -c '[[:space:]]PTR[[:space:]]' "$temporary/import.payload")" -eq 8 ]
+[ "$(grep -c '[[:space:]]PTR[[:space:]]' "$temporary/import.payload")" -eq \
+    "$(grep -c '[[:space:]]PTR[[:space:]]' "$reverse_zone")" ]
 if grep -Eq '[[:space:]](SOA|NS)[[:space:]]' "$temporary/import.payload"; then
     echo "FAIL dnsctl apply imported the reverse zone's SOA or apex NS" >&2
     exit 1

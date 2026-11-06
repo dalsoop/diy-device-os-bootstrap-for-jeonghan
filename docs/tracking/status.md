@@ -26,8 +26,10 @@ The current release state is a source-validated prototype, not a publicly distri
 | Protected prebuilt publication boundary | Policy only | Required Environment name and two-gate rule are encoded in policy and contracts | Human owner must create and verify `prebuilt-distribution` with a human-only required reviewer; no publishing job exists |
 | Exact HP/NIC/internal-disk install gate with mapper ancestry resolution and swap, holder, and synchronization checks | Yes | Guided VM BIOS and UEFI install from the exact-size raw image (`63cd0f4`, Secure Boot off); isolated source simulation of the current gate | Guided VM BIOS and UEFI reinstall with the current gate, then disposable physical `dns01` rerun |
 | Retry-safe encrypted first-boot enrollment | Yes | Source contract | Power-loss and real exFAT fault injection |
-| Three-node Technitium cluster bootstrap | Yes | Live three-node cluster observed on 2026-11-06 (Technitium 15.6.1; `dns01` Primary, `dns02` and `dns03` Secondary and connected; same answers and SOA serial from all three) | Primary-loss drill; record which installation media and commit the nodes were installed from |
-| DNS health, saved immutable plan, and plan-bound apply | Yes | Live: on 2026-11-06 hash-bound plans were applied to `home.arpa` and the new `77.10.in-addr.arpa` from merged `main` through an SSH tunnel to the Primary with a short admin session; all three nodes then answered the zone files' records over UDP and TCP | Apply with the applier account once zone permissions can be granted (see findings); pull-request approval binding remains unbuilt |
+| Three-node Technitium cluster bootstrap | Yes | Live three-node cluster observed on 2026-11-06 (Technitium 15.6.1; `dns01` Primary, `dns02` and `dns03` Secondary and connected; same answers and SOA serial from all three) | In-place update of the three nodes to the locked 15.6.2 (decision 0016); Primary-loss drill; record which installation media and commit the nodes were installed from |
+| Technitium in-place update from the locked archive | Procedure only | Lock pins 15.6.2; `verify-locks` and `fetch-locked-sources` (registry and archive digests) pass for it in an amd64 Debian 13 container | First run on `dns03`, `dns02`, then `dns01` |
+| AppArmor rule for Podman's stacked container profile | Yes | Live: added by hand to all three nodes on 2026-11-06; in-container `kill -TERM` test succeeds after it. Source: AppArmor signal simulation (Debian 13 AppArmor 4.1.0 and the CI parser) and image-builder install check | One installation from an image that carries it, with no AppArmor signal denial at the first container start |
+| DNS health, saved immutable plan, and plan-bound apply | Yes | Live: on 2026-11-06 hash-bound plans were applied to `home.arpa` and the new `77.10.in-addr.arpa` from merged `main` through an SSH tunnel to the Primary with a short admin session; all three nodes then answered the zone files' records over UDP and TCP. `77.10.in-addr.arpa` was removed later that day after Technitium 15.6.1 stopped `dns01` at startup (see findings) and is not live | Re-create and apply `77.10.in-addr.arpa` after the 15.6.2 update; apply with the applier account once zone permissions can be granted (see findings); pull-request approval binding remains unbuilt |
 | Encrypted backup collection and explicit restore | Yes | On-device backups never succeeded (first-boot token, see findings). Live: the management host signs in, streams each node's settings backup into `age`, and stores the encrypted files in the principal secret store daily; first files uploaded on 2026-11-06 | Add trusted-CA or pinned-fingerprint restore transport, then run isolated decrypt/import/canary drill; production restore is currently unqualified |
 | One-off tagged Tailscale enrollment | Yes | Live: all three nodes enrolled on 2026-11-06 with `tag:dns-appliance`, Serve and Funnel empty, tailnet policy entries and tests added, `home.arpa` split DNS to the three nodes | Reboot and key-expiry/revocation observation |
 | One-off NetBird enrollment with setup-key deletion | Yes | NetBird enrollment simulation, including secret non-disclosure and unconfirmed deletion | Network range `10.78.0.0/16` and `Default` policy removal before the first enrollment, then live three-node enrollment and reboot |
@@ -116,10 +118,33 @@ Observed live on 2026-11-06 from a wired host inside the LAN, before the managem
 ## Management connection, names, backups, and monitoring (2026-11-06)
 
 - The management host has its own operator SSH key on all three nodes and reaches them over Tailscale (`tag:dns-appliance`; NetBird remains unenrolled). Time synchronization is active on all three.
-- `home.arpa` carries the site's static hosts and `77.10.in-addr.arpa` their PTR records; both were applied with `dnsctl` and replicated to the Secondaries. The cluster writes the PTR records of its own node addresses itself; the repository mirrors them.
+- `home.arpa` carries the site's static hosts; it was applied with `dnsctl` and replicated to the Secondaries. `77.10.in-addr.arpa`, their PTR records, was applied the same way and later removed (see "Technitium 15.6.2 and the AppArmor signal rule" below). The cluster writes the PTR records of its own node addresses itself; the repository mirrors them.
 - Overlay devices resolve `home.arpa` through a split-DNS entry to the three nodes.
 - The management host takes a daily encrypted settings backup of each node into the principal secret store (newest seven per node) and checks the nodes every five minutes, alerting once per new problem and once on recovery. An emergency rollback of the router's DHCP DNS is implemented and stays disarmed until the cutover.
 - A one-workstation canary on the site Wi-Fi resolved through the nodes for about two hours without a failure; the owner accepted that duration.
 - Router DHCP still hands out the provider's resolvers.
 
 The remaining rollout follows decision 0015: the router DHCP DNS change with owner approval, then a recheck after one lease period.
+
+## Technitium 15.6.2 and the AppArmor signal rule (2026-11-06)
+
+Live state on 2026-11-06:
+
+- All three nodes run Technitium 15.6.1, and the `technitium-dns` service restarted about nine times on each that day: the .NET runtime aborted when AppArmor denied its signals to itself under Podman's stacked label `containers-default-0.62.2//&crun` (see "Technitium aborts under Podman's stacked AppArmor label" in `docs/engineering-notes.md`).
+- Upstream issue #2233 stopped `dns01` at startup (see findings). The reverse zone `77.10.in-addr.arpa` was removed to recover it and is not live.
+- At 21:54 KST the rule file `/etc/apparmor.d/abstractions/base.d/dns-appliance-podman-signal` (0644, root) was added by hand on all three nodes. Debian 13's base abstraction already includes `abstractions/base.d`, which did not exist before. Because Podman does not regenerate a loaded profile, each node's service was stopped, `containers-default-0.62.2` was removed through `/sys/kernel/security/apparmor/.remove`, and the service started again. `apparmor_parser -Q -K` compiled a probe profile with the rule, and inside the container `sh -c 'sleep 30 & kill -TERM $!'` failed with "Permission denied" before the change and succeeded after it.
+- Six unused bootstrap admin tokens remain on every node (see findings); they are to be deleted after the update.
+
+Source change (not yet live as a version):
+
+- The lock pins Technitium 15.6.2: index `sha256:eb48ac5c135f4ab936b536f74f853d53e15ab39ef37fdbc9598a089b90d9f245`, linux/amd64 manifest `sha256:1d5330f216d7e3bbe2192a73d114de61ca7c45800238e570cb22a6e86b7a892f`. The registry and the Docker Hub tag API returned the same index and per-platform digests, the manifests hash to their digests, the amd64 image's labels name version 15.6.2 and its creation on 2026-10-17, and the same method reproduces the 15.6.1 pin. Upstream tag `v15.6.2` and its changelog date the release 17 October 2026.
+- In an amd64 Debian 13 container, `verify-locks` passed and `fetch-locked-sources` for the real World verified the registry digest and the OCI archive digest and wrote archive SHA-256 `fccd690d73f3ba78397380c3f3ba21a5638a62eb2e28b068d1bcec268cc0e7d9`, then verified the cached copies again. That archive hash is evidence for this fetch, not a lock value.
+- The image installs the same AppArmor rule file; `tests/apparmor-signal-simulation.sh` compiles it into the profile Podman generates (Debian 13 AppArmor 4.1.0 and the CI parser), and the image-builder simulation checks the installed file.
+- Installed nodes take the new version through the in-place update of decision 0016.
+
+Remaining, in order:
+
+1. Merge, then the in-place update on `dns03`, `dns02`, and `dns01` (`docs/operations.md`, "Update Technitium in place").
+2. Re-create `77.10.in-addr.arpa` on the Primary and apply `burn-history/dns-reverse-records.zone`; query PTR records on all three nodes over UDP and TCP.
+3. Delete the six `cluster-bootstrap-dns01` admin tokens on the Primary and confirm they stay gone on all three nodes after a configuration sync.
+4. One installation from a rebuilt image to observe the AppArmor rule from the first container start.

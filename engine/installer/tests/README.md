@@ -56,7 +56,8 @@ each role's executable kernel reboot-required hook.
 conditional build records for Tailscale-only, NetBird-only, and dual
 selections, the per-selection appliance install step, World/image agreement in
 every direction, readiness blockers, and both Linux writers' manifest checks
-with no target command reached. It runs the kernel hook that the install step
+with no target command reached. Every selection's install carries the AppArmor
+signal rule (mode 0644) under `/etc/apparmor.d/abstractions/base.d/`. It runs the kernel hook that the install step
 put in the fake target's `/etc/kernel/postinst.d` through `run-parts` with a
 kernel version and image path, as a kernel package's postinst does, as root in
 a private mount namespace (`sudo -n unshare --mount`) over a fresh tmpfs
@@ -103,6 +104,20 @@ drop-in's stop (also with the table absent), and its reload leave stand-in
 `inet netbird` and `ip ts-filter` tables unchanged. It needs CAP_NET_ADMIN,
 re-runs itself through passwordless `sudo`, fails rather than skips when
 namespaces cannot be created, and changes nothing outside its namespaces.
+
+`apparmor-signal-simulation.sh` compiles the image's AppArmor rule
+`payload/dns-appliance-podman-signal` with the host's `apparmor_parser -Q -K`
+against a temporary copy of the host's `abi`, `tunables`, and `abstractions`.
+It checks that the payload is the one reviewed rule, that the host's base
+abstraction includes `abstractions/base.d` and lets a profile signal itself,
+and that `dns-finish-install` installs the rule at
+`/etc/apparmor.d/abstractions/base.d/dns-appliance-podman-signal`. The profile
+Podman generates from containers-common 0.62.2 and a probe profile that
+includes only the base abstraction compile without the rule and with it, carry
+the rule exactly once when it is installed, and fail to compile with a broken
+copy of it. It loads nothing into the kernel, so the kernel's decision on a
+real `…//&crun` label is not covered; it fails, never skips, without
+`apparmor_parser`.
 
 `media-catalog-simulation.sh` also checks capacity planning with
 checksum-matched sparse cache files, a runtime artifact with a matching

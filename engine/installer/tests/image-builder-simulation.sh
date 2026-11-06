@@ -1417,6 +1417,18 @@ for case_name in 'both|"tailscale0", "wt0"' 'netbird|"wt0"' 'tailscale|"tailscal
         simulation_fail "the ${case_name%%|*} install lacks the nftables.service drop-in"
 done
 
+# Every install carries the AppArmor rule that lets the stacked container
+# profile signal itself, in the directory the base abstraction includes.
+for case_name in both netbird tailscale; do
+    signal_rule=$finish/$case_name/target/etc/apparmor.d/abstractions/base.d/dns-appliance-podman-signal
+    cmp -s "$installer_dir/payload/dns-appliance-podman-signal" "$signal_rule" ||
+        simulation_fail "the $case_name install lacks the AppArmor signal rule"
+    [ "$(stat -c %a "$signal_rule")" = 644 ] ||
+        simulation_fail "the $case_name install's AppArmor signal rule is not mode 0644"
+    [ "$(stat -c %a "$(dirname "$signal_rule")")" = 755 ] ||
+        simulation_fail "the $case_name install's base.d directory is not mode 0755"
+done
+
 # A kernel package's postinst runs /etc/kernel/postinst.d through run-parts.
 # The installed hook is run exactly that way, as root in a private mount
 # namespace whose /run is a fresh tmpfs, so the marker it writes is the one
@@ -1574,7 +1586,7 @@ done
 for listed in generated/overlays generated/tailscale.tgz generated/tailscale-license.txt \
     generated/tailscale-dependency-licenses.md generated/netbird.tar.gz generated/netbird-license.txt \
     ../payload/netbird.service ../payload/nftables.conf ../payload/nftables-own-table.conf \
-    ../payload/dns-appliance-reboot-required; do
+    ../payload/dns-appliance-podman-signal ../payload/dns-appliance-reboot-required; do
     grep -qx "$listed" "$installer_dir/simple-cdd/profiles/default.extra" ||
         simulation_fail "default.extra does not list $listed"
 done

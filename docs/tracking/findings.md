@@ -1,5 +1,36 @@
 # Findings
 
+## Technitium 15.6.1 stops at startup after a web-console login
+
+Upstream issue #2233: Technitium 15.6.1 does not save the authentication
+configuration (`auth.config`) after a web-console login, and at the next start
+a zone without permission entries stops startup with a
+`NullReferenceException` in `InspectAndFixZonePermissions`. On 2026-11-06 this
+stopped `dns01`. The reverse zone `77.10.in-addr.arpa` was removed to bring the
+node back, so it is not live: `dig -x` for site addresses gets no answer from
+the cluster, although `burn-history/dns-reverse-records.zone` still describes
+it.
+
+Technitium 15.6.2 fixes the issue. The lock pins 15.6.2; the installed nodes
+still run 15.6.1. Closing this needs the in-place update of all three nodes
+(decision 0016), then the reverse zone created once on the Primary and applied
+from the reviewed zone file ("Create the reverse zone once" and "Plan and
+apply" in `docs/operations.md`), PTR queries over UDP and TCP on all three
+nodes, and a restart of one Secondary that comes back without the exception.
+
+## The image's AppArmor signal rule is not yet observed on a fresh installation
+
+The rule that lets Technitium's stacked container profile signal itself (see
+"Technitium aborts under Podman's stacked AppArmor label" in
+`docs/engineering-notes.md`) was added by hand to all three installed nodes on
+2026-11-06, with the loaded profile removed so that Podman reloaded it. The
+image now installs the same file, and `tests/apparmor-signal-simulation.sh`
+proves that it compiles into Podman's profile, but no node has been installed
+from an image that carries it. Closing this needs one installation (a
+disposable VM is enough) whose first container start shows no
+`apparmor="DENIED"` signal entry and passes the `kill -TERM` test inside the
+container.
+
 ## The first-boot static API token is not registered after clustering
 
 Each appliance's first boot writes a token to
@@ -30,8 +61,12 @@ On 2026-11-06 (Technitium 15.6.1):
 Until this is understood, nothing saves the authentication configuration
 (users, groups, permissions, tokens). Six unused admin API tokens from repeated
 bootstrap runs (`cluster-bootstrap-dns01`) remain on every node for that reason.
-Closing this needs a reproduction on a disposable cluster and an upstream fix or
-a supported procedure.
+Technitium 15.6.2 fixes several cluster configuration-sync problems and the
+unsaved authentication configuration of issue #2233 (see above). After all
+three nodes run 15.6.2, delete the six tokens on the Primary, then confirm on
+all three nodes that they are gone and stay gone after a later configuration
+sync. Closing this needs that result, or a reproduction on a disposable cluster
+and a supported procedure if the tokens return.
 
 ## Agent accounts have no zone-level permission
 
@@ -193,9 +228,9 @@ This does not limit personal use. It blocks a future redistribution review of an
 
 ## Overlay clients and Technitium are not updated automatically
 
-Unattended upgrades install only Debian packages. The Tailscale and NetBird clients and the Technitium container are pinned upstream artifacts installed from the image, so a security fix in any of them reaches an appliance only through a reviewed lock update, a rebuilt image, and a reinstall. No vendor apt repository is configured, by decision 0014.
+Unattended upgrades install only Debian packages. The Tailscale and NetBird clients and the Technitium container are pinned upstream artifacts installed from the image. A fix in an overlay client reaches an appliance only through a reviewed lock update, a rebuilt image, and a reinstall; a fix in Technitium reaches it through a reviewed lock update and the manual in-place update of decision 0016. No vendor apt repository is configured, by decision 0014.
 
-Until a reviewed update path exists, the operator must watch the upstream security announcements of these three components and schedule a lock update and one-at-a-time reinstall when a fix matters.
+The operator must watch the upstream security announcements of these three components and schedule a lock update, then the one-at-a-time in-place update or reinstall, when a fix matters.
 
 ## The reference collection's personal-use check lists every DNS component
 

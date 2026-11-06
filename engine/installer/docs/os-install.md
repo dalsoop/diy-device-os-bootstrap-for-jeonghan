@@ -94,7 +94,7 @@ The source lock currently selects Debian 13.7, the `20261031T143759Z` Debian
 snapshot (whose security archive carries `linux` 6.12.113-1, the fix for
 CVE-2026-98432; the installed kernel version is established only by a built
 image's package closure, and the Debian Installer's own kernel is not the
-installed one), Simple-CDD 0.6.9, and the Technitium 15.6.1 linux/amd64
+installed one), Simple-CDD 0.6.9, and the Technitium 15.6.2 linux/amd64
 manifest digest, plus Tailscale 1.104.1 and NetBird 0.82.0 for linux/amd64 by
 SHA-256. Only the overlay clients that the World's `overlays` select are
 fetched and embedded; the image carries the selection in its `overlays` file

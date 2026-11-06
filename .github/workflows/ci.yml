@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install -y iproute2 jq nftables python3-jsonschema ruby shellcheck
+        run: sudo apt-get update && sudo apt-get install -y apparmor iproute2 jq nftables python3-jsonschema ruby shellcheck
       - name: Check project license notices
         shell: bash
         run: |
@@ -143,7 +143,7 @@ jobs:
           ]
           components = [
               {"id": "debian-package-closure", "version": "13.7.0@20261031T143759Z", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
-              {"id": "technitium-oci", "version": "15.6.1", "digest": {"algorithm": "sha256", "value": digest}, "source_identity": {"kind": "oci-digest", "value": f"sha256:{digest}"}, "redistribution": {"status": "personal-use-only"}},
+              {"id": "technitium-oci", "version": "15.6.2", "digest": {"algorithm": "sha256", "value": digest}, "source_identity": {"kind": "oci-digest", "value": f"sha256:{digest}"}, "redistribution": {"status": "personal-use-only"}},
               {"id": "tailscale-archive", "version": "1.104.1", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
               {"id": "tailscale-dependency-report", "version": "1.104.1", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
               {"id": "netbird-archive", "version": "0.82.0", "digest": {"algorithm": "sha256", "value": digest}, "redistribution": {"status": "personal-use-only"}},
@@ -162,7 +162,7 @@ jobs:
           registry_fixture = {"schema_version": 1, "artifact_id": "dns-appliance", "components": components}
           review_fixture = {
               "schema_version": 1, "status": "redistribution-reviewed", "component_id": "technitium-oci",
-              "component_version": "15.6.1", "artifact_sha256": digest,
+              "component_version": "15.6.2", "artifact_sha256": digest,
               "source_identity": {"kind": "oci-digest", "value": f"sha256:{digest}"},
               "reviewed_at": "2026-10-17", "reviewer": "schema-fixture", "evidence": evidence,
               "obligations": obligations,
@@ -175,7 +175,7 @@ jobs:
               "overlays": ["tailscale", "netbird"],
               "components": [{"id": component["id"], "status": "personal-use-only"} for component in components],
               "sbom": "sbom.spdx.json", "sbom_sha256": digest, "debian_point_release": "13.7.0",
-              "debian_snapshot": "20261031T143759Z", "technitium_version": "15.6.1",
+              "debian_snapshot": "20261031T143759Z", "technitium_version": "15.6.2",
               "technitium_image_digest": f"sha256:{digest}", "technitium_archive_sha256": digest,
               "tailscale_version": "1.104.1", "tailscale_archive_sha256": digest,
               "netbird_version": "0.82.0", "netbird_archive_sha256": digest,
@@ -367,6 +367,7 @@ jobs:
           tests/install-gate-simulation.sh
           tests/management-simulation.sh
           tests/firewall-namespace-simulation.sh
+          tests/apparmor-signal-simulation.sh
           tests/tailscale-enrollment-simulation.sh
           tests/netbird-enrollment-simulation.sh
           tests/status-monitor-simulation.sh

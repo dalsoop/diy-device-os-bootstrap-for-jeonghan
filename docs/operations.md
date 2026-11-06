@@ -387,7 +387,7 @@ TAILSCALE_OAUTH_CLIENT_SECRET_FILE=/secure/tailscale/client-secret \
 
 Confirm each node's hostname, `tag:dns-appliance`, Tailscale address, peer reachability, `accept-dns=false`, and absence of routes, exit-node behavior, Tailscale SSH, Serve, and Funnel.
 
-For remote DNS, use the three enrolled nodes' Tailscale IPv4 addresses as tailnet nameservers, not their `10.77.5.x` LAN addresses. No subnet routing is required. First allow the intended client identities to reach `tag:dns-appliance` on both UDP and TCP 53 in the tailnet policy. The appliance recursion ACL includes `100.64.0.0/10`; nftables accepts DNS on `tailscale0` and rejects that source range on other network interfaces.
+For remote DNS, use the three enrolled nodes' Tailscale IPv4 addresses as tailnet nameservers, not their `10.77.5.x` LAN addresses. No subnet routing is required. First allow the intended client identities to reach `tag:dns-appliance` on both UDP and TCP 53 in the tailnet policy; `engine/installer/management/tailscale-policy.example.hujson` allows every tailnet member (`autogroup:member`), and its `tests` section, with the owner's login and another existing tag filled in, makes the tailnet reject a policy that takes ports 22, 9090, or 53 from the owner or gives them to that tag. The appliance recursion ACL includes `100.64.0.0/10`; nftables accepts DNS on `tailscale0` and rejects that source range on other network interfaces.
 
 Before changing tailnet DNS, run `dig @<node-tailscale-ip> home.arpa SOA` and `dig @<node-tailscale-ip> example.com A` from an approved remote client for each node, then repeat both with `+tcp`. Check that an unauthorized peer cannot query them. These live checks require installed, enrolled appliances and are separate from source simulations.
 
@@ -413,10 +413,41 @@ NETBIRD_API_TOKEN_FILE=/secure/netbird/api-token \
 
 ## DNS change and router cutover
 
+The cluster serves two reviewed zones: `burn-history/dns-records.zone` (`home.arpa`) and `burn-history/dns-reverse-records.zone` (`77.10.in-addr.arpa`, one PTR record per static name). They hold every record except the SOA and apex NS records, which the cluster manages for zones in its catalog; `dnsctl` imports and compares each zone without them. Plan and apply each zone on its own.
+
+### Reach the API
+
+The Technitium API listens only on each appliance's loopback and LAN addresses. On the LAN, `TECHNITIUM_URL=https://10.77.5.1:53443` reaches the cluster Primary `dns01`. A management host outside the LAN opens an SSH tunnel over the overlay to `dns01`'s `127.0.0.1:53443` and uses the tunnel's local end as `TECHNITIUM_URL`:
+
+```sh
+ssh -N -o ExitOnForwardFailure=yes \
+  -L 127.0.0.1:53443:127.0.0.1:53443 dns-operator@dns01
+```
+
+Keep that command running in its own terminal. A saved plan binds the exact `TECHNITIUM_URL`, so plan and apply through the same local URL; a plan made on the LAN URL cannot be applied through the tunnel, or the reverse. With `TECHNITIUM_CA_FILE`, curl checks the certificate's name against the URL's host: when the certificate does not name `127.0.0.1`, map a name it carries to `127.0.0.1` in the management host's hosts file and use that name in the URL, for example `https://dns01.dns-cluster.home.arpa:53443`.
+
+### Create the reverse zone once
+
+`dnsctl` imports into an existing zone only; while `77.10.in-addr.arpa` does not exist, plan fails with the export error Technitium returns. Create it once on `dns01`, the cluster Primary, as a Primary zone in the cluster catalog `cluster-catalog.<cluster domain>` (`cluster-catalog.dns-cluster.home.arpa` with the default cluster domain), so it replicates to `dns02` and `dns03` and the cluster manages its SOA and apex NS, as `cluster-bootstrap` does for `home.arpa`. Use an administrator token of `dns01` from a protected header file whose one line is `Authorization: Bearer <token>` (mode 0600, outside the checkout), so the token never appears in a command argument:
+
+```sh
+curl --fail --silent --show-error \
+  --cacert /secure/dns/technitium-ca.pem \
+  --header @/secure/dns/admin-authorization-header \
+  -X POST "$TECHNITIUM_URL/api/zones/create" \
+  --data-urlencode zone=77.10.in-addr.arpa \
+  --data-urlencode type=Primary \
+  --data-urlencode catalog=cluster-catalog.dns-cluster.home.arpa
+```
+
+The response must be JSON with `"status":"ok"`; Technitium also reports errors with HTTP success and `"status":"error"`. Then run `dnsctl plan burn-history/dns-reverse-records.zone` with the planner token: it must print a plan for `77.10.in-addr.arpa` whose diff adds every PTR record. If the export is refused for access, give `agent-dns-reader` and `agent-dns-planner` view and `agent-dns-applier` view and modify permission on the new zone, matching `home.arpa`, in the web console's zone permissions on `dns01`, and plan again.
+
+### Plan and apply
+
 Check health, create a plan, compare it with the reviewed zone change, then apply from the exact approved clean commit using the command's literal confirmation:
 
 ```sh
-export TECHNITIUM_URL=https://10.77.5.1:53443
+export TECHNITIUM_URL=https://10.77.5.1:53443   # or the tunnel's local URL
 export TECHNITIUM_TOKEN_FILE=/secure/dns/reader-token
 export TECHNITIUM_CA_FILE=/secure/dns/technitium-ca.pem
 engine/installer/management/dnsctl health
@@ -432,7 +463,7 @@ engine/installer/management/dnsctl apply \
   --confirm APPLY
 ```
 
-Save the plan from a clean checkout of the reviewed commit and review it; `plan --out` prints its `plan_sha256` on stderr. Apply rejects a different hash, endpoint, `HEAD`, or zone file, a live zone that changed since the plan, and a plan already applied; in each case make and review a new plan. Verify pull-request approval before apply; the command does not prove it. Change one logical zone operation at a time and query the canary over UDP and TCP before continuing.
+Use `burn-history/dns-reverse-records.zone` in place of `burn-history/dns-records.zone` for the reverse zone. Save the plan from a clean checkout of the reviewed commit and review it; `plan --out` prints its `plan_sha256` on stderr. The diff lists records as `<owner> <ttl> IN <TYPE> <data>` with absolute names and leaves out the SOA and apex NS, so a changed SOA serial in the file alone is not a change. Apply rejects a different hash, endpoint, `HEAD`, or zone file, a live zone whose export changed in any byte since the plan (a new live SOA serial included), and a plan already applied; in each case make and review a new plan. Verify pull-request approval before apply; the command does not prove it. Change one logical zone operation at a time and query the canary over UDP and TCP before continuing; after a reverse-zone apply, also query one PTR record, for example `dig @10.77.5.1 -x 10.77.0.1` and the same with `+tcp`.
 
 Router DHCP DNS changes are last. Record old values, retain a wired recovery client, advertise all three resolver addresses, renew one test lease, and observe a full lease cycle. If client resolution fails, restore the old DHCP DNS values before investigating the nodes.
 
@@ -542,7 +573,7 @@ Prove repository, World, capacity, network, tunnel, DNS health, and DNS plan cal
 | `DNS_CLUSTER_DOMAIN` | Cluster domain override; defaults to `dns-cluster.home.arpa` and must match reviewed DNS intent |
 | `DNS_CLUSTER_ZONE_FILE` | Reviewed zone-file override; defaults to the tracked `burn-history/dns-records.zone` |
 | `DNSCTL_AUDIT_LOG` | Protected append-only destination for redacted DNS plan/apply events |
-| `TECHNITIUM_URL` | Direct management-command target URL; callers use reviewed fixed node endpoints, not arbitrary agent input |
+| `TECHNITIUM_URL` | Direct management-command target URL; callers use reviewed fixed node endpoints or the local end of an SSH tunnel to a node's loopback API, not arbitrary agent input |
 | `TECHNITIUM_TOKEN_FILE` | Protected role-specific token file for direct management commands |
 | `TAILSCALE_OAUTH_CLIENT_ID_FILE` | Protected file containing the OAuth client ID; value must not be passed directly |
 | `TAILSCALE_OAUTH_CLIENT_SECRET_FILE` | Protected file containing the OAuth secret; value must not be passed directly |

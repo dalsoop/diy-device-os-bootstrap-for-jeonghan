@@ -5,6 +5,7 @@ set -euo pipefail
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
+monorepo_root=$(CDPATH='' cd -- "$repo_root/../.." && pwd)
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/dns-management-test.XXXXXX")
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM
 
@@ -20,6 +21,15 @@ cat > "$temporary/bin/curl" <<'EOF'
 case "$*" in
     */api/zones/import*)
         printf '%s\n' "$*" >> "${MOCK_IMPORT_LOG:-/dev/null}"
+        for argument in "$@"; do
+            case "$argument" in
+                file=@*)
+                    payload=${argument#file=@}
+                    payload=${payload%%;*}
+                    [ -z "${MOCK_IMPORT_PAYLOAD:-}" ] || cp "$payload" "$MOCK_IMPORT_PAYLOAD"
+                    ;;
+            esac
+        done
         printf '{"status":"ok","response":{}}\n'
         ;;
     *)
@@ -73,6 +83,148 @@ if grep -Fx -- '--insecure' "$temporary/curl.args" >/dev/null; then
 fi
 pass dnsctl_uses_configured_ca
 
+# plan compares record sets without the SOA and apex NS records, which the
+# cluster manages, independent of record order and presentation.
+plan_against() {
+    PATH="$temporary/bin:$PATH" \
+    MOCK_CURRENT_ZONE="$1" \
+    TECHNITIUM_TOKEN_FILE="$temporary/token" \
+    TECHNITIUM_CA_FILE="$temporary/technitium-ca.pem" \
+    DNSCTL_AUDIT_LOG="$temporary/audit.jsonl" \
+        "$repo_root/management/dnsctl" plan "$2" \
+        > "$temporary/compare.json" 2> "$temporary/compare.diff"
+}
+expect_plan_rejected() {
+    name=$1
+    shift
+    if plan_against "$@"; then
+        echo "FAIL $name: dnsctl plan succeeded" >&2
+        exit 1
+    fi
+    if [ -s "$temporary/compare.json" ]; then
+        echo "FAIL $name: dnsctl plan printed a plan before rejecting" >&2
+        exit 1
+    fi
+    pass "$name"
+}
+cat > "$temporary/rich.zone" <<'EOF'
+$ORIGIN home.arpa.
+$TTL 300
+@ IN SOA dns01.home.arpa. hostmaster.home.arpa. (
+    2026110601  ; serial
+    3600 600 604800 300 )
+@      IN NS dns01.home.arpa.
+@      IN NS dns02.home.arpa.
+dns01  IN A 10.77.5.1
+router IN A 10.77.0.1
+mail   IN MX 10 dns01
+alias  IN CNAME router
+note   IN TXT "a; b"
+EOF
+cat > "$temporary/export-equivalent.zone" <<'EOF'
+; Exported zone file
+$ORIGIN home.arpa.
+
+@	3600	IN	SOA	dns01.home.arpa. hostmaster.home.arpa. 9 900 300 604800 900
+	3600	IN	NS	dns03.home.arpa.
+note.home.arpa.	300	IN	TXT	"a; b"
+alias.home.arpa.	300	IN	CNAME	router.home.arpa.
+ROUTER.home.arpa.	300	in	a	10.77.0.1
+dns01	300	IN	A	10.77.5.1
+mail.home.arpa.	300	IN	MX	10 dns01.home.arpa.
+EOF
+plan_against "$temporary/export-equivalent.zone" "$temporary/rich.zone"
+jq -e '.changed == false and .zone == "home.arpa"' "$temporary/compare.json" >/dev/null || {
+    echo "FAIL plan reported a change for an export that differs only in SOA, apex NS, order, and presentation" >&2
+    cat "$temporary/compare.diff" >&2
+    exit 1
+}
+if grep -q '^[-+][^-+]' "$temporary/compare.diff"; then
+    echo "FAIL plan printed a record difference for an equivalent export" >&2
+    exit 1
+fi
+pass dnsctl_plan_ignores_soa_apex_ns_order_and_presentation
+
+sed 's/^ROUTER\.home\.arpa\.	300	/ROUTER.home.arpa.	600	/' \
+    "$temporary/export-equivalent.zone" > "$temporary/export-ttl.zone"
+plan_against "$temporary/export-ttl.zone" "$temporary/rich.zone"
+jq -e '.changed == true' "$temporary/compare.json" >/dev/null
+grep -qx -- '-router.home.arpa. 600 IN A 10.77.0.1' "$temporary/compare.diff"
+grep -qx -- '+router.home.arpa. 300 IN A 10.77.0.1' "$temporary/compare.diff"
+sed 's/10\.77\.0\.1$/10.77.0.2/' "$temporary/export-equivalent.zone" > "$temporary/export-address.zone"
+plan_against "$temporary/export-address.zone" "$temporary/rich.zone"
+jq -e '.changed == true' "$temporary/compare.json" >/dev/null
+grep -qx -- '-router.home.arpa. 300 IN A 10.77.0.2' "$temporary/compare.diff"
+cp "$temporary/export-equivalent.zone" "$temporary/export-delegation.zone"
+printf 'sub.home.arpa.\t300\tIN\tNS\tns.example.\n' >> "$temporary/export-delegation.zone"
+plan_against "$temporary/export-delegation.zone" "$temporary/rich.zone"
+jq -e '.changed == true' "$temporary/compare.json" >/dev/null
+grep -qx -- '-sub.home.arpa. 300 IN NS ns.example.' "$temporary/compare.diff"
+pass dnsctl_plan_detects_real_record_differences
+
+printf '%s\n' '{"status":"error","errorMessage":"No such zone was found"}' > "$temporary/export-error.json"
+expect_plan_rejected dnsctl_plan_rejects_an_api_error_as_live_zone \
+    "$temporary/export-error.json" "$temporary/rich.zone"
+grep -q 'No such zone was found' "$temporary/compare.diff"
+cp "$temporary/rich.zone" "$temporary/absolute-apex-ns.zone"
+printf '%s\n' 'home.arpa. IN NS dns03.home.arpa.' >> "$temporary/absolute-apex-ns.zone"
+expect_plan_rejected dnsctl_plan_rejects_apex_ns_the_import_cannot_strip \
+    "$temporary/export-equivalent.zone" "$temporary/absolute-apex-ns.zone"
+grep -q 'apex NS records the import cannot strip' "$temporary/compare.diff"
+cp "$temporary/rich.zone" "$temporary/include.zone"
+printf '%s\n' "\$INCLUDE other.zone" >> "$temporary/include.zone"
+expect_plan_rejected dnsctl_plan_rejects_unsupported_zone_directives \
+    "$temporary/export-equivalent.zone" "$temporary/include.zone"
+grep -qF "unsupported directive \$INCLUDE" "$temporary/compare.diff"
+
+# The repository zones: every static name has exactly one PTR record, and the
+# API and canary names have none.
+reverse_zone=$monorepo_root/burn-history/dns-reverse-records.zone
+printf '%s\n' "\$ORIGIN home.arpa." \
+    '@ 3600 IN SOA dns01.home.arpa. hostmaster.home.arpa. 9 900 300 604800 900' \
+    > "$temporary/export-empty-forward.zone"
+printf '%s\n' "\$ORIGIN 77.10.in-addr.arpa." \
+    '@ 3600 IN SOA dns01.home.arpa. hostmaster.home.arpa. 1 900 300 604800 900' \
+    '  3600 IN NS dns01.home.arpa.' > "$temporary/export-empty-reverse.zone"
+plan_against "$temporary/export-empty-forward.zone" "$monorepo_root/burn-history/dns-records.zone"
+jq -e '.zone == "home.arpa" and .changed == true' "$temporary/compare.json" >/dev/null
+grep '^+[^+]' "$temporary/compare.diff" > "$temporary/forward.records"
+plan_against "$temporary/export-empty-reverse.zone" "$reverse_zone"
+jq -e '.zone == "77.10.in-addr.arpa" and .changed == true' "$temporary/compare.json" >/dev/null
+grep '^+[^+]' "$temporary/compare.diff" > "$temporary/reverse.records"
+python3 - "$temporary/forward.records" "$temporary/reverse.records" <<'PY'
+import sys
+
+def records(path):
+    return [line[1:].split() for line in open(path, encoding="utf-8")]
+
+forward = records(sys.argv[1])
+reverse = records(sys.argv[2])
+assert all(record[2] == "IN" and record[3] in ("A", "NS") for record in forward), forward
+assert not any(record[3] == "NS" for record in forward), "apex NS left in the forward diff"
+addresses = {record[0]: record[4] for record in forward if record[3] == "A"}
+expected = {
+    "router.home.arpa.": "10.77.0.1", "pve1.home.arpa.": "10.77.0.11",
+    "nas-synology1.home.arpa.": "10.77.0.21", "nas-truenas1.home.arpa.": "10.77.0.23",
+    "pbs1.home.arpa.": "10.77.0.25", "dns01.home.arpa.": "10.77.5.1",
+    "dns02.home.arpa.": "10.77.5.2", "dns03.home.arpa.": "10.77.5.3",
+    "dns-api.home.arpa.": "10.77.5.1", "canary.home.arpa.": "10.77.9.9",
+}
+assert addresses == expected, addresses
+assert all(record[3] == "PTR" and record[1] == "300" for record in reverse), reverse
+pointers = {}
+for owner, _, _, _, target in reverse:
+    assert owner.endswith(".77.10.in-addr.arpa."), owner
+    assert owner not in pointers, f"duplicate PTR for {owner}"
+    pointers[owner] = target
+named = {name: address for name, address in expected.items()
+         if name not in ("dns-api.home.arpa.", "canary.home.arpa.")}
+wanted = {".".join(reversed(address.split("."))) + ".in-addr.arpa.": name
+          for name, address in named.items()}
+assert pointers == wanted, pointers
+PY
+pass repository_zones_name_each_static_address_once_in_forward_and_reverse
+
 zone_repo=$temporary/zone-repo
 mkdir -p "$zone_repo/zones"
 cp "$temporary/desired.zone" "$zone_repo/zones/home.arpa.zone"
@@ -84,8 +236,9 @@ dnsctl_in_repo() {
     (
         cd "$zone_repo"
         PATH="$temporary/bin:$PATH" \
-        MOCK_CURRENT_ZONE="$temporary/current.zone" \
+        MOCK_CURRENT_ZONE="${DNSCTL_TEST_EXPORT:-$temporary/current.zone}" \
         MOCK_IMPORT_LOG="$temporary/import.log" \
+        MOCK_IMPORT_PAYLOAD="$temporary/import.payload" \
         TECHNITIUM_URL="${DNSCTL_TEST_URL:-https://dns01:53443}" \
         TECHNITIUM_TOKEN_FILE="$temporary/token" \
         TECHNITIUM_CA_FILE="$temporary/technitium-ca.pem" \
@@ -165,7 +318,15 @@ jq -s -e 'map(select(.result == "drifted")) | length == 1' \
     "$temporary/apply-audit.jsonl" >/dev/null
 cp "$temporary/current.zone.reviewed" "$temporary/current.zone"
 
+# The comparison ignores the SOA, but the drift check still binds the exact
+# live export the plan saw.
+sed 's/( 1 3600/( 5 3600/' "$temporary/current.zone.reviewed" > "$temporary/current.zone"
+expect_apply_rejected dnsctl_apply_rejects_live_soa_drift \
+    --plan "$temporary/reviewed.plan" --plan-sha256 "$plan_sha" --confirm APPLY
+cp "$temporary/current.zone.reviewed" "$temporary/current.zone"
+
 : > "$temporary/import.log"
+rm -f "$temporary/import.payload"
 dnsctl_in_repo apply --plan "$temporary/reviewed.plan" --plan-sha256 "$plan_sha" \
     --confirm APPLY > "$temporary/apply.json"
 jq -e --arg plan "$plan_sha" '.status == "ok" and .plan_sha256 == $plan' \
@@ -175,6 +336,35 @@ jq -s -e --arg plan "$plan_sha" \
     'map(select(.action == "apply:home.arpa" and .result == "ok" and .plan_sha256 == $plan)) | length == 1' \
     "$temporary/apply-audit.jsonl" >/dev/null
 pass dnsctl_apply_consumes_the_reviewed_plan
+
+# The import carries every record except the SOA and apex NS records, exactly
+# as cluster-bootstrap strips them.
+python3 - "$repo_root/management/cluster-bootstrap" "$temporary/bootstrap-strip.awk" <<'PY'
+import pathlib
+import re
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text()
+program = re.search(r"^awk '\n(.*?)\n' \"\$zone_file\" > \"\$zone_import\"$", source, re.M | re.S)
+assert program, "cluster-bootstrap zone import filter is missing"
+pathlib.Path(sys.argv[2]).write_text(program.group(1) + "\n")
+PY
+[ -s "$temporary/import.payload" ] || {
+    echo "FAIL dnsctl apply did not upload a zone file" >&2
+    exit 1
+}
+if grep -Eq '[[:space:]]SOA[[:space:]]' "$temporary/import.payload" ||
+    grep -Eq '^@[[:space:]].*[[:space:]]NS[[:space:]]' "$temporary/import.payload"; then
+    echo "FAIL dnsctl apply imported an SOA or apex NS record" >&2
+    exit 1
+fi
+grep -q '^canary IN A 10.77.9.9$' "$temporary/import.payload"
+awk -f "$temporary/bootstrap-strip.awk" "$zone_repo/zones/home.arpa.zone" > "$temporary/bootstrap.payload"
+cmp -s "$temporary/bootstrap.payload" "$temporary/import.payload" || {
+    echo "FAIL dnsctl apply and cluster-bootstrap strip managed records differently" >&2
+    exit 1
+}
+pass dnsctl_apply_imports_without_soa_and_apex_ns
 
 expect_apply_rejected dnsctl_apply_rejects_replayed_plan \
     --plan "$temporary/reviewed.plan" --plan-sha256 "$plan_sha" --confirm APPLY
@@ -190,6 +380,40 @@ git -C "$zone_repo" -c user.name=test -c user.email=test@example.invalid \
     commit -q -am later
 expect_apply_rejected dnsctl_apply_rejects_other_source_commit \
     --plan "$temporary/stale.plan" --plan-sha256 "$stale_sha" --confirm APPLY
+
+# The reverse zone goes through the same hash-bound plan and apply.
+cp "$reverse_zone" "$zone_repo/zones/77.10.in-addr.arpa.zone"
+git -C "$zone_repo" add zones/77.10.in-addr.arpa.zone
+git -C "$zone_repo" -c user.name=test -c user.email=test@example.invalid \
+    commit -q -m reverse
+DNSCTL_TEST_EXPORT=$temporary/export-empty-reverse.zone \
+    dnsctl_in_repo plan zones/77.10.in-addr.arpa.zone --out "$temporary/reverse.plan" \
+    > /dev/null 2>&1
+reverse_sha=$(sha256_of "$temporary/reverse.plan")
+jq -e --arg commit "$(git -C "$zone_repo" rev-parse HEAD)" \
+    '.zone == "77.10.in-addr.arpa" and .changed == true and .source_commit == $commit
+     and .zone_path == "zones/77.10.in-addr.arpa.zone"' \
+    "$temporary/reverse.plan" >/dev/null
+DNSCTL_TEST_URL=https://dns02:53443 DNSCTL_TEST_EXPORT=$temporary/export-empty-reverse.zone \
+    expect_apply_rejected dnsctl_apply_rejects_reverse_plan_for_other_endpoint \
+    --plan "$temporary/reverse.plan" --plan-sha256 "$reverse_sha" --confirm APPLY
+: > "$temporary/import.log"
+rm -f "$temporary/import.payload"
+DNSCTL_TEST_EXPORT=$temporary/export-empty-reverse.zone \
+    dnsctl_in_repo apply --plan "$temporary/reverse.plan" --plan-sha256 "$reverse_sha" \
+    --confirm APPLY > "$temporary/reverse-apply.json"
+jq -e --arg plan "$reverse_sha" '.status == "ok" and .plan_sha256 == $plan' \
+    "$temporary/reverse-apply.json" >/dev/null
+grep -q 'zone=77.10.in-addr.arpa&overwrite=true' "$temporary/import.log"
+[ "$(grep -c '[[:space:]]PTR[[:space:]]' "$temporary/import.payload")" -eq 8 ]
+if grep -Eq '[[:space:]](SOA|NS)[[:space:]]' "$temporary/import.payload"; then
+    echo "FAIL dnsctl apply imported the reverse zone's SOA or apex NS" >&2
+    exit 1
+fi
+DNSCTL_TEST_EXPORT=$temporary/export-empty-reverse.zone \
+    expect_apply_rejected dnsctl_apply_rejects_replayed_reverse_plan \
+    --plan "$temporary/reverse.plan" --plan-sha256 "$reverse_sha" --confirm APPLY
+pass dnsctl_reverse_zone_plan_and_bound_apply
 
 enrollment=$temporary/DNS-ENROLL
 generation=11111111-2222-3333-4444-555555555555
@@ -585,4 +809,4 @@ for content in '' 'wireguard\n' 'netbird\ntailscale\n'; do
 done
 pass health_reports_each_selected_overlay_and_only_those
 
-echo "RESULT $pass_count/21 management simulations passed"
+echo "RESULT $pass_count/34 management simulations passed"

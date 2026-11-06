@@ -82,6 +82,177 @@ zone_is_committed() {
         [ -z "$(git status --short -- ":/$1")" ]
 }
 
+# Prints the zone file without its SOA and apex NS records. The cluster
+# manages those records for a zone in its catalog and refuses imported ones;
+# this is the same rule cluster-bootstrap applies to its import.
+strip_managed_records() {
+    awk '
+    skip { if (index($0, ")")) skip = 0; next }
+    $0 ~ /[[:space:]]SOA[[:space:]]/ { if (index($0, "(") && !index($0, ")")) skip = 1; next }
+    $1 == "@" && $0 ~ /[[:space:]]NS[[:space:]]/ { next }
+    { print }
+' "$1"
+}
+
+# Reads a zone in presentation format and prints one record per line as
+# "<owner> <ttl> IN <TYPE> <data>": names absolute and lowercase, the TTL in
+# seconds (explicit, else $TTL, else the previous record's), and single spaces
+# outside quoted text. With exclude=1 it leaves out the SOA and apex NS
+# records. Unsupported syntax fails instead of being guessed.
+# shellcheck disable=SC2016 # awk program, not shell expansions
+zone_records_program='
+function fail(message) {
+    printf "dnsctl: %s line %d: %s\n", label, FNR, message > "/dev/stderr"
+    failed = 1
+    exit 1
+}
+function absolute(name) {
+    if (name == "@") return origin
+    name = tolower(name)
+    if (name ~ /\.$/) return name
+    return name "." origin
+}
+function is_ttl(value) {
+    return value ~ /^[0-9]+$/ || value ~ /^([0-9]+[smhdwSMHDW])+$/
+}
+function seconds(value,    total, unit) {
+    if (value ~ /^[0-9]+$/) return value + 0
+    total = 0
+    while (value != "") {
+        match(value, /^[0-9]+[smhdwSMHDW]/)
+        unit = tolower(substr(value, RLENGTH, 1))
+        total += substr(value, 1, RLENGTH - 1) * (unit == "s" ? 1 : unit == "m" ? 60 : unit == "h" ? 3600 : unit == "d" ? 86400 : 604800)
+        value = substr(value, RLENGTH + 1)
+    }
+    return total
+}
+function scan(text,    i, n, c, token, has) {
+    n = length(text)
+    token = ""
+    has = 0
+    for (i = 1; i <= n; i++) {
+        c = substr(text, i, 1)
+        if (quoted) {
+            token = token c
+            if (c == "\\") { i++; token = token substr(text, i, 1) }
+            else if (c == "\"") quoted = 0
+            continue
+        }
+        if (c == "\\") { i++; token = token c substr(text, i, 1); has = 1; continue }
+        if (c == "\"") { token = token c; quoted = 1; has = 1; continue }
+        if (c == ";") break
+        if (c == "(" || c == ")" || c == " " || c == "\t") {
+            if (has) { words[++count] = token; token = ""; has = 0 }
+            if (c == "(") depth++
+            else if (c == ")" && --depth < 0) fail("unbalanced parenthesis")
+            continue
+        }
+        token = token c
+        has = 1
+    }
+    if (quoted) fail("quoted text continues past the end of the line")
+    if (has) words[++count] = token
+}
+function record(    i, j, owner, ttl, class, type, fields, names, data, field) {
+    if (!blank && words[1] ~ /^\$/) {
+        if (toupper(words[1]) == "$ORIGIN" && count == 2) { origin = absolute(words[2]); return }
+        if (toupper(words[1]) == "$TTL" && count == 2 && is_ttl(words[2])) { default_ttl = seconds(words[2]); return }
+        fail("unsupported directive " words[1])
+    }
+    if (blank) {
+        if (last_owner == "") fail("record without an owner")
+        owner = last_owner
+        i = 1
+    } else {
+        owner = absolute(words[1])
+        i = 2
+    }
+    ttl = ""
+    class = ""
+    while (i <= count) {
+        if (ttl == "" && is_ttl(words[i])) ttl = seconds(words[i++])
+        else if (class == "" && toupper(words[i]) ~ /^(IN|CH|HS|CS)$/) class = toupper(words[i++])
+        else break
+    }
+    if (class != "" && class != "IN") fail("unsupported class " class)
+    if (i > count) fail("record without a type")
+    type = toupper(words[i++])
+    if (type !~ /^[A-Z][A-Z0-9-]*$/) fail("invalid record type " type)
+    if (ttl == "") {
+        if (default_ttl != "") ttl = default_ttl
+        else if (last_ttl != "") ttl = last_ttl
+        else fail("record without a TTL")
+    }
+    last_owner = owner
+    last_ttl = ttl
+    # Data fields that hold domain names, and the field count those types need.
+    fields = 0
+    names = ""
+    if (type == "A" || type == "AAAA") fields = 1
+    else if (type ~ /^(NS|CNAME|PTR|DNAME)$/) { fields = 1; names = " 1 " }
+    else if (type == "MX") { fields = 2; names = " 2 " }
+    else if (type == "SRV") { fields = 4; names = " 4 " }
+    else if (type == "SOA") { fields = 7; names = " 1 2 " }
+    if (count < i) fail(type " record without data")
+    if (fields && count - i + 1 != fields) fail(type " record with " (count - i + 1) " data fields")
+    data = ""
+    for (j = 1; i <= count; j++) {
+        field = words[i++]
+        if (index(names, " " j " ")) field = absolute(field)
+        else if (type == "AAAA") field = tolower(field)
+        data = data (j > 1 ? " " : "") field
+    }
+    if (exclude && (type == "SOA" || (type == "NS" && owner == apex))) return
+    print owner " " ttl " IN " type " " data
+}
+BEGIN {
+    origin = tolower(zone) "."
+    apex = origin
+}
+{
+    line = $0
+    sub(/\r$/, "", line)
+    if (depth == 0) {
+        count = 0
+        blank = (line ~ /^[ \t]/)
+    }
+    scan(line)
+    if (depth == 0 && count > 0) record()
+}
+END {
+    if (failed) exit 1
+    if (depth != 0) fail("unbalanced parenthesis")
+}
+'
+
+# zone_records <zone> <exclude 0|1> <label> <zone-file> <output>: writes the
+# sorted, duplicate-free record set of a zone file.
+zone_records() {
+    LC_ALL=C awk -v zone="$1" -v exclude="$2" -v label="$3" \
+        "$zone_records_program" "$4" > "$5.unsorted" || return 1
+    LC_ALL=C sort -u "$5.unsorted" > "$5"
+}
+
+# prepare_import <zone> <zone-file> <payload>: writes the import payload and
+# the zone file's record set, and refuses a file whose payload would not
+# carry exactly its records other than the SOA and apex NS.
+prepare_import() {
+    strip_managed_records "$2" > "$3"
+    zone_records "$1" 1 "zone file" "$2" "$temporary/desired.records" ||
+        fail "cannot read the zone file"
+    zone_records "$1" 0 "import payload" "$3" "$temporary/payload.records" ||
+        fail "cannot read the import payload"
+    cmp -s "$temporary/desired.records" "$temporary/payload.records" ||
+        fail "zone file has SOA or apex NS records the import cannot strip; write each on one '@' line"
+}
+
+# Technitium answers an API error as JSON instead of zone text.
+reject_api_error() {
+    if [ "$(awk 'NF { print substr($1, 1, 1); exit }' "$1")" = "{" ]; then
+        fail "live zone export failed: $(jq -r '[.status, .errorMessage] | map(select(. != null)) | join(": ")' "$1" 2>/dev/null || printf 'unreadable response')"
+    fi
+}
+
 case "$command" in
     health)
         api GET '/api/dashboard/metrics/json' | jq '{status,server,uptimeSeconds:.response.uptimeSeconds,lifetimeCounters:.response.lifetimeCounters}'
@@ -112,12 +283,18 @@ case "$command" in
                 fail "plan file already exists; plans are immutable"
             fi
         fi
+        prepare_import "$zone" "$zone_file" "$temporary/import.zone"
         current=$temporary/current.zone
         api GET "/api/zones/export?zone=$zone" > "$current"
+        reject_api_error "$current"
         current_sha=$(sha256_file "$current")
         desired_sha=$(sha256_file "$zone_file")
+        # The decision compares record sets without the SOA and apex NS
+        # records, which the cluster manages; the hashes bind exact bytes.
+        zone_records "$zone" 1 "live zone" "$current" "$temporary/current.records" ||
+            fail "cannot read the live zone export"
         changed=true
-        cmp -s "$current" "$zone_file" && changed=false
+        cmp -s "$temporary/current.records" "$temporary/desired.records" && changed=false
         plan=$temporary/plan.json
         jq -n --arg zone "$zone" --arg target_url "$url" \
             --arg created_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -146,7 +323,9 @@ case "$command" in
         fi
         cat "$plan"
         if [ "$changed" = true ]; then
-            diff -u "$current" "$zone_file" >&2 || true
+            diff -u --label "live $zone (without SOA and apex NS)" \
+                --label "$zone_file (without SOA and apex NS)" \
+                "$temporary/current.records" "$temporary/desired.records" >&2 || true
         fi
         audit "plan:$zone" ok "$saved_sha"
         ;;
@@ -200,6 +379,8 @@ case "$command" in
             "$audit_log" >/dev/null 2>&1; then
             fail "plan was already applied; create a new plan"
         fi
+        import_zone=$temporary/import.zone
+        prepare_import "$zone" "$zone_file" "$import_zone"
         current=$temporary/current.zone
         api GET "/api/zones/export?zone=$zone" > "$current"
         [ "$(sha256_file "$current")" = "$(jq -r .current_sha256 "$plan")" ] || {
@@ -207,7 +388,7 @@ case "$command" in
             fail "live zone changed since the plan; create and review a new plan"
         }
         response=$(api POST "/api/zones/import?zone=$zone&overwrite=true&overwriteZone=true" \
-            -F "file=@$zone_file;type=text/plain")
+            -F "file=@$import_zone;type=text/plain")
         [ "$(jq -r '.status' <<<"$response")" = ok ] || {
             audit "apply:$zone" failed "$plan_sha256"
             printf '%s\n' "$response" >&2

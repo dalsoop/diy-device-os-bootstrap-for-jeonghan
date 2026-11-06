@@ -71,7 +71,8 @@ write. Ordinary operators should begin with the root
 | `docs/` | Installer procedures and physical verification gates |
 
 The per-role guided profiles (`burn-history/os-installs/<role>/os.conf`) and the
-DNS zone (`burn-history/dns-records.zone`) the Installer consumes are tracked; real
+DNS zones (`burn-history/dns-records.zone`, `burn-history/dns-reverse-records.zone`)
+the Installer consumes are tracked; real
 hardware captures (`burn-history/os-installs/<role>/hardware.conf`) and operator
 public keys (`burn-history/keys/`) are ignored. Format examples live in
 [`docs/examples/`](docs/examples/).

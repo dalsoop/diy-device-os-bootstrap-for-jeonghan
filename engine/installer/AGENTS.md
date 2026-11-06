@@ -9,7 +9,7 @@ This module is the repository's execution and safety boundary. It resolves World
 - `dns-image/` owns the offline DNS image, install gate, first-boot enrollment, and the installed appliance's unattended updates and guarded reboots; it does not own general public OS behavior.
 - Per-role folders live in `burn-history/os-installs/<role>/`: the tracked guided profile `os.conf` and the ignored real hardware capture `hardware.conf`. Operator public keys live in the ignored `burn-history/keys/`. Public format examples live in `docs/examples/`.
 - `management/` owns post-install DNS, Tailscale and NetBird enrollment, backup, restore, reinstall authorization, and read-only monitoring from a trusted host.
-- `build/` owns immutable external input locks; `schemas/` owns exchanged record shapes; `tests/` owns non-destructive simulations; `docs/` owns installer procedures and physical verification gates. Reviewed DNS desired state lives in `burn-history/dns-records.zone`.
+- `build/` owns immutable external input locks; `schemas/` owns exchanged record shapes; `tests/` owns non-destructive simulations; `docs/` owns installer procedures and physical verification gates. Reviewed DNS desired state lives in `burn-history/dns-records.zone` and `burn-history/dns-reverse-records.zone`.
 - Long-lived credentials belong outside the checkout. Router mutation and arbitrary remote administration are outside this module.
 
 ## Invariants

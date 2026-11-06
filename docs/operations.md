@@ -400,7 +400,7 @@ Complete these preconditions in the NetBird dashboard before the first appliance
 1. Under Settings > Networks, set the network range to `10.78.0.0/16`. It must stay outside `100.64.0.0/10`, which Tailscale claims on every interface of a node that runs both clients.
 2. Remove or disable the built-in all-to-all `Default` policy.
 3. Create the appliance group (`dns-appliances` by default) and an admin group, then create the policies in `engine/installer/management/netbird-policy.example.json` after replacing each `<group-id:NAME>` placeholder with that group's ID. They let the admin group reach the appliances on TCP 22, 53, 9090, 9100, and 53443 and UDP 53, and the appliances reach each other on TCP 53443.
-4. Create a dedicated service user and a personal access token with the narrowest role that can create and delete setup keys and read groups, peers, routes, and network routers. Store the token on one line of a protected file outside the checkout.
+4. Create a dedicated service user and a personal access token with the narrowest role that can create and delete setup keys and read groups, peers, routes, and network routers. On NetBird Cloud that role is Admin, because a Network Admin token is refused when it creates a setup key. Store the token on one line of a protected file outside the checkout.
 
 Then enroll:
 

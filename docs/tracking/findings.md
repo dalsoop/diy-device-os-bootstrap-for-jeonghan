@@ -207,6 +207,16 @@ The NetBird client inserts `iifname "wt0" accept` at the top of the appliance's 
 
 Closing this requires an installed node with both clients enrolled: `nft list table inet dns_appliance` shows `overlay_prerouting` with both interfaces; from an admin-group peer over each overlay, DNS and the management ports answer while a port outside the allowed set does not; and the clients' tables and connectivity remain after `systemctl reload nftables` and `systemctl restart nftables`. Because the client's accept also sits at the top of the forward chain, the same check confirms `net.ipv4.ip_forward` stays `0` with both clients enrolled; that, not the forward chain's policy, is what keeps an appliance from forwarding overlay traffic.
 
+Partly closed on 2026-11-06 for NetBird (`docs/tracking/status.md`, "NetBird enrollment"). All three installed nodes run both clients. The real NetBird 0.82.0 client inserted `iifname "wt0" counter accept` at the top of `inet dns_appliance` `input`. While a temporary NetBird policy allowed all TCP from the management peer, TCP 5053, 5380, and 8080 stayed closed over `wt0`: 5053 is the client's own listener on the `wt0` address, so only `overlay_prerouting` was left to drop it. DNS and TCP 22, 9090, and 9100 answered, and `ip_forward` stayed `0`. Still open: the same check over `tailscale0`, and the tables surviving `systemctl reload nftables` and `restart nftables` on an installed node. Neither was run because the nodes are in service.
+
+## The NetBird client keeps a DNS listener and an output DNAT although DNS management is off
+
+With `--disable-dns=true`, the NetBird 0.82.0 client on each appliance still listens on TCP 5053 at its own `wt0` address, and its table `ip netbird` contains an `output` NAT chain. That chain redirects locally generated UDP and TCP 53 traffic for the node's own NetBird address to that listener. Queries from peers enter through prerouting and still reach Technitium, as the live checks show. The appliance's resolver names only `127.0.0.1`, so it is unaffected. Only a process on the appliance that queries its own NetBird address gets the client's resolver instead of Technitium. `overlay_prerouting` keeps port 5053 closed to peers. No change is needed. Keep this in mind when a check runs on an appliance against that appliance's own NetBird address.
+
+## A NetBird service-user token needs the Admin role
+
+The design asks for the narrowest role that can create and delete setup keys. On NetBird Cloud that role is Admin: a Network Admin token is refused with 403 on `POST /api/setup-keys`, although it can read the account and manage groups and policies. An Admin token can also change account settings and users. Keeping it in the principal secret store, writing it to a temporary mode-0600 file only for a run, and deleting that file afterwards limit its exposure.
+
 ## Tailscale enrollment does not inspect Serve or Funnel state
 
 The enrollment command verifies running state, hostname, tag, address, accepted DNS, routes, exit-node settings, and Tailscale SSH preferences. It does not query the separate Serve/Funnel configuration, so a node can pass the implemented preference gate without source evidence that those listeners are absent.

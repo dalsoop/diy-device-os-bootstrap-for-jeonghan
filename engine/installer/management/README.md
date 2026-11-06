@@ -99,7 +99,8 @@ default) and an admin group, and create the policies in
 `netbird-policy.example.json` after replacing each `<group-id:NAME>`
 placeholder with that group's ID. Create a dedicated service user whose
 personal access token can create and delete setup keys and read groups, peers,
-routes, and network routers, and store the token outside this repository on
+routes, and network routers (on NetBird Cloud the Admin role; Network Admin
+cannot create setup keys), and store the token outside this repository on
 one line of a protected file:
 
 ```sh

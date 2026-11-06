@@ -205,23 +205,35 @@ assert not any(record[3] == "NS" for record in forward), "apex NS left in the fo
 addresses = {record[0]: record[4] for record in forward if record[3] == "A"}
 expected = {
     "router.home.arpa.": "10.77.0.1", "pve1.home.arpa.": "10.77.0.11",
+    "pve2.home.arpa.": "10.77.0.12",
     "nas-synology1.home.arpa.": "10.77.0.21", "nas-truenas1.home.arpa.": "10.77.0.23",
     "pbs1.home.arpa.": "10.77.0.25", "dns01.home.arpa.": "10.77.5.1",
     "dns02.home.arpa.": "10.77.5.2", "dns03.home.arpa.": "10.77.5.3",
     "dns-api.home.arpa.": "10.77.5.1", "canary.home.arpa.": "10.77.9.9",
 }
 assert addresses == expected, addresses
-assert all(record[3] == "PTR" and record[1] == "300" for record in reverse), reverse
+# The cluster writes the PTR records of its own node addresses (name in the
+# cluster domain, TTL 3600); the repository mirrors them exactly.
+nodes = {"dns01.home.arpa.", "dns02.home.arpa.", "dns03.home.arpa."}
+assert all(record[3] == "PTR" for record in reverse), reverse
 pointers = {}
-for owner, _, _, _, target in reverse:
+ttls = {}
+for owner, ttl, _, _, target in reverse:
     assert owner.endswith(".77.10.in-addr.arpa."), owner
     assert owner not in pointers, f"duplicate PTR for {owner}"
     pointers[owner] = target
+    ttls[owner] = ttl
 named = {name: address for name, address in expected.items()
          if name not in ("dns-api.home.arpa.", "canary.home.arpa.")}
-wanted = {".".join(reversed(address.split("."))) + ".in-addr.arpa.": name
+def ptr_owner(address):
+    return ".".join(reversed(address.split("."))) + ".in-addr.arpa."
+wanted = {ptr_owner(address): (name.replace(".home.arpa.", ".dns-cluster.home.arpa.")
+                              if name in nodes else name)
           for name, address in named.items()}
 assert pointers == wanted, pointers
+wanted_ttls = {ptr_owner(address): ("3600" if name in nodes else "300")
+               for name, address in named.items()}
+assert ttls == wanted_ttls, ttls
 PY
 pass repository_zones_name_each_static_address_once_in_forward_and_reverse
 

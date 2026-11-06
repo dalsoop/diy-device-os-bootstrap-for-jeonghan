@@ -27,9 +27,9 @@ The current release state is a source-validated prototype, not a publicly distri
 | Exact HP/NIC/internal-disk install gate with mapper ancestry resolution and swap, holder, and synchronization checks | Yes | Guided VM BIOS and UEFI install from the exact-size raw image (`63cd0f4`, Secure Boot off); isolated source simulation of the current gate | Guided VM BIOS and UEFI reinstall with the current gate, then disposable physical `dns01` rerun |
 | Retry-safe encrypted first-boot enrollment | Yes | Source contract | Power-loss and real exFAT fault injection |
 | Three-node Technitium cluster bootstrap | Yes | Live three-node cluster observed on 2026-11-06 (Technitium 15.6.1; `dns01` Primary, `dns02` and `dns03` Secondary and connected; same answers and SOA serial from all three) | Primary-loss drill; record which installation media and commit the nodes were installed from |
-| DNS health, saved immutable plan, and plan-bound apply | Yes | Isolated simulation of plan saving, immutability, hash, endpoint, commit, zone, drift, and replay rejection | Approved live canary apply and rollback; pull-request approval binding remains unbuilt |
-| Encrypted backup collection and explicit restore | Yes | Source checks only | Add trusted-CA or pinned-fingerprint restore transport, then run isolated decrypt/import/canary drill; production restore is currently unqualified |
-| One-off tagged Tailscale enrollment | Yes | Isolated tag/DNS/route/exit-node/SSH preference simulation | Tailnet policy review, explicit Serve/Funnel verification, three-node enrollment, reboot, and key-expiry/revocation observation |
+| DNS health, saved immutable plan, and plan-bound apply | Yes | Live: on 2026-11-06 hash-bound plans were applied to `home.arpa` and the new `77.10.in-addr.arpa` from merged `main` through an SSH tunnel to the Primary with a short admin session; all three nodes then answered the zone files' records over UDP and TCP | Apply with the applier account once zone permissions can be granted (see findings); pull-request approval binding remains unbuilt |
+| Encrypted backup collection and explicit restore | Yes | On-device backups never succeeded (first-boot token, see findings). Live: the management host signs in, streams each node's settings backup into `age`, and stores the encrypted files in the principal secret store daily; first files uploaded on 2026-11-06 | Add trusted-CA or pinned-fingerprint restore transport, then run isolated decrypt/import/canary drill; production restore is currently unqualified |
+| One-off tagged Tailscale enrollment | Yes | Live: all three nodes enrolled on 2026-11-06 with `tag:dns-appliance`, Serve and Funnel empty, tailnet policy entries and tests added, `home.arpa` split DNS to the three nodes | Reboot and key-expiry/revocation observation |
 | One-off NetBird enrollment with setup-key deletion | Yes | NetBird enrollment simulation, including secret non-disclosure and unconfirmed deletion | Network range `10.78.0.0/16` and `Default` policy removal before the first enrollment, then live three-node enrollment and reboot |
 | Dependency-free read-only status monitor reaching nodes by name, with reboot state | Yes | Status monitor simulation and Python syntax | Management-host name resolution without the DNS cluster, then a run against all three live nodes |
 | Constrained MCP gateway over overlay-carried forced SSH, `tunnel_status` for both overlays | Yes | Isolated tool, input, policy, and overlay-status simulation | Add centralized credential-output filtering; then prove dedicated account, overlay policy, forced command, credential files, trusted CA, NetBird daemon-socket access, and live three-node reads |
@@ -107,13 +107,19 @@ Remaining:
 
 ## Installed cluster and router move (2026-11-06)
 
-Observed live on 2026-11-06 from a wired host inside the LAN (the management host is at another site and has no route to the appliances yet):
+Observed live on 2026-11-06 from a wired host inside the LAN, before the management host was connected:
 
 - `dns01` (`10.77.5.1`), `dns02` (`10.77.5.2`), and `dns03` (`10.77.5.3`) are installed and run Technitium 15.6.1 as one cluster: `dns01` is Primary, `dns02` and `dns03` are Secondary and connected, and both secondaries report a recent configuration sync. Which installation media generation and source commit installed them is not recorded here.
 - All three answer `canary.home.arpa` with `10.77.9.9` over UDP and TCP, return the same live SOA serial, return NXDOMAIN for an unknown `home.arpa` name, and resolve public names. The API answers on TCP 53443 and Cockpit on TCP 9090. The recursion ACL is `127.0.0.0/8`, `10.77.0.0/16`, `100.64.0.0/10`, `10.78.0.0/16`, and one management-site `/24`.
 - Before the router change, the router LAN was `10.77.0.1/24`, so the appliances (configured as `/16`) could not reach the router and every recursive query failed. The router LAN mask was changed to `255.255.0.0` with the address unchanged; the router restarted, and recursion then worked on all three. The appliances' lifetime SERVFAIL counters still include the earlier failures.
 - Router DHCP still hands out the provider's resolvers. The DHCP range is `10.77.0.101` through `10.77.0.199`.
-- Not yet checked on the appliances: time synchronization, the backup and health timers, and the produced encrypted backups (key-based operator SSH from the management host is not set up yet).
-- The appliances are not enrolled in Tailscale or NetBird.
+## Management connection, names, backups, and monitoring (2026-11-06)
 
-The remaining rollout follows decision 0015: owner-approved, agent-run changes; Tailscale enrollment; zone changes through `dnsctl`; daily backup collection into the principal secret store; monitoring with alerts; a one-workstation canary; and then the router DHCP DNS change.
+- The management host has its own operator SSH key on all three nodes and reaches them over Tailscale (`tag:dns-appliance`; NetBird remains unenrolled). Time synchronization is active on all three.
+- `home.arpa` carries the site's static hosts and `77.10.in-addr.arpa` their PTR records; both were applied with `dnsctl` and replicated to the Secondaries. The cluster writes the PTR records of its own node addresses itself; the repository mirrors them.
+- Overlay devices resolve `home.arpa` through a split-DNS entry to the three nodes.
+- The management host takes a daily encrypted settings backup of each node into the principal secret store (newest seven per node) and checks the nodes every five minutes, alerting once per new problem and once on recovery. An emergency rollback of the router's DHCP DNS is implemented and stays disarmed until the cutover.
+- A one-workstation canary on the site Wi-Fi resolved through the nodes for about two hours without a failure; the owner accepted that duration.
+- Router DHCP still hands out the provider's resolvers.
+
+The remaining rollout follows decision 0015: the router DHCP DNS change with owner approval, then a recheck after one lease period.

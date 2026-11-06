@@ -1,32 +1,70 @@
 # Findings
 
-## Stored per-node Technitium tokens do not match the appliances
+## The first-boot static API token is not registered after clustering
 
-On 2026-11-06, the per-node static Technitium tokens kept in the principal
-secret store were refused (`invalid-token`) by every appliance, while the
-cluster-level planner and applier tokens worked. Each appliance reads its own
-static token from `/var/lib/dns-appliance/secrets/technitium-static-token`
-into Technitium's static sessions, and its backup and health scripts use the
-same file, so the copy in the secret store is what is wrong. Tools and people
-that use the stored copy cannot reach a single node's API. The fix copies each
-on-device value into the secret store without printing it, then verifies it.
+Each appliance's first boot writes a token to
+`/var/lib/dns-appliance/secrets/technitium-static-token` and passes it to
+Technitium as a static session. On 2026-11-06 that token was refused
+(`invalid-token`) by its own appliance on all three nodes, and no static
+session appeared in any node's session list. The on-device backup and any
+other on-device API caller therefore fail; the on-device
+`dns-appliance-backup.service` has exited with status 9 on every run since
+installation and has produced no backup. Backups are instead taken by the
+management host (decision 0015). Closing this needs a token mechanism that
+survives cluster initialization and joining, proven on a disposable cluster.
 
-## `dnsctl apply` imports records the cluster manages
+## Cluster authentication changes do not propagate and can revert
 
-`dnsctl apply` imports the whole zone file, including the SOA and apex NS
-records. According to the source of `cluster-bootstrap`, the cluster manages
-those records for zones in its catalog and refuses imported ones, which is why
-the bootstrap strips them; the live SOA serial already differs from the
-repository zone file. This is source-level evidence; no live `dnsctl apply`
-has run yet. Until `dnsctl` strips and ignores the SOA and apex NS records the
-same way, its first live apply is expected to fail.
+On 2026-11-06 (Technitium 15.6.1):
+
+- An admin API token created on the Primary (both through `/api/user/createToken`
+  and `/api/admin/sessions/createToken`) worked on the Primary but was never
+  accepted by either Secondary, even after the Secondaries reported later
+  configuration syncs. The tokens created by cluster bootstrap are present on all
+  three nodes.
+- Re-saving one section's permissions with unchanged values on the Primary made
+  the Primary's sessions return to the state recorded at cluster bootstrap: a
+  token created that day disappeared and admin tokens deleted minutes earlier
+  reappeared.
+
+Until this is understood, nothing saves the authentication configuration
+(users, groups, permissions, tokens). Six unused admin API tokens from repeated
+bootstrap runs (`cluster-bootstrap-dns01`) remain on every node for that reason.
+Closing this needs a reproduction on a disposable cluster and an upstream fix or
+a supported procedure.
+
+## Agent accounts have no zone-level permission
+
+The reader, planner, and applier accounts created by `cluster-bootstrap` have
+section permissions but no permission on the zones themselves: zone listing
+returns nothing and zone export is refused. `dnsctl plan` and `apply` were run
+on 2026-11-06 with a short admin session instead, through an SSH tunnel to the
+Primary. Granting zone permissions would save the authentication configuration
+(see above), so it is deferred.
+
+## The cluster writes the PTR records of its own node addresses
+
+After the reverse zone `77.10.in-addr.arpa` was created in the cluster catalog
+and imported, the cluster replaced the record for a node address with a PTR to
+the node's name in the cluster domain (TTL 3600). The repository reverse zone
+now mirrors exactly what the cluster writes for `10.77.5.1` through `10.77.5.3`
+so that plans show no difference.
 
 ## The management API is reachable only on the LAN
 
 The Technitium web service listens on loopback and the appliance's LAN address
-only. A management host outside the LAN cannot reach the API over an overlay
-and must use an SSH tunnel to the appliance's loopback address, which also
-changes the `TECHNITIUM_URL` that a saved plan binds to.
+only. The management host reaches it through an SSH tunnel to the appliance's
+loopback address over the overlay; the tunnel's local URL is the
+`TECHNITIUM_URL` that a saved plan binds to.
+
+## A storage server allows TCP forwarding for one account
+
+To reach the site LAN before overlay enrollment, and as the wired recovery path
+for the router, the site's storage server allows SSH TCP forwarding for one
+named account (a `Match User` block added on 2026-11-06, with a backup of the
+previous configuration). A storage-server software update may reset it; rerun
+the management host's rollback dry-run after such an update to confirm the
+recovery path still works.
 
 ## A stale DHCP reservation remains for a storage server
 

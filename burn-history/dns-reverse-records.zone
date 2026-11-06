@@ -1,7 +1,7 @@
 $ORIGIN 77.10.in-addr.arpa.
 $TTL 300
 @ IN SOA dns01.home.arpa. hostmaster.home.arpa. (
-    2026110601  ; serial
+    2026110602  ; serial
     3600        ; refresh
     600         ; retry
     604800      ; expire
@@ -12,9 +12,10 @@ $TTL 300
 @     IN NS dns03.home.arpa.
 1.0   IN PTR router.home.arpa.
 11.0  IN PTR pve1.home.arpa.
+12.0  IN PTR pve2.home.arpa.
 21.0  IN PTR nas-synology1.home.arpa.
 23.0  IN PTR nas-truenas1.home.arpa.
 25.0  IN PTR pbs1.home.arpa.
-1.5   IN PTR dns01.home.arpa.
-2.5   IN PTR dns02.home.arpa.
-3.5   IN PTR dns03.home.arpa.
+1.5   3600 IN PTR dns01.dns-cluster.home.arpa.
+2.5   3600 IN PTR dns02.dns-cluster.home.arpa.
+3.5   3600 IN PTR dns03.dns-cluster.home.arpa.

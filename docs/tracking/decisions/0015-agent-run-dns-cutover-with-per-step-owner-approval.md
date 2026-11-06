@@ -41,27 +41,41 @@ not want a site-wide outage to wait for a reply when no appliance answers.
   appliances and unenrolled; the World keeps selecting both overlays. The
   tailnet policy only adds the reviewed `tag:dns-appliance` entries: management
   ports for administrators, DNS for the owner's devices, and cluster traffic
-  between appliances. Existing rules for other devices stay unchanged. A
-  Tailscale split-DNS entry sends only `home.arpa` to the appliances.
+  between appliances. Existing rules for other devices stay unchanged. The tag
+  is owned by the owner's login (single-owner tailnet, matching the existing
+  tag) rather than the admin group of the reviewed example. A Tailscale
+  split-DNS entry sends only `home.arpa` to the appliances. The management
+  host's SSH configuration reaches each node by its overlay address, not its
+  overlay name, so management does not depend on any name resolution.
 - **Management API path.** The Technitium API stays bound to loopback and the
   LAN address. The management host reaches it through an SSH tunnel to the
   appliance's loopback address. The API is not exposed on the overlay.
 - **Zone authority.** The repository zone files are the source for every record
   except the SOA and apex NS records, which the cluster manages. `dnsctl`
-  imports and compares the zone without those two record types.
-- **Backups.** The management host collects the encrypted appliance backups
-  daily and keeps them as attachments of a dedicated item in the principal
-  secret store, separate from the item that holds the recovery identity. It
-  keeps the latest seven per appliance. A restore drill is a later step.
+  imports and compares the zone without those two record types. The PTR records
+  of the nodes' own addresses are also written by the cluster; the repository
+  mirrors them exactly. Until agent accounts can be granted zone permissions
+  without saving the authentication configuration (see findings), `dnsctl`
+  runs with a short admin session.
+- **Backups.** The on-device backup cannot authenticate (see findings). The
+  management host therefore signs in to each node daily with a short admin
+  session, streams the settings backup straight into `age` with the cluster's
+  recovery recipient (no plaintext on disk), and keeps the encrypted files as
+  attachments of a dedicated item in the principal secret store, separate from
+  the item that holds the recovery identity. It keeps the latest seven per
+  appliance. A restore drill is a later step.
+- **Canary.** One workstation on the site Wi-Fi resolved through the appliances
+  for about two hours without a failure before the cutover; the owner accepted
+  that instead of a full day.
 - **Names.** Static-address hosts get names in `home.arpa` following the fleet
   naming rule (role or product plus a number without zero padding), with one
   PTR record per address in `77.10.in-addr.arpa`. DHCP-roaming devices get no
   names. `dns01` through `dns03` keep their zero-padded names as an exception,
   because the names are part of the cluster node identities, the installation
   profiles, and the stored credentials.
-- **Excluded hosts.** Hypervisors, storage servers, and the server that runs
-  the CI runner and the tailnet identity provider keep their own resolver
-  settings, so a cluster outage does not take them down.
+- **Excluded hosts.** Hypervisors and storage servers on the site LAN keep their
+  own resolver settings, so a cluster outage does not take them down. Hosts at
+  other sites are not affected by the site router change.
 
 ## Alternatives
 

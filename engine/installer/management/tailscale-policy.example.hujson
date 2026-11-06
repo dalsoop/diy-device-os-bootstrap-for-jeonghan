@@ -15,4 +15,33 @@
       "ip": ["tcp:53443"],
     },
   ],
+
+  // DNS for the tailnet's own members; management ports stay admin-only.
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["autogroup:member"],
+      "proto": "udp",
+      "dst": ["tag:dns-appliance:53"],
+    },
+    {
+      "action": "accept",
+      "src": ["autogroup:member"],
+      "proto": "tcp",
+      "dst": ["tag:dns-appliance:53"],
+    },
+  ],
+
+  // Replace owner@example.com with the tailnet owner's login and tag:other
+  // with a tag the tailnet defines that has no access to the appliances.
+  "tests": [
+    {
+      "src": "owner@example.com",
+      "accept": ["tag:dns-appliance:22", "tag:dns-appliance:9090", "tag:dns-appliance:53"],
+    },
+    {
+      "src": "tag:other",
+      "deny": ["tag:dns-appliance:22", "tag:dns-appliance:9090", "tag:dns-appliance:53"],
+    },
+  ],
 }

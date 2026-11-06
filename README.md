@@ -62,7 +62,8 @@ cd diy-device-os-bootstrap-for-jeonghan
 ```
 
 The user only needs [`burn-history/`](burn-history/README.md). You edit
-`home.yaml`, `dns-records.zone`, and the per-role `os-installs/<role>/os.conf`;
+`home.yaml`, the zone files `dns-records.zone` and `dns-reverse-records.zone`,
+and the per-role `os-installs/<role>/os.conf`;
 `keys/` and each `os-installs/<role>/hardware.conf` hold private files never
 committed; `logs/` records what happened and is never edited. Everything in
 `engine/` is machinery that reads `burn-history/`; you do not need to open it.
@@ -140,6 +141,7 @@ diy-device-os-bootstrap-for-jeonghan/
 ├── burn-history/          the user's folder
 │   ├── home.yaml          home intent: networks, computers, services, media, overlays, policies
 │   ├── dns-records.zone   the DNS zone
+│   ├── dns-reverse-records.zone  the reverse DNS zone
 │   ├── os-installs/       per-role folders: os.conf guided profile, hardware.conf real capture (ignored)
 │   ├── keys/              operator public keys, never committed
 │   └── logs/              what happened, never edited: USB generations, failed writes, verification reports

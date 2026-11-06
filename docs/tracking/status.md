@@ -26,15 +26,15 @@ The current release state is a source-validated prototype, not a publicly distri
 | Protected prebuilt publication boundary | Policy only | Required Environment name and two-gate rule are encoded in policy and contracts | Human owner must create and verify `prebuilt-distribution` with a human-only required reviewer; no publishing job exists |
 | Exact HP/NIC/internal-disk install gate with mapper ancestry resolution and swap, holder, and synchronization checks | Yes | Guided VM BIOS and UEFI install from the exact-size raw image (`63cd0f4`, Secure Boot off); isolated source simulation of the current gate | Guided VM BIOS and UEFI reinstall with the current gate, then disposable physical `dns01` rerun |
 | Retry-safe encrypted first-boot enrollment | Yes | Source contract | Power-loss and real exFAT fault injection |
-| Three-node Technitium cluster bootstrap | Yes | Fixture/source checks | Live three-node cluster and primary-loss drill |
+| Three-node Technitium cluster bootstrap | Yes | Live three-node cluster observed on 2026-11-06 (Technitium 15.6.1; `dns01` Primary, `dns02` and `dns03` Secondary and connected; same answers and SOA serial from all three) | Primary-loss drill; record which installation media and commit the nodes were installed from |
 | DNS health, saved immutable plan, and plan-bound apply | Yes | Isolated simulation of plan saving, immutability, hash, endpoint, commit, zone, drift, and replay rejection | Approved live canary apply and rollback; pull-request approval binding remains unbuilt |
 | Encrypted backup collection and explicit restore | Yes | Source checks only | Add trusted-CA or pinned-fingerprint restore transport, then run isolated decrypt/import/canary drill; production restore is currently unqualified |
 | One-off tagged Tailscale enrollment | Yes | Isolated tag/DNS/route/exit-node/SSH preference simulation | Tailnet policy review, explicit Serve/Funnel verification, three-node enrollment, reboot, and key-expiry/revocation observation |
 | One-off NetBird enrollment with setup-key deletion | Yes | NetBird enrollment simulation, including secret non-disclosure and unconfirmed deletion | Network range `10.78.0.0/16` and `Default` policy removal before the first enrollment, then live three-node enrollment and reboot |
 | Dependency-free read-only status monitor reaching nodes by name, with reboot state | Yes | Status monitor simulation and Python syntax | Management-host name resolution without the DNS cluster, then a run against all three live nodes |
 | Constrained MCP gateway over overlay-carried forced SSH, `tunnel_status` for both overlays | Yes | Isolated tool, input, policy, and overlay-status simulation | Add centralized credential-output filtering; then prove dedicated account, overlay policy, forced command, credential files, trusted CA, NetBird daemon-socket access, and live three-node reads |
-| Router move to `10.77.0.1/16` | Procedure only | No live evidence | Manual operator step with a wired recovery client and the old router values |
-| Router DHCP DNS cutover and rollback | Procedure only | No live evidence | Manual model-specific change after all node and recovery gates pass |
+| Router move to `10.77.0.1/16` | Done live | 2026-11-06: LAN mask changed from `255.255.255.0` to `255.255.0.0` with the address `10.77.0.1` unchanged; after the router restart the appliances resolve public names | None; see decision 0015 for how router changes are run |
+| Router DHCP DNS cutover and rollback | Procedure only | No live evidence; DHCP DNS still points at the provider's resolvers | Agent-run change with owner approval after the remaining gates pass (decision 0015) |
 
 ## Next dependency order
 
@@ -104,3 +104,16 @@ Remaining:
 - The post-build embedded-file check covers the kernel reboot-required hook but not the other unattended-upgrade and reboot payload files; a missing one of those would fail at installation instead of at build time.
 - No real kernel package has run the hook yet: the first live security-kernel update on an installed node must show `/run/reboot-required.pkgs` naming the package and the guarded reboot following.
 - The Ventoy USB's `licenses/` folder carries the full third-party notices, which name both overlays even for a single-overlay image; the ISO and the copied license texts follow the selection.
+
+## Installed cluster and router move (2026-11-06)
+
+Observed live on 2026-11-06 from a wired host inside the LAN (the management host is at another site and has no route to the appliances yet):
+
+- `dns01` (`10.77.5.1`), `dns02` (`10.77.5.2`), and `dns03` (`10.77.5.3`) are installed and run Technitium 15.6.1 as one cluster: `dns01` is Primary, `dns02` and `dns03` are Secondary and connected, and both secondaries report a recent configuration sync. Which installation media generation and source commit installed them is not recorded here.
+- All three answer `canary.home.arpa` with `10.77.9.9` over UDP and TCP, return the same live SOA serial, return NXDOMAIN for an unknown `home.arpa` name, and resolve public names. The API answers on TCP 53443 and Cockpit on TCP 9090. The recursion ACL is `127.0.0.0/8`, `10.77.0.0/16`, `100.64.0.0/10`, `10.78.0.0/16`, and one management-site `/24`.
+- Before the router change, the router LAN was `10.77.0.1/24`, so the appliances (configured as `/16`) could not reach the router and every recursive query failed. The router LAN mask was changed to `255.255.0.0` with the address unchanged; the router restarted, and recursion then worked on all three. The appliances' lifetime SERVFAIL counters still include the earlier failures.
+- Router DHCP still hands out the provider's resolvers. The DHCP range is `10.77.0.101` through `10.77.0.199`.
+- Not yet checked on the appliances: time synchronization, the backup and health timers, and the produced encrypted backups (key-based operator SSH from the management host is not set up yet).
+- The appliances are not enrolled in Tailscale or NetBird.
+
+The remaining rollout follows decision 0015: owner-approved, agent-run changes; Tailscale enrollment; zone changes through `dnsctl`; daily backup collection into the principal secret store; monitoring with alerts; a one-workstation canary; and then the router DHCP DNS change.

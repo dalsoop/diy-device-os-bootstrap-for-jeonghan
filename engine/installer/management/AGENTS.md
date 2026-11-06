@@ -4,6 +4,9 @@ This module runs from a trusted management host after appliance installation.
 
 - Keep credentials in protected caller-selected files and directories outside
   the repository. Never print tokens or place them in URLs.
+- A management host outside the LAN reaches the Technitium API only through an
+  SSH tunnel to the appliance's `127.0.0.1:53443`; the tunnel's local URL is
+  `TECHNITIUM_URL` and therefore the target a saved plan binds.
 - Reader and planner operations are the default. Apply consumes one saved,
   read-only plan named by its SHA-256 and rejects any change of target,
   commit, zone file, or live zone since that plan, and any replay. Human
@@ -45,17 +48,27 @@ This module runs from a trusted management host after appliance installation.
 
 ## DNS zone
 
-The reviewed zone is `burn-history/dns-records.zone`; its YAML description
-example is `engine/installer/docs/examples/home.arpa.example.yml`.
-`cluster-bootstrap` reads the zone by default, `dnsctl plan` takes it as its
+The reviewed zones are `burn-history/dns-records.zone` (`home.arpa`) and
+`burn-history/dns-reverse-records.zone` (`77.10.in-addr.arpa`); the YAML
+description example of the forward zone is
+`engine/installer/docs/examples/home.arpa.example.yml`. `cluster-bootstrap`
+reads the forward zone by default, `dnsctl plan` takes either file as its
 zone-file argument, and `dnsctl apply` reads it through the saved plan's
 `zone_path`.
 
+- The zone files are the source of every record except the SOA and apex NS
+  records, which the cluster manages for zones in its catalog and refuses on
+  import. `dnsctl` and `cluster-bootstrap` strip those with the same rule, and
+  `dnsctl plan` compares record sets without them. Write each apex NS record on
+  its own `@` line and the SOA starting on an `@` line, or plan refuses the file.
+- Every static-address name in the forward zone has exactly one PTR record in
+  the reverse zone; the service names `dns-api` and `canary` have none.
 - Keep zone changes declarative and reviewable; do not embed credentials or live
   API responses.
 - Preserve a low-risk canary record that can be queried over UDP and TCP after
   each apply or restore.
-- Advance SOA serials deliberately when zone content changes.
+- Advance SOA serials deliberately when zone content changes. The cluster keeps
+  its own live serial, so the file serial records the reviewed revision only.
 - Do not combine a broad zone rewrite with unrelated installer or credential
   changes.
 - Verify a zone change with the plan hash and diff, then query the canary over

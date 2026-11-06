@@ -1,23 +1,49 @@
 # Findings
 
-## Three-node DNS rollout lacks live inputs and topology evidence
+## Stored per-node Technitium tokens do not match the appliances
 
-On 2026-10-21, `device-os world readiness` reported no captured inventory for
-`dns01`, `dns02`, or `dns03`, no single erase-enabled role, no valid operator
-SSH public-key input or age recovery recipient, missing locked Technitium and
-Tailscale build inputs, and no DNS installer ISO/build manifest. The offline
-network preflight observed a management gateway of `192.168.0.1`, while the
-planned `10.77.0.1/16` router and `10.77.5.1` through `10.77.5.3` nodes were
-unreachable. A passing offline-install topology calculation does not establish
-live node reachability or Internet readiness.
+On 2026-11-06, the per-node static Technitium tokens kept in the principal
+secret store were refused (`invalid-token`) by every appliance, while the
+cluster-level planner and applier tokens worked. Each appliance reads its own
+static token from `/var/lib/dns-appliance/secrets/technitium-static-token`
+into Technitium's static sessions, and its backup and health scripts use the
+same file, so the copy in the secret store is what is wrong. Tools and people
+that use the stored copy cannot reach a single node's API. The fix copies each
+on-device value into the secret store without printing it, then verifies it.
 
-Source fixes and simulations can proceed, but image creation and physical
-rollout cannot be qualified from these inputs. Capture each HP machine with the
-non-destructive inventory media, provide public installation/recovery inputs
-through ignored local paths, verify locked dependencies, and qualify the
-intended network before building and testing BIOS/UEFI installation. Enable only
-the `dns01` pilot after current target-specific authorization; the remaining
-nodes and router DNS cutover depend on that pilot's evidence.
+## `dnsctl apply` imports records the cluster manages
+
+`dnsctl apply` imports the whole zone file, including the SOA and apex NS
+records. According to the source of `cluster-bootstrap`, the cluster manages
+those records for zones in its catalog and refuses imported ones, which is why
+the bootstrap strips them; the live SOA serial already differs from the
+repository zone file. This is source-level evidence; no live `dnsctl apply`
+has run yet. Until `dnsctl` strips and ignores the SOA and apex NS records the
+same way, its first live apply is expected to fail.
+
+## The management API is reachable only on the LAN
+
+The Technitium web service listens on loopback and the appliance's LAN address
+only. A management host outside the LAN cannot reach the API over an overlay
+and must use an SSH tunnel to the appliance's loopback address, which also
+changes the `TECHNITIUM_URL` that a saved plan binds to.
+
+## A stale DHCP reservation remains for a storage server
+
+The router keeps a manual DHCP reservation for one storage server's MAC address
+inside the DHCP range, while that server uses a different static address. If
+the server ever falls back to DHCP, its DNS name would point at the wrong
+address. The reservation is to be removed as part of the router change.
+
+## Installed appliances lack an installation provenance record
+
+The three appliances are installed and serve as one cluster on the
+`10.77.0.0/16` LAN (see `status.md`), but the repository does not record which
+installation media generation, image build, or source commit installed each
+node, nor the per-node enrollment evidence. Without that record, the installed
+kernel snapshot, overlay client versions, and installer gate behavior cannot be
+tied to a reviewed build. Closing this needs the operator's enrollment records
+(kept outside Git) matched to a build manifest and summarized here by role.
 
 ## The first physical DNS pilot selected its installer USB
 

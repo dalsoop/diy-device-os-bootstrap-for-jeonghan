@@ -12,13 +12,20 @@ Implemented bootstrap and operating surfaces:
 - `dnsctl health` uses the reader token.
 - `dnsctl plan <zone> [--out <plan-file>]` emits a schema version 2 plan with
   the target URL, source commit, zone path, and current and desired hashes,
-  plus a human diff. `--out` requires a committed, unmodified zone, writes the
-  plan once as a read-only file, refuses an existing path, and prints
-  `plan_sha256` on stderr.
+  plus a human diff. `changed` and the diff compare the live and desired record
+  sets without the SOA and apex NS records, which the cluster manages,
+  independent of record order, relative or absolute names, implicit or
+  explicit TTLs, and spacing or case of the presentation. `--out` requires a
+  committed, unmodified zone, writes the plan once as a read-only file, refuses
+  an existing path, and prints `plan_sha256` on stderr. It works for the
+  forward zone `burn-history/dns-records.zone` and the reverse zone
+  `burn-history/dns-reverse-records.zone`.
 - `dnsctl apply --plan <plan-file> --plan-sha256 <sha256> --confirm APPLY`
-  applies only that reviewed plan. It refuses a hash mismatch, another target
-  URL, a different `HEAD`, a modified zone file, a live zone that drifted from
-  the plan's current hash, and a plan that the audit log already records as
+  applies only that reviewed plan and imports the zone file without its SOA
+  and apex NS records, with the rule `cluster-bootstrap` uses. It refuses a
+  hash mismatch, another target URL, a different `HEAD`, a modified zone file,
+  a live zone whose exact export drifted from the plan's current hash (an SOA
+  serial change included), and a plan that the audit log already records as
   applied. It does not prove pull-request approval. Audit output is JSONL,
   carries `plan_sha256`, and contains no token.
 - `collect-backups` retrieves only already-encrypted backup files over SSH.
@@ -67,7 +74,13 @@ Enrollment commands, by contrast, use the fixed LAN addresses below.
 Before enrollment, merge the relevant parts of
 `tailscale-policy.example.hujson` into the reviewed tailnet policy and create an
 OAuth client with the `auth_keys` scope restricted to `tag:dns-appliance`.
-Store the ID and secret outside this repository, one line per protected file:
+The example grants administrators the management ports, lets every tailnet
+member (`autogroup:member`) query the appliances on UDP and TCP 53, and lets
+the appliances reach each other's API. Its `tests` section makes the tailnet
+reject a policy in which the owner loses port 22, 9090, or 53 on the appliances
+or another tag gains them; replace its placeholder login and tag first.
+Store the OAuth client ID and secret outside this repository, one line per
+protected file:
 
 ```sh
 TAILSCALE_OAUTH_CLIENT_ID_FILE=/secure/tailscale/client-id \

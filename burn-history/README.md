@@ -15,7 +15,8 @@ burn-history/
 ├── .paths.yaml             where the World tools find things (tools only)
 ├── .in-progress/           burn recorder state (ignored)
 ├── home.yaml               the home: networks, computers, services, media, policies
-├── dns-records.zone        the DNS zone served by the cluster
+├── dns-records.zone        the DNS zone served by the cluster (home.arpa)
+├── dns-reverse-records.zone  the reverse zone served by the cluster (77.10.in-addr.arpa)
 ├── os-installs/
 │   └── dns01/ dns02/ dns03/
 │       ├── os.conf         guided-install profile of the role (tracked)
@@ -34,6 +35,7 @@ burn-history/
 | Networks, computers, services, media selections, or policies of the home | [`home.yaml`](home.yaml) |
 | The guided-install profile of one DNS role (`dns01`..`dns03`) | `os-installs/<role>/os.conf`, for example [`os-installs/dns01/os.conf`](os-installs/dns01/os.conf) |
 | DNS records served by the cluster | [`dns-records.zone`](dns-records.zone) |
+| PTR records for the LAN addresses (one per static name) | [`dns-reverse-records.zone`](dns-reverse-records.zone) |
 
 Check every change before anything is built:
 

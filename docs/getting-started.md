@@ -148,7 +148,8 @@ the gateway is outside the LAN, a node repeats an address or sits in the DHCP
 range, the management range leaves the LAN, or the LAN or NetBird range overlaps
 each other, Tailscale (`100.64.0.0/10`), Docker's pools, k3s, or Podman's
 networks. Then generate the per-node installer profiles and update the node
-records in `burn-history/dns-records.zone` by hand:
+records in `burn-history/dns-records.zone` and their PTR records in
+`burn-history/dns-reverse-records.zone` by hand:
 
 ```sh
 engine/world/bin/render-network-plan --write

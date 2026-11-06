@@ -183,6 +183,7 @@ for required in \
     engine/installer/schemas/license-check.schema.json \
     engine/installer/schemas/raw-image-manifest.schema.json \
     burn-history/dns-records.zone \
+    burn-history/dns-reverse-records.zone \
     burn-history/os-installs/dns01/os.conf \
     burn-history/os-installs/dns02/os.conf \
     burn-history/os-installs/dns03/os.conf \

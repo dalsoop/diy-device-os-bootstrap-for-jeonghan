@@ -18,7 +18,8 @@ diy-device-os-bootstrap-for-jeonghan/
 │   ├── README.md                     ← user guide
 │   ├── .paths.yaml                   ← World playbook: registered data paths read by the World tools
 │   ├── home.yaml                     ← home: networks, computers, services, media, overlays, policies (you edit)
-│   ├── dns-records.zone              ← reviewed DNS zone
+│   ├── dns-records.zone              ← reviewed DNS zone (home.arpa)
+│   ├── dns-reverse-records.zone      ← reviewed reverse DNS zone (77.10.in-addr.arpa)
 │   ├── os-installs/<role>/           ← os.conf guided profile (tracked); hardware.conf real capture (ignored)
 │   ├── keys/                         ← operator SSH public key and age recipient (ignored except README.md)
 │   ├── .in-progress/                 ← burn recorder state (ignored)

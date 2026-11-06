@@ -5,7 +5,8 @@ boundaries and safety rules in `AGENTS.md`, and update every affected producer,
 consumer, fixture, and document together.
 
 User-owned data lives in `burn-history/`: what you edit (`home.yaml`,
-`dns-records.zone`, `os-installs/<role>/os.conf`), private files never committed
+`dns-records.zone`, `dns-reverse-records.zone`, `os-installs/<role>/os.conf`),
+private files never committed
 (`keys/`, `os-installs/<role>/hardware.conf`, `.in-progress/`), and what happened
 (never edited) in `logs/`.
 Code, schemas, and tests live in `engine/`. Never hand-edit

@@ -11,9 +11,9 @@ node back, so it is not live: `dig -x` for site addresses gets no answer from
 the cluster, although `burn-history/dns-reverse-records.zone` still describes
 it.
 
-Technitium 15.6.2 fixes the issue. The lock pins 15.6.2; the installed nodes
-still run 15.6.1. Closing this needs the in-place update of all three nodes
-(decision 0016), then the reverse zone created once on the Primary and applied
+Technitium 15.6.2 fixes the issue. The lock pins 15.6.2, and since 2026-11-10
+all three installed nodes run it (in-place update of decision 0016, see
+`status.md`). Closing this still needs the reverse zone created once on the Primary and applied
 from the reviewed zone file ("Create the reverse zone once" and "Plan and
 apply" in `docs/operations.md`), PTR queries over UDP and TCP on all three
 nodes, and a restart of one Secondary that comes back without the exception.
